@@ -203,4 +203,75 @@ document.addEventListener("DOMContentLoaded", function () {
       behavior: "smooth", // With smooth animation
     });
   });
+
+  /* =====================
+       7. SHARED HEADER AND FOOTER LOADING
+       Load header and footer from index.html for consistency
+       ===================== */
+
+  /**
+   * Load header from index.html and update active navigation
+   */
+  function loadHeader() {
+    const headerPlaceholder = document.getElementById("header-placeholder");
+    if (!headerPlaceholder) return; // Exit if placeholder doesn't exist
+
+    fetch("index.html")
+      .then((response) => response.text())
+      .then((html) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const header = doc.querySelector("header");
+
+        if (header) {
+          // Update active nav link based on current page
+          updateActiveNavLink(header);
+          headerPlaceholder.replaceWith(header);
+        }
+      })
+      .catch((error) => console.error("Error loading header:", error));
+  }
+
+  /**
+   * Load footer from index.html
+   */
+  function loadFooter() {
+    const footerPlaceholder = document.getElementById("footer-placeholder");
+    if (!footerPlaceholder) return; // Exit if placeholder doesn't exist
+
+    fetch("index.html")
+      .then((response) => response.text())
+      .then((html) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const footer = doc.querySelector("footer");
+
+        if (footer) {
+          footerPlaceholder.replaceWith(footer);
+        }
+      })
+      .catch((error) => console.error("Error loading footer:", error));
+  }
+
+  /**
+   * Update active navigation link based on current page
+   * @param {Element} header - Header element containing navigation
+   */
+  function updateActiveNavLink(header) {
+    const navLinks = header.querySelectorAll(".nav-link");
+    const currentPage = window.location.pathname.split("/").pop() || "index.html";
+
+    navLinks.forEach((link) => {
+      link.classList.remove("active");
+      const href = link.getAttribute("href").split("#")[0]; // Remove anchor part
+
+      if (href === currentPage) {
+        link.classList.add("active");
+      }
+    });
+  }
+
+  // Call the functions to load header and footer
+  loadHeader();
+  loadFooter();
 }); // End of DOMContentLoaded

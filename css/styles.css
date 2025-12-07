@@ -61,12 +61,25 @@ img {
 /* =====================
    Header & Navigation
    ===================== */
-.header {
-  display: flex; /* Arrange children in a row */
-  justify-content: space-between; /* Logo on left, nav on right, space between */
+/* Main container for all main content sections */
+.main-container {
+  margin: 0 auto; /* Center container horizontally */
+  padding: 0 var(--spacing-lg); /* Left/right padding */
+}
+
+.header-container {
+  display: flex; /* Enable flexbox layout */
+  margin: 0 auto; /* Center header horizontally */
+  max-width: 1200px; /* Limit width on large screens */
   align-items: center; /* Vertically center items */
+  justify-content: space-between; /* Logo on left, nav on right, space between */
   padding: var(--spacing-md) var(--spacing-lg); /* Top/bottom 16px, left/right 32px */
+}
+
+.header {
   background: var(--color-background); /* White background */
+  box-shadow: var(--shadow); /* Subtle shadow below header */
+  width: 100%; /* Full width */
   border-bottom: 1px solid var(--color-border); /* Subtle line under header */
   position: sticky; /* Stick to top when scrolling */
   top: 0; /* Stick at 0px from top */
@@ -110,11 +123,13 @@ img {
    Main banner at top of page
    ===================== */
 .hero {
+  margin: 0 auto; /* Center container horizontally */
+  max-width: 1200px; /* Limit width on large screens */
   display: flex; /* Arrange content and image side by side */
   align-items: center; /* Vertically center both sides */
   justify-content: space-between; /* Push content and image apart */
   gap: var(--spacing-xl); /* 64px space between text and image */
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom, 32px left/right */
+  padding: var(--spacing-xl) 0; /* 64px top/bottom, no left/right (handled by main-container) */
   min-height: 80vh; /* At least 80% of viewport height */
 }
 
@@ -194,9 +209,10 @@ img {
    Grid of feature cards
    ===================== */
 .features-preview {
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom, 32px left/right */
+  padding: var(--spacing-xl) 0; /* 64px top/bottom, no left/right (handled by main-container) */
   background: var(--color-background-alt); /* Light gray background */
   text-align: center; /* Center all text */
+  margin: 0 calc(-1 * var(--spacing-lg)); /* Extend background to full width */
 }
 
 .features-preview h2 {
@@ -242,7 +258,7 @@ img {
    Email signup form
    ===================== */
 .newsletter {
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom, 32px left/right */
+  padding: var(--spacing-xl) 0; /* 64px top/bottom, no left/right (handled by main-container) */
   text-align: center; /* Center all content */
   max-width: 500px; /* Limit form width */
   margin: 0 auto; /* Center section horizontally */
@@ -301,47 +317,55 @@ img {
 .footer {
   background: var(--color-text); /* Dark background */
   color: white; /* White text */
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom, 32px left/right */
+  width: 100%; /* Full width for background */
+}
+
+/* Footer container for max-width control */
+.footer-container {
+  max-width: 1200px; /* Limit width on large screens */
+  margin: 0 auto; /* Center container horizontally */
+  padding: 0 var(--spacing-lg); /* Left/right padding */
 }
 
 .footer-content {
-  display: grid; /* Grid layout for footer columns */
-  grid-template-columns: 2fr 1fr 1fr; /* Brand takes 2x space, links take 1x each */
+  display: flex; /* Flexbox layout for footer columns */
+  justify-content: space-between; /* Distribute sections evenly */
+  align-items: flex-start; /* Align to top */
   gap: var(--spacing-xl); /* 64px between columns */
-  max-width: 1000px; /* Limit total width */
-  margin: 0 auto; /* Center footer content */
+  padding: var(--spacing-xl) 0; /* Top/bottom padding */
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
 }
+
+.footer-brand {
+  flex: 3; /* Take up 3x space compared to links */
+  min-width: 300px; /* Minimum width for brand section */
+}
+
 
 .footer-brand p {
   margin-top: var(--spacing-md); /* 16px above tagline */
   color: var(--color-secondary); /* Gray tagline text */
 }
 
-.footer-links h4 {
-  margin-bottom: var(--spacing-md); /* 16px below column heading */
-}
-
-.footer-links ul {
-  display: flex; /* Flexbox for link list */
-  flex-direction: column; /* Stack links vertically */
-  gap: var(--spacing-sm); /* 8px between links */
-}
-
-.footer-links a {
-  color: var(--color-secondary); /* Gray link color */
-  transition: color 0.2s ease; /* Smooth color change */
-}
-
-.footer-links a:hover {
-  color: white; /* White on hover */
-}
 
 .footer-bottom {
   text-align: center; /* Center copyright text */
   margin-top: var(--spacing-xl); /* 64px above this section */
   padding-top: var(--spacing-lg); /* 32px padding above text */
-  border-top: 1px solid var(--color-secondary); /* Divider line */
+  padding-bottom: var(--spacing-xl); /* Bottom padding */
   color: var(--color-secondary); /* Gray text */
+  position: relative; /* For positioning the border */
+}
+
+.footer-bottom::before {
+  content: ""; /* Empty content for border line */
+  position: absolute; /* Position relative to footer-bottom */
+  top: 0; /* At the top edge */
+  left: 50%; /* Start from center */
+  transform: translateX(-50%); /* Center the line */
+  width: 100vw; /* Full viewport width */
+  height: 1px; /* 1px height for border */
+  background-color: var(--color-secondary); /* Gray border color */
 }
 
 /* =====================
@@ -349,8 +373,9 @@ img {
    ===================== */
 .page-hero {
   text-align: center; /* Center all text */
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom, 32px left/right */
+  padding: var(--spacing-xl) 0; /* 64px top/bottom, no left/right (handled by main-container) */
   background: var(--color-background-alt); /* Light gray background */
+  margin: 0 calc(-1 * var(--spacing-lg)); /* Extend background to full width */
 }
 
 .page-hero h1 {
@@ -370,7 +395,7 @@ img {
    Alternating image/text rows
    ===================== */
 .features-detailed {
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom, 32px left/right */
+  padding: var(--spacing-xl) 0; /* 64px top/bottom, no left/right (handled by main-container) */
   max-width: 1000px; /* Limit content width */
   margin: 0 auto; /* Center the section */
 }
@@ -448,9 +473,10 @@ img {
    ===================== */
 .cta-section {
   text-align: center; /* Center all content */
-  padding: var(--spacing-xl) var(--spacing-lg); /* 64px top/bottom */
+  padding: var(--spacing-xl) 0; /* 64px top/bottom, no left/right (handled by main-container) */
   background: var(--color-primary); /* Blue background */
   color: white; /* White text */
+  margin: 0 calc(-1 * var(--spacing-lg)); /* Extend background to full width */
 }
 
 .cta-section h2 {
@@ -602,8 +628,15 @@ img {
   }
 
   .footer-content {
-    grid-template-columns: 1fr; /* Single column footer */
+    flex-direction: column; /* Stack sections vertically */
     text-align: center; /* Center footer text */
+    gap: var(--spacing-lg); /* Reduce gap on mobile */
+  }
+
+  .footer-brand,
+  .footer-links {
+    flex: none; /* Remove flex sizing on mobile */
+    min-width: auto; /* Remove min-width constraint */
   }
 
   .page-hero h1 {
