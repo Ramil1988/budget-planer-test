@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+
+# Tailwind CLI binary (can be downloaded fresh)
+tailwindcss
+
+# Generated CSS (rebuild with pnpm run build:css)
+css/tailwind.css
+
+# Lock files (optional - some prefer to commit these)
+# pnpm-lock.yaml
