@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+
+# Tailwind CLI binary (can be downloaded fresh)
+tailwindcss
