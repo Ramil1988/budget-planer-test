@@ -50,6 +50,11 @@ coverage/
 *.lcov
 .nyc_output
 
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Tailwind CLI binary (can be downloaded fresh)
 tailwindcss
 
