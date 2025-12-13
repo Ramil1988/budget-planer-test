@@ -1,0 +1,24 @@
+name: Add Branch to Project
+
+on:
+  create:
+
+jobs:
+  track-branch:
+    runs-on: ubuntu-latest
+    if: github.event.ref_type == 'branch' && !startsWith(github.event.ref, 'dependabot/')
+    steps:
+      - name: Create issue for branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branchName = context.payload.ref;
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Branch: ${branchName}`,
+              body: `Tracking branch: **${branchName}**\\n\\nThis issue was auto-created to track the branch on the project board.`,
+              labels: ['branch-tracking']
+            });
+            console.log(`Created issue #${issue.data.number} for branch ${branchName}`);

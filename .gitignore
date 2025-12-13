@@ -50,6 +50,9 @@ coverage/
 *.lcov
 .nyc_output
 
+# Tailwind CLI binary (can be downloaded fresh)
+tailwindcss
+
 # Misc
 *.orig
 .temp/
