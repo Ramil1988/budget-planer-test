@@ -4,90 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BudgetWise - Take Control of Your Finances</title>
-    <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
-    <!-- Header with Navigation -->
-    <header class="header">
-      <div class="header-container">
-        <div class="logo">
-          <span class="logo-icon">💰</span>
-          <span class="logo-text">BudgetWise</span>
-        </div>
-        <nav class="nav">
-          <ul class="nav-list">
-            <li><a href="index.html" class="nav-link active">Home</a></li>
-            <li><a href="features.html" class="nav-link">Features</a></li>
-          </ul>
-        </nav>
-        <button class="nav-toggle" aria-label="Toggle navigation">☰</button>
-      </div>
-    </header>
-
-    <!-- Main -->
-    <main>
-      <div class="main-container">
-        <!-- Hero Section -->
-        <section class="hero">
-          <div class="hero-content">
-            <h1>Simple <span class="highlight">Budget Tracking</span> Tool</h1>
-            <p class="hero-subtitle">
-              Track your expenses, set budgets, and monitor your spending with
-              this clean and intuitive budget management tool.
-            </p>
-            <div class="hero-buttons">
-              <button class="btn btn-primary">Start Tracking</button>
-            </div>
-          </div>
-          <div class="hero-image">
-            <img
-              src="images/hero-dashboard.png"
-              alt="Budget dashboard preview"
-            />
-          </div>
-        </section>
-
-        <!-- Features Preview Section -->
-        <section class="features-preview" id="features">
-          <h2>Why Choose BudgetWise?</h2>
-          <div class="features-grid">
-            <div class="feature-card">
-              <div class="feature-icon">📊</div>
-              <h3>Visual Reports</h3>
-              <p>See where your money goes with beautiful charts and graphs.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon">🎯</div>
-              <h3>Goal Tracking</h3>
-              <p>Set savings goals and track your progress in real-time.</p>
-            </div>
-            <div class="feature-card">
-              <div class="feature-icon">🔔</div>
-              <h3>Smart Alerts</h3>
-              <p>Get notified when you're approaching your budget limits.</p>
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <div class="footer-container">
-        <div class="footer-content">
-          <div class="footer-brand">
-            <span class="logo-icon">💰</span>
-            <span class="logo-text">BudgetWise</span>
-            <p>A simple, effective budget tracking tool.</p>
-          </div>
-        </div>
-        <div class="footer-bottom">
-          <p>&copy; 2025 BudgetWise. All rights reserved.</p>
-        </div>
-      </div>
-    </footer>
-
-    <script src="js/http-client.js"></script>
-    <script src="js/main.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
