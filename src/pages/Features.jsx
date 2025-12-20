@@ -108,24 +108,6 @@ function Features() {
             </div>
           </div>
 
-          <div className="feature-row reverse">
-            <div className="feature-text">
-              <h2>🔒 Bank-Level Security</h2>
-              <p>
-                Your financial data is protected with 256-bit encryption. We never
-                sell your data and you're always in control.
-              </p>
-              <ul className="feature-list">
-                <li>256-bit SSL encryption</li>
-                <li>Two-factor authentication</li>
-                <li>No data selling, ever</li>
-              </ul>
-            </div>
-            <div className="feature-image">
-              <img src="/images/encryption.png" alt="Security features" />
-            </div>
-          </div>
-
           <div className="feature-row">
             <div className="feature-text">
               <h2>📸 Smart Receipt Scanner</h2>
