@@ -1,96 +1,162 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  Box,
+  Container,
+  Flex,
+  Heading,
+  Text,
+  Button,
+  SimpleGrid,
+  VStack,
+  IconButton,
+} from '@chakra-ui/react'
 
 function Home() {
+  const [showScrollTop, setShowScrollTop] = useState(false)
+
   useEffect(() => {
-    // Feature cards animation
-    const featureCards = document.querySelectorAll('.feature-card')
-    featureCards.forEach((card, index) => {
-      const delay = index * 0.1
-      card.style.animationDelay = `${delay}s`
-      card.classList.add('fade-in')
-    })
-
-    // Scroll to top button
-    const scrollBtn = document.createElement('button')
-    scrollBtn.className = 'scroll-top-btn'
-    scrollBtn.textContent = '↑'
-    scrollBtn.setAttribute('aria-label', 'Scroll to top')
-    document.body.appendChild(scrollBtn)
-
     const handleScroll = () => {
-      const scrollPosition = window.scrollY
-      if (scrollPosition > 300) {
-        scrollBtn.classList.add('visible')
-      } else {
-        scrollBtn.classList.remove('visible')
-      }
-    }
-
-    const handleScrollTop = () => {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      })
+      setShowScrollTop(window.scrollY > 300)
     }
 
     window.addEventListener('scroll', handleScroll)
-    scrollBtn.addEventListener('click', handleScrollTop)
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll)
-      scrollBtn.removeEventListener('click', handleScrollTop)
-      scrollBtn.remove()
-    }
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    })
+  }
+
   return (
-    <main>
-      <div className="main-container">
+    <Box as="main">
+      <Container maxW="1200px" px={8}>
         {/* Hero Section */}
-        <section className="hero">
-          <div className="hero-content">
-            <h1>
-              Simple <span className="highlight">Budget Tracking</span> Tool
-            </h1>
-            <p className="hero-subtitle">
+        <Flex
+          align="center"
+          justify="space-between"
+          gap={16}
+          py={16}
+          minH="80vh"
+          direction={{ base: 'column', md: 'row' }}
+          textAlign={{ base: 'center', md: 'left' }}
+        >
+          <VStack
+            flex={1}
+            maxW="600px"
+            align={{ base: 'center', md: 'flex-start' }}
+            gap={4}
+          >
+            <Heading as="h1" size="3xl" lineHeight="1.2">
+              Simple <Text as="span" color="blue.600">Budget Tracking</Text> Tool
+            </Heading>
+            <Text fontSize="xl" color="gray.600">
               Track your expenses, set budgets, and monitor your spending with
               this clean and intuitive budget management tool.
-            </p>
-            <div className="hero-buttons">
-              <button className="btn btn-primary">Start Tracking</button>
-            </div>
-          </div>
-          <div className="hero-image">
-            <img
+            </Text>
+            <Flex gap={4} pt={4}>
+              <Button colorScheme="blue" size="lg">
+                Start Tracking
+              </Button>
+            </Flex>
+          </VStack>
+          <Box flex={1} textAlign="center">
+            <Box
+              as="img"
               src="/images/hero-dashboard.png"
               alt="Budget dashboard preview"
+              maxW="500px"
+              w="100%"
             />
-          </div>
-        </section>
+          </Box>
+        </Flex>
+      </Container>
 
-        {/* Features Preview Section */}
-        <section className="features-preview" id="features">
-          <h2>Why Choose BudgetWise?</h2>
-          <div className="features-grid">
-            <div className="feature-card">
-              <div className="feature-icon">📊</div>
-              <h3>Visual Reports</h3>
-              <p>See where your money goes with beautiful charts and graphs.</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon">🎯</div>
-              <h3>Goal Tracking</h3>
-              <p>Set savings goals and track your progress in real-time.</p>
-            </div>
-            <div className="feature-card">
-              <div className="feature-icon">🔔</div>
-              <h3>Smart Alerts</h3>
-              <p>Get notified when you're approaching your budget limits.</p>
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
+      {/* Features Preview Section */}
+      <Box bg="gray.50" py={16} id="features">
+        <Container maxW="1000px">
+          <Heading as="h2" size="xl" textAlign="center" mb={16}>
+            Why Choose BudgetWise?
+          </Heading>
+          <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
+            <VStack
+              bg="white"
+              p={8}
+              borderRadius="md"
+              shadow="md"
+              _hover={{ transform: 'translateY(-4px)' }}
+              transition="transform 0.2s"
+              opacity={0}
+              animation="fadeIn 0.5s ease forwards"
+            >
+              <Text fontSize="4xl">📊</Text>
+              <Heading as="h3" size="md" mt={4}>
+                Visual Reports
+              </Heading>
+              <Text color="gray.600" textAlign="center">
+                See where your money goes with beautiful charts and graphs.
+              </Text>
+            </VStack>
+            <VStack
+              bg="white"
+              p={8}
+              borderRadius="md"
+              shadow="md"
+              _hover={{ transform: 'translateY(-4px)' }}
+              transition="transform 0.2s"
+              opacity={0}
+              animation="fadeIn 0.5s ease forwards 0.1s"
+            >
+              <Text fontSize="4xl">🎯</Text>
+              <Heading as="h3" size="md" mt={4}>
+                Goal Tracking
+              </Heading>
+              <Text color="gray.600" textAlign="center">
+                Set savings goals and track your progress in real-time.
+              </Text>
+            </VStack>
+            <VStack
+              bg="white"
+              p={8}
+              borderRadius="md"
+              shadow="md"
+              _hover={{ transform: 'translateY(-4px)' }}
+              transition="transform 0.2s"
+              opacity={0}
+              animation="fadeIn 0.5s ease forwards 0.2s"
+            >
+              <Text fontSize="4xl">🔔</Text>
+              <Heading as="h3" size="md" mt={4}>
+                Smart Alerts
+              </Heading>
+              <Text color="gray.600" textAlign="center">
+                Get notified when you're approaching your budget limits.
+              </Text>
+            </VStack>
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <IconButton
+          position="fixed"
+          bottom={8}
+          right={8}
+          colorScheme="blue"
+          borderRadius="full"
+          size="lg"
+          onClick={scrollToTop}
+          aria-label="Scroll to top"
+          _hover={{ transform: 'translateY(-3px)' }}
+          transition="all 0.3s"
+        >
+          ↑
+        </IconButton>
+      )}
+    </Box>
   )
 }
 
