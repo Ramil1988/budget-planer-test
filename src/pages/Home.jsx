@@ -6,9 +6,9 @@ import {
   Heading,
   Text,
   Button,
+  IconButton,
   SimpleGrid,
   VStack,
-  IconButton,
 } from '@chakra-ui/react'
 
 function Home() {
@@ -32,107 +32,191 @@ function Home() {
 
   return (
     <Box as="main">
-      <Container maxW="1200px" px={8}>
-        {/* Hero Section */}
+      {/* Hero Section */}
+      <Container maxW="1200px" px={8} py={{ base: 20, md: 32 }}>
         <Flex
+          direction={{ base: 'column', lg: 'row' }}
           align="center"
-          justify="space-between"
           gap={16}
-          py={16}
-          minH="80vh"
-          direction={{ base: 'column', md: 'row' }}
-          textAlign={{ base: 'center', md: 'left' }}
+          justify="space-between"
         >
-          <VStack
-            flex={1}
-            maxW="600px"
-            align={{ base: 'center', md: 'flex-start' }}
-            gap={4}
-          >
-            <Heading as="h1" size="3xl" lineHeight="1.2">
-              Simple <Text as="span" color="blue.600">Budget Tracking</Text> Tool
+          {/* Left side - Text content */}
+          <Box flex={1} maxW={{ base: '100%', lg: '500px' }}>
+            <Heading
+              as="h1"
+              fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
+              fontWeight="normal"
+              mb={6}
+              lineHeight="1.2"
+            >
+              Simple{' '}
+              <Text as="span" color="blue.600" fontWeight="bold">
+                Budget Tracking
+              </Text>{' '}
+              Tool
             </Heading>
-            <Text fontSize="xl" color="gray.600">
-              Track your expenses, set budgets, and monitor your spending with
-              this clean and intuitive budget management tool.
+            <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600" mb={8} lineHeight="1.8">
+              Track your expenses, set budgets, and monitor your spending with this clean and
+              intuitive budget management tool.
             </Text>
-            <Flex gap={4} pt={4}>
-              <Button colorScheme="blue" size="lg">
-                Start Tracking
-              </Button>
-            </Flex>
-          </VStack>
-          <Box flex={1} textAlign="center">
+            <Button
+              bg="black"
+              color="white"
+              size="lg"
+              px={8}
+              py={6}
+              fontSize="md"
+              _hover={{
+                bg: 'gray.800',
+              }}
+            >
+              Start Tracking
+            </Button>
+          </Box>
+
+          {/* Right side - Image */}
+          <Box flex={1} maxW={{ base: '100%', lg: '600px' }}>
             <Box
               as="img"
               src="/images/hero-dashboard.png"
               alt="Budget dashboard preview"
-              maxW="500px"
               w="100%"
+              h="auto"
             />
           </Box>
         </Flex>
       </Container>
 
-      {/* Features Preview Section */}
-      <Box bg="gray.50" py={16} id="features">
-        <Container maxW="1000px">
-          <Heading as="h2" size="xl" textAlign="center" mb={16}>
+      {/* Features Section */}
+      <Box bg="gray.50" py={{ base: 16, md: 24 }} id="features">
+        <Container maxW="1200px" px={8}>
+          <Heading
+            as="h2"
+            fontSize={{ base: '2xl', md: '3xl', lg: '4xl' }}
+            textAlign="center"
+            mb={12}
+          >
             Why Choose BudgetWise?
           </Heading>
-          <SimpleGrid columns={{ base: 1, md: 3 }} gap={8}>
+
+          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={8}>
+            {/* Feature 1 */}
             <VStack
               bg="white"
               p={8}
-              borderRadius="md"
-              shadow="md"
-              _hover={{ transform: 'translateY(-4px)' }}
-              transition="transform 0.2s"
-              opacity={0}
-              animation="fadeIn 0.5s ease forwards"
+              borderRadius="lg"
+              align="flex-start"
+              gap={4}
+              shadow="sm"
+              _hover={{ shadow: 'md' }}
+              transition="all 0.2s"
             >
-              <Text fontSize="4xl">📊</Text>
-              <Heading as="h3" size="md" mt={4}>
+              <Box fontSize="3xl">📊</Box>
+              <Heading as="h3" fontSize="xl" fontWeight="semibold">
                 Visual Reports
               </Heading>
-              <Text color="gray.600" textAlign="center">
-                See where your money goes with beautiful charts and graphs.
+              <Text color="gray.600" lineHeight="1.7">
+                Get clear insights into your spending with beautiful charts and graphs.
               </Text>
             </VStack>
+
+            {/* Feature 2 */}
             <VStack
               bg="white"
               p={8}
-              borderRadius="md"
-              shadow="md"
-              _hover={{ transform: 'translateY(-4px)' }}
-              transition="transform 0.2s"
-              opacity={0}
-              animation="fadeIn 0.5s ease forwards 0.1s"
+              borderRadius="lg"
+              align="flex-start"
+              gap={4}
+              shadow="sm"
+              _hover={{ shadow: 'md' }}
+              transition="all 0.2s"
             >
-              <Text fontSize="4xl">🎯</Text>
-              <Heading as="h3" size="md" mt={4}>
+              <Box fontSize="3xl">🎯</Box>
+              <Heading as="h3" fontSize="xl" fontWeight="semibold">
                 Goal Tracking
               </Heading>
-              <Text color="gray.600" textAlign="center">
-                Set savings goals and track your progress in real-time.
+              <Text color="gray.600" lineHeight="1.7">
+                Set financial goals and track your progress toward achieving them.
               </Text>
             </VStack>
+
+            {/* Feature 3 */}
             <VStack
               bg="white"
               p={8}
-              borderRadius="md"
-              shadow="md"
-              _hover={{ transform: 'translateY(-4px)' }}
-              transition="transform 0.2s"
-              opacity={0}
-              animation="fadeIn 0.5s ease forwards 0.2s"
+              borderRadius="lg"
+              align="flex-start"
+              gap={4}
+              shadow="sm"
+              _hover={{ shadow: 'md' }}
+              transition="all 0.2s"
             >
-              <Text fontSize="4xl">🔔</Text>
-              <Heading as="h3" size="md" mt={4}>
+              <Box fontSize="3xl">🔔</Box>
+              <Heading as="h3" fontSize="xl" fontWeight="semibold">
                 Smart Alerts
               </Heading>
-              <Text color="gray.600" textAlign="center">
-                Get notified when you're approaching your budget limits.
+              <Text color="gray.600" lineHeight="1.7">
+                Receive notifications when you're approaching your budget limits.
+              </Text>
+            </VStack>
+
+            {/* Feature 4 */}
+            <VStack
+              bg="white"
+              p={8}
+              borderRadius="lg"
+              align="flex-start"
+              gap={4}
+              shadow="sm"
+              _hover={{ shadow: 'md' }}
+              transition="all 0.2s"
+            >
+              <Box fontSize="3xl">🔒</Box>
+              <Heading as="h3" fontSize="xl" fontWeight="semibold">
+                Secure & Private
+              </Heading>
+              <Text color="gray.600" lineHeight="1.7">
+                Your financial data is encrypted and kept private at all times.
+              </Text>
+            </VStack>
+
+            {/* Feature 5 */}
+            <VStack
+              bg="white"
+              p={8}
+              borderRadius="lg"
+              align="flex-start"
+              gap={4}
+              shadow="sm"
+              _hover={{ shadow: 'md' }}
+              transition="all 0.2s"
+            >
+              <Box fontSize="3xl">📱</Box>
+              <Heading as="h3" fontSize="xl" fontWeight="semibold">
+                Mobile Friendly
+              </Heading>
+              <Text color="gray.600" lineHeight="1.7">
+                Track your budget on the go with our responsive mobile design.
+              </Text>
+            </VStack>
+
+            {/* Feature 6 */}
+            <VStack
+              bg="white"
+              p={8}
+              borderRadius="lg"
+              align="flex-start"
+              gap={4}
+              shadow="sm"
+              _hover={{ shadow: 'md' }}
+              transition="all 0.2s"
+            >
+              <Box fontSize="3xl">💡</Box>
+              <Heading as="h3" fontSize="xl" fontWeight="semibold">
+                Easy to Use
+              </Heading>
+              <Text color="gray.600" lineHeight="1.7">
+                Simple and intuitive interface that anyone can use right away.
               </Text>
             </VStack>
           </SimpleGrid>
@@ -145,13 +229,16 @@ function Home() {
           position="fixed"
           bottom={8}
           right={8}
-          colorScheme="blue"
+          bg="blue.600"
+          color="white"
           borderRadius="full"
           size="lg"
           onClick={scrollToTop}
           aria-label="Scroll to top"
-          _hover={{ transform: 'translateY(-3px)' }}
-          transition="all 0.3s"
+          _hover={{
+            bg: 'blue.700',
+          }}
+          fontSize="xl"
         >
           ↑
         </IconButton>

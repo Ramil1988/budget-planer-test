@@ -4,7 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BudgetWise is a budget tracking application built with React and Vite. The project was migrated from vanilla HTML/CSS/JS to React, maintaining all original functionality while adopting modern React patterns.
+BudgetWise is a budget tracking application built with React, Vite, and Chakra UI. The project was migrated from vanilla HTML/CSS/JS to React (v1.0.0), then migrated from vanilla CSS to Chakra UI (v2.0.0).
+
+**Current Version:** 2.0.0
+
+## Documentation Structure
+
+This project maintains comprehensive documentation in the `docs/` directory. **Always read these documents first** when working on the project:
+
+- **`docs/architecture.md`** - Complete technical architecture, technology stack, component structure, and design patterns
+- **`docs/changelog.md`** - Version history and detailed change log
+- **`docs/project-status.md`** - Current status, roadmap, tasks, and priorities
+- **`docs/technical-reference.md`** - Code patterns, examples, and quick reference guides
+
+**Important:** When making significant changes:
+1. Read the relevant documentation first
+2. Make your changes
+3. Update the appropriate documentation files
+4. Add an entry to `docs/changelog.md` under `[Unreleased]`
+5. Update `docs/project-status.md` if completing tasks or adding new ones
 
 ## Development Commands
 
@@ -43,31 +61,54 @@ The Header component uses `useLocation` hook to highlight active navigation link
 ### State Management
 
 The application uses React's built-in state management:
-- **Header component:** `useState` for mobile menu toggle state
-- **Home & Features pages:** `useEffect` hooks for scroll-based UI (scroll-to-top button, animations)
+- **Header component:** `useDisclosure` hook (Chakra UI) for mobile menu toggle
+- **Home & Features pages:** `useState` for scroll-to-top button visibility
+- **Router state:** `useLocation` hook for active link detection
+
+**Future:** Context API for budget data (see `docs/project-status.md` for roadmap)
 
 ### Styling Approach
 
-- Single global CSS file (`src/styles/styles.css`) with CSS custom properties for theming
-- Uses vanilla CSS with BEM-like class naming conventions
-- Responsive design with mobile-first breakpoints at 768px
-- No CSS-in-JS or CSS modules currently used
+**Current (v2.0.0):**
+- Chakra UI v3.30.0 component library
+- Emotion for CSS-in-JS (required by Chakra UI)
+- Framer Motion for animations (required by Chakra UI)
+- ChakraProvider wraps entire app in `main.jsx`
+- Uses Chakra's default theme system
+- Responsive props using object syntax: `{{ base: 'value', md: 'value' }}`
+- No custom CSS files
+
+**Previous (v1.0.0):**
+- Single global CSS file with CSS custom properties
+- Vanilla CSS with BEM-like naming
+- Migrated to Chakra UI in v2.0.0
 
 ### Key Implementation Details
 
-**Mobile Menu:** Toggled via React state in Header component, synced with hamburger icon (☰/✕)
+**Mobile Menu:**
+- Uses Chakra UI's `useDisclosure` hook for toggle state
+- Desktop: HStack with horizontal navigation
+- Mobile: Collapsible Stack with hamburger IconButton
 
-**Scroll Animations:**
-- Scroll-to-top button dynamically created/removed in useEffect cleanup
-- Feature cards use staggered fade-in animations with CSS animation-delay
+**Scroll-to-Top Button:**
+- Managed via React useState (visibility based on scroll position)
+- Appears after scrolling 300px
+- Chakra UI IconButton with fixed positioning
+
+**Feature Cards:**
+- Use Chakra UI's VStack and SimpleGrid components
+- Staggered animation using CSS animation delays
+- Hover effects via Chakra's `_hover` prop
 
 **Navigation:**
-- Uses React Router's `Link` components for client-side navigation
-- Active link highlighting based on current pathname
+- React Router's `Link` wrapped in Chakra's `Box` component (`as={RouterLink}`)
+- Active link highlighting using `useLocation` hook
+- Color changes via Chakra's color tokens
 
 **Images:**
 - Stored in `/images` directory at project root
-- Referenced from components using `/images/` paths (Vite's public asset handling)
+- Referenced using `/images/` paths (Vite's public asset handling)
+- Displayed using Chakra's `Box` component with `as="img"`
 
 ## Platform-Specific Notes
 
@@ -79,11 +120,18 @@ The application uses React's built-in state management:
 ## Component Patterns
 
 **Page Components:**
-- Each page component handles its own scroll-related effects in `useEffect`
-- Cleanup functions properly remove event listeners and DOM elements
-- Pages are wrapped in `<main>` with `.main-container` for consistent layout
+- Each page handles scroll-to-top button in local state
+- Use Chakra UI's `Box` with `as="main"` for semantic HTML
+- Wrapped in `Container` component (maxW="1200px") for consistent layout
+- See `docs/technical-reference.md` for component templates
 
 **Layout Components:**
-- Header and Footer are rendered once in App.jsx, wrapping all routes
-- Header manages its own mobile menu state internally
-- Footer is purely presentational with no state
+- **Header:** Sticky navigation with mobile responsive menu, uses Chakra UI components
+- **Footer:** Dark footer with branding, uses Chakra UI Container and VStack
+- Both rendered once in App.jsx, wrapping all routes
+
+**Chakra UI Patterns:**
+- Layout: Box, Container, Flex, Stack, HStack, VStack, SimpleGrid
+- Typography: Heading, Text
+- Interactive: Button, IconButton
+- See `docs/technical-reference.md` for detailed usage patterns
