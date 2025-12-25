@@ -7,12 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **NestJS Backend Setup:**
+  - Initialized NestJS v11.1.10 framework in `backend/` directory
+  - Created basic application structure (main.ts, app.module.ts, app.controller.ts, app.service.ts)
+  - Configured TypeScript with decorators and metadata reflection
+  - Added health check endpoint at `/health`
+  - Enabled CORS for frontend communication (http://localhost:5173)
+  - Added development scripts with hot reload support
+- `concurrently` package at root level for running frontend and backend simultaneously
+
+### Changed
+- Updated root package.json scripts:
+  - `pnpm run dev` now starts both frontend and backend concurrently
+  - Added `pnpm run build` to build both frontend and backend
+  - Added `pnpm run test:backend` for backend testing
+- Updated CLAUDE.md with NestJS backend documentation and development commands
+
 ### Planned
 - Budget entry form
-- Data persistence (localStorage)
+- Data persistence (database integration)
 - Budget visualization charts
 - Export functionality
 - Dark mode support
+- REST API endpoints for budget management
 
 ---
 

@@ -28,26 +28,68 @@ This project maintains comprehensive documentation in the `docs/` directory. **A
 
 **Package Manager:** This project uses `pnpm` (v10.24.0)
 
-- `pnpm run dev` - Start Vite development server (runs on http://localhost:5173/)
+**Monorepo Structure:** The project is organized into `frontend/` and `backend/` directories.
+
+From the root directory:
+- `pnpm run dev` - Start both frontend and backend servers concurrently
+- `pnpm run dev:frontend` - Start frontend Vite development server (runs on http://localhost:5173/)
+- `pnpm run dev:backend` - Start backend NestJS server (runs on http://localhost:3000/)
+- `pnpm run build` - Build both frontend and backend for production
+- `pnpm run build:frontend` - Build frontend for production
+- `pnpm run build:backend` - Build backend for production
+- `pnpm run test:frontend` - Run frontend Playwright tests
+- `pnpm run test:backend` - Run backend Jest tests
+- `pnpm run install:all` - Install dependencies for root, frontend, and backend
+
+From the frontend directory (`cd frontend`):
+- `pnpm run dev` - Start Vite development server
 - `pnpm run build` - Build for production
 - `pnpm run preview` - Preview production build locally
+- `pnpm run test` - Run Playwright tests
+
+From the backend directory (`cd backend`):
+- `pnpm run dev` - Start NestJS server in watch mode
+- `pnpm run build` - Build for production
+- `pnpm run start` - Start production server
+- `pnpm run test` - Run Jest tests
 
 ## Architecture
 
-### Application Structure
+### Project Structure
 
 ```
-src/
-├── main.jsx              # Application entry point, wraps App with BrowserRouter
-├── App.jsx               # Root component with routing configuration
-├── components/           # Reusable UI components
-│   ├── Header.jsx        # Navigation with mobile menu toggle
-│   └── Footer.jsx        # Footer with branding
-├── pages/                # Route-level page components
-│   ├── Home.jsx          # Homepage with hero and feature preview
-│   └── Features.jsx      # Detailed features page
-└── styles/
-    └── styles.css        # Global CSS with CSS custom properties
+.
+├── frontend/             # Frontend React application
+│   ├── src/
+│   │   ├── main.jsx              # Application entry point, wraps App with BrowserRouter
+│   │   ├── App.jsx               # Root component with routing configuration
+│   │   ├── components/           # Reusable UI components
+│   │   │   ├── Header.jsx        # Navigation with mobile menu toggle
+│   │   │   └── Footer.jsx        # Footer with branding
+│   │   ├── pages/                # Route-level page components
+│   │   │   ├── Home.jsx          # Homepage with hero and feature preview
+│   │   │   └── Features.jsx      # Detailed features page
+│   │   └── styles/
+│   │       └── styles.css        # Global CSS with CSS custom properties
+│   ├── public/                   # Static assets
+│   ├── images/                   # Image assets
+│   ├── tests/                    # Playwright test files
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── playwright.config.js
+│   └── package.json
+├── backend/              # Backend NestJS API
+│   ├── src/
+│   │   ├── main.ts               # Application entry point
+│   │   ├── app.module.ts         # Root application module
+│   │   ├── app.controller.ts     # Root controller
+│   │   └── app.service.ts        # Root service
+│   ├── tsconfig.json
+│   ├── tsconfig.build.json
+│   ├── nest-cli.json
+│   └── package.json
+├── docs/                 # Project documentation
+└── package.json          # Root package.json with monorepo scripts
 ```
 
 ### Routing
@@ -106,9 +148,38 @@ The application uses React's built-in state management:
 - Color changes via Chakra's color tokens
 
 **Images:**
-- Stored in `/images` directory at project root
+- Stored in `frontend/images/` directory
 - Referenced using `/images/` paths (Vite's public asset handling)
 - Displayed using Chakra's `Box` component with `as="img"`
+
+## Backend (NestJS)
+
+The backend is built with NestJS, a progressive Node.js framework for building efficient and scalable server-side applications.
+
+**Technology Stack:**
+- **Framework:** NestJS v11.1.10
+- **Runtime:** Node.js with TypeScript
+- **Architecture:** Modular, following NestJS conventions
+- **API Style:** RESTful (GraphQL support possible in future)
+
+**Project Structure:**
+- `src/main.ts` - Application bootstrap, sets up CORS and port configuration
+- `src/app.module.ts` - Root module that imports all feature modules
+- `src/app.controller.ts` - Root controller with health check endpoint
+- `src/app.service.ts` - Root service with basic application logic
+
+**Key Features:**
+- CORS enabled for frontend (http://localhost:5173)
+- Health check endpoint at `/health`
+- TypeScript configured for decorators and metadata reflection
+- Hot reload in development mode via `nest start --watch`
+
+**Development Patterns:**
+- Controllers handle HTTP requests and responses
+- Services contain business logic
+- Modules organize features and dependencies
+- DTOs (Data Transfer Objects) for request/response validation
+- Use dependency injection for all services
 
 ## Platform-Specific Notes
 
