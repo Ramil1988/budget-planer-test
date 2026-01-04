@@ -9,7 +9,6 @@ import {
   VStack,
   Text,
   Link,
-  Alert,
   Stack,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -86,19 +85,33 @@ export default function Signup() {
         >
           <VStack gap={4}>
             {error && (
-              <Alert.Root status="error">
-                <Alert.Icon />
-                <Alert.Title>{error}</Alert.Title>
-              </Alert.Root>
+              <Box
+                p={3}
+                bg="red.50"
+                borderColor="red.500"
+                borderWidth="1px"
+                borderRadius="md"
+                w="100%"
+              >
+                <Text color="red.700" fontWeight="medium">
+                  {error}
+                </Text>
+              </Box>
             )}
 
             {success && (
-              <Alert.Root status="success">
-                <Alert.Icon />
-                <Alert.Title>
+              <Box
+                p={3}
+                bg="green.50"
+                borderColor="green.500"
+                borderWidth="1px"
+                borderRadius="md"
+                w="100%"
+              >
+                <Text color="green.700" fontWeight="medium">
                   Account created! Please check your email to verify your account.
-                </Alert.Title>
-              </Alert.Root>
+                </Text>
+              </Box>
             )}
 
             <Stack gap={2} w="100%">
