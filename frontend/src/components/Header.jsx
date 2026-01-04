@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link as RouterLink, useLocation } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Box,
   Flex,
@@ -8,14 +8,23 @@ import {
   useDisclosure,
   Stack,
   Text,
+  Button,
 } from '@chakra-ui/react'
+import { useAuth } from '../contexts/AuthContext'
 
 function Header() {
   const { open, onToggle } = useDisclosure()
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
 
   const isActive = (path) => {
     return location.pathname === path
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
   }
 
   return (
@@ -67,6 +76,48 @@ function Header() {
           >
             Features
           </Box>
+
+          {user ? (
+            <>
+              <Box
+                as={RouterLink}
+                to="/dashboard"
+                color={isActive('/dashboard') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/dashboard') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Dashboard
+              </Box>
+              <Button
+                onClick={handleSignOut}
+                size="sm"
+                colorScheme="red"
+                variant="outline"
+              >
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                as={RouterLink}
+                to="/login"
+                size="sm"
+                variant="ghost"
+              >
+                Login
+              </Button>
+              <Button
+                as={RouterLink}
+                to="/signup"
+                size="sm"
+                colorScheme="teal"
+              >
+                Sign Up
+              </Button>
+            </>
+          )}
         </HStack>
 
         {/* Mobile Menu Button */}
@@ -107,6 +158,52 @@ function Header() {
             >
               Features
             </Box>
+
+            {user ? (
+              <>
+                <Box
+                  as={RouterLink}
+                  to="/dashboard"
+                  color={isActive('/dashboard') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/dashboard') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Dashboard
+                </Box>
+                <Button
+                  onClick={() => {
+                    handleSignOut()
+                    onToggle()
+                  }}
+                  size="sm"
+                  colorScheme="red"
+                  variant="outline"
+                >
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  as={RouterLink}
+                  to="/login"
+                  size="sm"
+                  variant="ghost"
+                  onClick={onToggle}
+                >
+                  Login
+                </Button>
+                <Button
+                  as={RouterLink}
+                  to="/signup"
+                  size="sm"
+                  colorScheme="teal"
+                  onClick={onToggle}
+                >
+                  Sign Up
+                </Button>
+              </>
+            )}
           </Stack>
         </Box>
       )}
