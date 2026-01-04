@@ -4,9 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BudgetWise is a budget tracking application built with React, Vite, and Chakra UI. The project was migrated from vanilla HTML/CSS/JS to React (v1.0.0), then migrated from vanilla CSS to Chakra UI (v2.0.0).
+BudgetWise is a full-stack budget tracking application built with React (frontend), Netlify Functions (serverless backend), and Supabase (database). The project was migrated from vanilla HTML/CSS/JS to React (v1.0.0), then migrated from vanilla CSS to Chakra UI (v2.0.0), and recently added backend infrastructure with Supabase PostgreSQL database and serverless API using Netlify Functions.
 
 **Current Version:** 2.0.0
+
+**Technology Stack:**
+- **Frontend:** React 19.2.3 + Chakra UI 3.30.0 + Vite 7.2.7
+- **Backend:** Netlify Functions (Serverless) + TypeScript
+- **Database:** Supabase (PostgreSQL) with Row Level Security
+- **Authentication:** Supabase Auth
+- **Deployment:** Netlify (Frontend + Backend Functions)
+- **Package Manager:** pnpm 10.24.0
 
 ## Documentation Structure
 
@@ -28,18 +36,15 @@ This project maintains comprehensive documentation in the `docs/` directory. **A
 
 **Package Manager:** This project uses `pnpm` (v10.24.0)
 
-**Monorepo Structure:** The project is organized into `frontend/` and `backend/` directories.
+**Project Structure:** The project consists of `frontend/` (React app) and `netlify/functions/` (serverless backend).
 
 From the root directory:
-- `pnpm run dev` - Start both frontend and backend servers concurrently
-- `pnpm run dev:frontend` - Start frontend Vite development server (runs on http://localhost:5173/)
-- `pnpm run dev:backend` - Start backend NestJS server (runs on http://localhost:3000/)
-- `pnpm run build` - Build both frontend and backend for production
+- `netlify dev` - Start development server with frontend and functions (http://localhost:8888)
+- `pnpm run dev:frontend` - Start frontend Vite development server only (http://localhost:5173/)
 - `pnpm run build:frontend` - Build frontend for production
-- `pnpm run build:backend` - Build backend for production
 - `pnpm run test:frontend` - Run frontend Playwright tests
-- `pnpm run test:backend` - Run backend Jest tests
-- `pnpm run install:all` - Install dependencies for root, frontend, and backend
+- `pnpm run install:all` - Install dependencies for root and frontend
+- `netlify deploy --prod` - Deploy to Netlify production
 
 From the frontend directory (`cd frontend`):
 - `pnpm run dev` - Start Vite development server
@@ -47,11 +52,11 @@ From the frontend directory (`cd frontend`):
 - `pnpm run preview` - Preview production build locally
 - `pnpm run test` - Run Playwright tests
 
-From the backend directory (`cd backend`):
-- `pnpm run dev` - Start NestJS server in watch mode
-- `pnpm run build` - Build for production
-- `pnpm run start` - Start production server
-- `pnpm run test` - Run Jest tests
+Netlify Functions (serverless backend):
+- Functions are located in `netlify/functions/`
+- Accessed at `/.netlify/functions/{function-name}` or `/api/*` (via redirect)
+- Automatically deployed with frontend to Netlify
+- No separate backend server needed
 
 ## Architecture
 
@@ -78,18 +83,23 @@ From the backend directory (`cd backend`):
 │   ├── vite.config.js
 │   ├── playwright.config.js
 │   └── package.json
-├── backend/              # Backend NestJS API
-│   ├── src/
-│   │   ├── main.ts               # Application entry point
-│   │   ├── app.module.ts         # Root application module
-│   │   ├── app.controller.ts     # Root controller
-│   │   └── app.service.ts        # Root service
-│   ├── tsconfig.json
-│   ├── tsconfig.build.json
-│   ├── nest-cli.json
-│   └── package.json
+├── netlify/              # Serverless backend
+│   └── functions/                # Netlify Functions (TypeScript)
+│       ├── auth.ts               # Authentication endpoints
+│       ├── accounts.ts           # Accounts CRUD
+│       ├── transactions.ts       # Transactions CRUD
+│       ├── categories.ts         # Categories CRUD
+│       └── budgets.ts            # Budgets CRUD
+├── backend/              # Legacy NestJS (to be removed)
+│   └── database/
+│       └── schema.sql            # Supabase PostgreSQL database schema
 ├── docs/                 # Project documentation
-└── package.json          # Root package.json with monorepo scripts
+│   ├── tech-stack.md             # Technology stack details
+│   ├── architecture.md           # Architecture documentation
+│   ├── changelog.md              # Version history
+│   └── project-status.md         # Current status and roadmap
+├── netlify.toml          # Netlify deployment configuration
+└── package.json          # Root package.json with scripts
 ```
 
 ### Routing
@@ -152,34 +162,128 @@ The application uses React's built-in state management:
 - Referenced using `/images/` paths (Vite's public asset handling)
 - Displayed using Chakra's `Box` component with `as="img"`
 
-## Backend (NestJS)
+## Backend (Netlify Functions)
 
-The backend is built with NestJS, a progressive Node.js framework for building efficient and scalable server-side applications.
+The backend is built with Netlify Functions, a serverless platform that runs event-driven backend logic without managing servers.
 
 **Technology Stack:**
-- **Framework:** NestJS v11.1.10
+- **Platform:** Netlify Functions (AWS Lambda)
 - **Runtime:** Node.js with TypeScript
-- **Architecture:** Modular, following NestJS conventions
-- **API Style:** RESTful (GraphQL support possible in future)
+- **Database:** Supabase PostgreSQL with Row Level Security (RLS)
+- **Architecture:** Serverless, event-driven functions
+- **API Style:** RESTful
 
 **Project Structure:**
-- `src/main.ts` - Application bootstrap, sets up CORS and port configuration
-- `src/app.module.ts` - Root module that imports all feature modules
-- `src/app.controller.ts` - Root controller with health check endpoint
-- `src/app.service.ts` - Root service with basic application logic
+- `netlify/functions/` - Serverless function handlers
+- `backend/database/schema.sql` - Complete Supabase PostgreSQL schema with triggers and RLS
+- Environment variables configured in Netlify dashboard
 
 **Key Features:**
-- CORS enabled for frontend (http://localhost:5173)
-- Health check endpoint at `/health`
-- TypeScript configured for decorators and metadata reflection
-- Hot reload in development mode via `nest start --watch`
+- Serverless - no servers to manage, auto-scaling
+- Zero cost when not in use (pay per invocation)
+- Single deployment platform with frontend (Netlify)
+- CORS handled automatically by Netlify
+- Functions accessible at `/.netlify/functions/{name}` or via `/api/*` redirects
 
 **Development Patterns:**
-- Controllers handle HTTP requests and responses
-- Services contain business logic
-- Modules organize features and dependencies
-- DTOs (Data Transfer Objects) for request/response validation
-- Use dependency injection for all services
+- Each function handles specific HTTP endpoints
+- Use Supabase JS client for database queries
+- JWT token validation via Supabase Auth
+- TypeScript for type safety
+- Functions run independently (stateless)
+
+**Database Schema:**
+- **Tables:**
+  - `profiles` - User profiles linked to Supabase Auth
+  - `accounts` - Financial accounts (bank accounts, wallets, etc.) with balance tracking
+  - `categories` - Income and expense categories
+  - `transactions` - Individual transactions with running balance
+  - `budgets` - Monthly budget planning
+  - `budget_categories` - Category-level budget limits and spent tracking
+- **Features:**
+  - Running balance tracking (automatic via triggers)
+  - Automatic account balance updates on transactions
+  - Budget spent amount tracking (linked to transactions)
+- **Automation:** 3 trigger functions for automatic calculations:
+  - `update_balance()` - Updates account balance on transaction insert
+  - `calc_running_balance()` - Calculates running balance for each transaction
+  - `update_spent()` - Updates budget_categories.spent when expenses are added
+- **Security:** Row Level Security (RLS) enabled on all tables
+  - Users can only access their own data (user_id = auth.uid())
+  - Budget categories secured via budget ownership check
+- See `backend/database/schema.sql` for complete schema definition
+
+## Database & Supabase
+
+### Supabase Setup
+
+**Database:** PostgreSQL hosted on Supabase
+**Authentication:** Supabase Auth (integrated with database via `auth.users` table)
+**Connection:** Direct SQL queries using `pg` (PostgreSQL client) - no ORM
+
+### Environment Configuration
+
+The backend requires the following environment variables in `backend/.env`:
+
+```env
+DATABASE_URL=postgresql://postgres:[password]@[host]:5432/postgres
+PORT=3000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:5173
+```
+
+**Note:** Never commit the `.env` file to git. Use `.env.example` as a template.
+
+### Database Connection
+
+**Supabase JS Client** is used in Netlify Functions to interact with the database:
+
+1. Install in function: `npm install @supabase/supabase-js`
+2. Create Supabase client in each function
+3. Use client methods for queries (type-safe)
+4. JWT validation built into Supabase client
+
+### Working with the Database
+
+**Query Pattern (Using Supabase JS Client):**
+```typescript
+// Netlify Function example
+import { createClient } from '@supabase/supabase-js';
+
+export const handler = async (event, context) => {
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!
+  );
+
+  // Get user from JWT token
+  const token = event.headers.authorization?.replace('Bearer ', '');
+  const { data: { user } } = await supabase.auth.getUser(token);
+
+  // Query with automatic RLS filtering
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', user.id);
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify(data)
+  };
+};
+```
+
+**Security:**
+- Always use Row Level Security (RLS) policies (already enabled in schema)
+- Validate Supabase JWT tokens in Netlify Functions
+- Never expose database credentials in frontend code
+- Supabase client handles SQL injection prevention automatically
+
+**Important:** The database schema (`backend/database/schema.sql`) should be executed in Supabase SQL editor. It includes:
+- Table definitions
+- Trigger functions for automatic calculations
+- Row Level Security policies
+- All required indexes and constraints
 
 ## Platform-Specific Notes
 
