@@ -8,29 +8,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **NestJS Backend Setup:**
+- **Supabase PostgreSQL Database Schema (2025-12-29):**
+  - Comprehensive 6-table schema:
+    - `profiles` - User profiles linked to Supabase Auth (id, email, full_name)
+    - `accounts` - Financial accounts with automatic balance tracking
+    - `categories` - Income and expense categories (user-customizable)
+    - `transactions` - Transaction records with running balance
+    - `budgets` - Monthly budget planning
+    - `budget_categories` - Category-level budget limits and spent tracking
+  - **Database Features:**
+    - Row Level Security (RLS) enabled on all tables
+    - 3 PostgreSQL triggers for automatic calculations:
+      - `update_balance()` - Updates account balance on transaction insert
+      - `calc_running_balance()` - Calculates running balance per transaction
+      - `update_spent()` - Updates budget_categories.spent from expenses
+    - Supabase Auth integration via `auth.users` table
+    - UUID primary keys with uuid-ossp extension
+
+- **NestJS Backend Setup (2025-12-27):**
   - Initialized NestJS v11.1.10 framework in `backend/` directory
-  - Created basic application structure (main.ts, app.module.ts, app.controller.ts, app.service.ts)
-  - Configured TypeScript with decorators and metadata reflection
-  - Added health check endpoint at `/health`
-  - Enabled CORS for frontend communication (http://localhost:5173)
-  - Added development scripts with hot reload support
-- `concurrently` package at root level for running frontend and backend simultaneously
+  - TypeScript configuration with decorators and metadata reflection
+  - Basic application structure:
+    - `main.ts` - Application bootstrap with CORS configuration
+    - `app.module.ts` - Root application module
+    - `app.controller.ts` - Health check controller
+    - `app.service.ts` - Root service
+    - `database/schema.sql` - Complete Supabase PostgreSQL schema
+  - Health check endpoint at `/health`
+  - CORS enabled for frontend (http://localhost:5173)
+  - Hot reload support in development mode
+  - Environment configuration template (`.env.example`)
+
+- **Monorepo Development Setup:**
+  - Added `concurrently` package for parallel frontend/backend development
+  - Root-level development scripts:
+    - `pnpm run dev` - Start both frontend and backend
+    - `pnpm run dev:frontend` - Frontend only (http://localhost:5173)
+    - `pnpm run dev:backend` - Backend only (http://localhost:3000)
+    - `pnpm run build` - Build both projects
+    - `pnpm run test:frontend` - Playwright tests
+    - `pnpm run test:backend` - Jest tests
+
+- **Documentation Updates (2025-12-29):**
+  - `docs/architecture.md` - Added database schema, backend API architecture, security model
+  - `docs/project-status.md` - Added Phase 3 completion, updated roadmap
+  - `CLAUDE.md` - Added Supabase setup, database connection guide, security best practices
 
 ### Changed
-- Updated root package.json scripts:
-  - `pnpm run dev` now starts both frontend and backend concurrently
-  - Added `pnpm run build` to build both frontend and backend
-  - Added `pnpm run test:backend` for backend testing
-- Updated CLAUDE.md with NestJS backend documentation and development commands
+- Converted project to monorepo structure with separate `frontend/` and `backend/` directories
+- Updated all documentation files with database and backend information
+- Enhanced root package.json with scripts for full-stack development
 
 ### Planned
-- Budget entry form
-- Data persistence (database integration)
-- Budget visualization charts
-- Export functionality
-- Dark mode support
-- REST API endpoints for budget management
+- **Backend API Implementation:**
+  - Install `pg` (PostgreSQL client) for database connectivity
+  - Create database service with connection pooling
+  - Implement authentication module with Supabase JWT validation
+  - Build REST API endpoints:
+    - Authentication (signup, login, logout, profile)
+    - Accounts CRUD operations
+    - Categories CRUD operations
+    - Transactions CRUD with filtering and sorting
+    - Budgets CRUD operations
+    - Budget categories management
+  - Add DTOs for request/response validation
+  - Implement comprehensive error handling and logging
+  - Write unit and integration tests (Jest)
+
+- **Frontend Integration:**
+  - Set up API client service in React
+  - Implement authentication UI (login, signup, logout)
+  - Connect frontend to backend API endpoints
+  - Add loading states and error handling
+  - Build core UI components:
+    - Transaction entry forms
+    - Accounts dashboard
+    - Budget planning interface
+    - Categories management
+
+- **Future Features:**
+  - Budget visualization charts (Recharts or Nivo)
+  - Real-time data updates (Supabase Realtime)
+  - Export functionality (CSV, PDF)
+  - Dark mode support with Chakra UI
+  - Receipt scanner with OCR integration
+  - Multi-currency support
+  - Recurring transactions
 
 ---
 
