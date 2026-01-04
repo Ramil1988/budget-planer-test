@@ -2,8 +2,8 @@
 # This file configures how Netlify builds and deploys the application
 
 [build]
-  # Build command runs from root, builds frontend
-  command = "cd frontend && pnpm run build"
+  # Build command: install dependencies then build frontend
+  command = "cd frontend && pnpm install && pnpm run build"
 
   # Publish directory is where Vite outputs the built files
   publish = "frontend/dist"
@@ -14,9 +14,6 @@
 [build.environment]
   # Node.js version to use during build
   NODE_VERSION = "18"
-
-  # Use pnpm as package manager
-  NPM_FLAGS = "--version"
 
 # Redirect all routes to index.html for React Router (SPA)
 # This fixes the 404 error when navigating directly to routes like /features
