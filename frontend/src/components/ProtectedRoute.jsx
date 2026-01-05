@@ -9,7 +9,7 @@ export default function ProtectedRoute({ children }) {
   if (loading) {
     return (
       <Center h="100vh">
-        <Spinner size="xl" color="teal.500" />
+        <Spinner size="xl" color="blue.500" />
       </Center>
     );
   }

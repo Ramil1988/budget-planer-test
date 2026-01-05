@@ -299,26 +299,24 @@ export default function Budget() {
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={6}>
+    <Box w="100%" h="100%" bg="gray.50" p={{ base: 3, md: 6 }}>
       <Box w="100%">
-        <VStack gap={6} align="stretch" w="100%">
+        <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
         {/* Header */}
-        <HStack justify="space-between" wrap="wrap" gap={4}>
-          <Heading size="xl">Monthly Budget</Heading>
-          <HStack>
-            <Input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              size="md"
-              w="200px"
-              bg="white"
-            />
-          </HStack>
-        </HStack>
+        <Flex justify="space-between" align={{ base: 'stretch', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} wrap="wrap" gap={{ base: 3, md: 4 }}>
+          <Heading size={{ base: 'lg', md: 'xl' }}>Monthly Budget</Heading>
+          <Input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            size="md"
+            w={{ base: '100%', sm: '200px' }}
+            bg="white"
+          />
+        </Flex>
 
         {/* Month Display */}
-        <Text fontSize="lg" color="gray.600">
+        <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600">
           {getMonthName(selectedMonth)}
         </Text>
 
@@ -357,92 +355,209 @@ export default function Budget() {
                 <Text>Loading...</Text>
               </VStack>
             ) : (
-              <Box borderWidth="1px" borderRadius="lg" overflow="hidden" bg="white">
-                <Table.Root size="sm" style={{ fontSize: '13px' }}>
-                  <Table.Header bg="gray.100">
-                    <Table.Row>
-                      <Table.ColumnHeader fontWeight="bold" py={2} px={3} fontSize="xs">Expense Item</Table.ColumnHeader>
-                      <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">SPENT</Table.ColumnHeader>
-                      <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">Limit</Table.ColumnHeader>
-                      <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">Remaining</Table.ColumnHeader>
-                      <Table.ColumnHeader fontWeight="bold" textAlign="center" py={2} px={3} fontSize="xs">% of Limit</Table.ColumnHeader>
-                      <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">% of Budget</Table.ColumnHeader>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {budgetData.map((item) => (
-                      <Table.Row key={item.id} _hover={{ bg: 'gray.50' }}>
-                        <Table.Cell py={1.5} px={3} fontWeight="medium" fontSize="sm">{item.name}</Table.Cell>
-                        <Table.Cell py={1.5} px={3} textAlign="right" fontWeight="bold" fontSize="sm">
-                          {formatCurrency(item.spent)}
-                        </Table.Cell>
-                        <Table.Cell py={1.5} px={3} textAlign="right" fontSize="sm">
-                          {item.limit > 0 ? formatCurrency(item.limit) : '-'}
-                        </Table.Cell>
-                        <Table.Cell py={1.5} px={3} textAlign="right">
-                          <Text
-                            color={item.remaining < 0 ? 'red.600' : 'green.600'}
-                            fontWeight="medium"
-                            fontSize="sm"
-                          >
-                            {formatCurrency(item.remaining)}
-                          </Text>
-                        </Table.Cell>
-                        <Table.Cell py={1.5} px={3} textAlign="center">
-                          {item.limit > 0 ? (
-                            <Badge
-                              colorPalette={item.percentOfLimit > 100 ? 'red' : item.percentOfLimit > 80 ? 'yellow' : 'green'}
-                              size="sm"
-                            >
-                              {formatPercent(item.percentOfLimit)}
-                            </Badge>
-                          ) : (
-                            '-'
-                          )}
-                        </Table.Cell>
-                        <Table.Cell py={1.5} px={3} textAlign="right" fontSize="sm">
-                          {formatPercent(item.percentOfBudget)}
-                        </Table.Cell>
-                      </Table.Row>
-                    ))}
-                    {/* Grand Total Row */}
-                    <Table.Row bg="gray.100" fontWeight="bold">
-                      <Table.Cell py={2} px={3} fontSize="sm">GRAND TOTAL</Table.Cell>
-                      <Table.Cell py={2} px={3} textAlign="right" fontSize="sm">
-                        {formatCurrency(totalSpent)}
-                      </Table.Cell>
-                      <Table.Cell py={2} px={3} textAlign="right" fontSize="sm">
-                        {formatCurrency(totalLimit)}
-                      </Table.Cell>
-                      <Table.Cell py={2} px={3} textAlign="right">
-                        <Text
-                          color={totalRemaining < 0 ? 'red.600' : 'green.600'}
-                          fontWeight="medium"
-                          fontSize="sm"
-                        >
+              <>
+                {/* Mobile Card View */}
+                <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch">
+                  {/* Summary Card */}
+                  <Box p={4} bg="white" borderRadius="lg" borderWidth="1px" borderColor="gray.200">
+                    <Text fontWeight="bold" fontSize="sm" mb={3}>Summary</Text>
+                    <Flex justify="space-between" mb={2}>
+                      <Text fontSize="sm" color="gray.600">Total Spent</Text>
+                      <Text fontWeight="bold" fontSize="sm">{formatCurrency(totalSpent)}</Text>
+                    </Flex>
+                    <Flex justify="space-between" mb={2}>
+                      <Text fontSize="sm" color="gray.600">Total Limit</Text>
+                      <Text fontSize="sm">{formatCurrency(totalLimit)}</Text>
+                    </Flex>
+                    <Flex justify="space-between" align="center">
+                      <Text fontSize="sm" color="gray.600">Remaining</Text>
+                      <HStack gap={2}>
+                        <Text fontWeight="medium" fontSize="sm" color={totalRemaining < 0 ? 'red.600' : 'green.600'}>
                           {formatCurrency(totalRemaining)}
                         </Text>
-                      </Table.Cell>
-                      <Table.Cell py={2} px={3} textAlign="center">
                         <Badge
                           colorPalette={totalPercentSpent > 100 ? 'red' : totalPercentSpent > 80 ? 'yellow' : 'green'}
                           size="sm"
                         >
                           {formatPercent(totalPercentSpent)}
                         </Badge>
-                      </Table.Cell>
-                      <Table.Cell py={2} px={3} textAlign="right" fontSize="sm">100%</Table.Cell>
-                    </Table.Row>
-                  </Table.Body>
-                </Table.Root>
-              </Box>
+                      </HStack>
+                    </Flex>
+                  </Box>
+
+                  {/* Category Cards */}
+                  {budgetData.map((item) => (
+                    <Box
+                      key={item.id}
+                      p={4}
+                      bg="white"
+                      borderRadius="lg"
+                      borderWidth="1px"
+                      borderColor="gray.200"
+                    >
+                      <Flex justify="space-between" align="center" mb={2}>
+                        <Text fontWeight="semibold" fontSize="sm">{item.name}</Text>
+                        {item.limit > 0 && (
+                          <Badge
+                            colorPalette={item.percentOfLimit > 100 ? 'red' : item.percentOfLimit > 80 ? 'yellow' : 'green'}
+                            size="sm"
+                          >
+                            {formatPercent(item.percentOfLimit)}
+                          </Badge>
+                        )}
+                      </Flex>
+                      <Flex justify="space-between" mb={1}>
+                        <Text fontSize="xs" color="gray.500">Spent</Text>
+                        <Text fontWeight="bold" fontSize="sm">{formatCurrency(item.spent)}</Text>
+                      </Flex>
+                      <Flex justify="space-between" mb={1}>
+                        <Text fontSize="xs" color="gray.500">Limit</Text>
+                        <Text fontSize="sm">{item.limit > 0 ? formatCurrency(item.limit) : '-'}</Text>
+                      </Flex>
+                      <Flex justify="space-between">
+                        <Text fontSize="xs" color="gray.500">Remaining</Text>
+                        <Text fontSize="sm" fontWeight="medium" color={item.remaining < 0 ? 'red.600' : 'green.600'}>
+                          {formatCurrency(item.remaining)}
+                        </Text>
+                      </Flex>
+                    </Box>
+                  ))}
+                </VStack>
+
+                {/* Desktop Table View */}
+                <Box display={{ base: 'none', md: 'block' }} borderWidth="1px" borderRadius="lg" overflow="hidden" bg="white">
+                  <Table.Root size="sm" style={{ fontSize: '13px' }}>
+                    <Table.Header bg="gray.100">
+                      <Table.Row>
+                        <Table.ColumnHeader fontWeight="bold" py={2} px={3} fontSize="xs">Expense Item</Table.ColumnHeader>
+                        <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">SPENT</Table.ColumnHeader>
+                        <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">Limit</Table.ColumnHeader>
+                        <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">Remaining</Table.ColumnHeader>
+                        <Table.ColumnHeader fontWeight="bold" textAlign="center" py={2} px={3} fontSize="xs">% of Limit</Table.ColumnHeader>
+                        <Table.ColumnHeader fontWeight="bold" textAlign="right" py={2} px={3} fontSize="xs">% of Budget</Table.ColumnHeader>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {budgetData.map((item) => (
+                        <Table.Row key={item.id} _hover={{ bg: 'gray.50' }}>
+                          <Table.Cell py={1.5} px={3} fontWeight="medium" fontSize="sm">{item.name}</Table.Cell>
+                          <Table.Cell py={1.5} px={3} textAlign="right" fontWeight="bold" fontSize="sm">
+                            {formatCurrency(item.spent)}
+                          </Table.Cell>
+                          <Table.Cell py={1.5} px={3} textAlign="right" fontSize="sm">
+                            {item.limit > 0 ? formatCurrency(item.limit) : '-'}
+                          </Table.Cell>
+                          <Table.Cell py={1.5} px={3} textAlign="right">
+                            <Text
+                              color={item.remaining < 0 ? 'red.600' : 'green.600'}
+                              fontWeight="medium"
+                              fontSize="sm"
+                            >
+                              {formatCurrency(item.remaining)}
+                            </Text>
+                          </Table.Cell>
+                          <Table.Cell py={1.5} px={3} textAlign="center">
+                            {item.limit > 0 ? (
+                              <Badge
+                                colorPalette={item.percentOfLimit > 100 ? 'red' : item.percentOfLimit > 80 ? 'yellow' : 'green'}
+                                size="sm"
+                              >
+                                {formatPercent(item.percentOfLimit)}
+                              </Badge>
+                            ) : (
+                              '-'
+                            )}
+                          </Table.Cell>
+                          <Table.Cell py={1.5} px={3} textAlign="right" fontSize="sm">
+                            {formatPercent(item.percentOfBudget)}
+                          </Table.Cell>
+                        </Table.Row>
+                      ))}
+                      {/* Grand Total Row */}
+                      <Table.Row bg="gray.100" fontWeight="bold">
+                        <Table.Cell py={2} px={3} fontSize="sm">GRAND TOTAL</Table.Cell>
+                        <Table.Cell py={2} px={3} textAlign="right" fontSize="sm">
+                          {formatCurrency(totalSpent)}
+                        </Table.Cell>
+                        <Table.Cell py={2} px={3} textAlign="right" fontSize="sm">
+                          {formatCurrency(totalLimit)}
+                        </Table.Cell>
+                        <Table.Cell py={2} px={3} textAlign="right">
+                          <Text
+                            color={totalRemaining < 0 ? 'red.600' : 'green.600'}
+                            fontWeight="medium"
+                            fontSize="sm"
+                          >
+                            {formatCurrency(totalRemaining)}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell py={2} px={3} textAlign="center">
+                          <Badge
+                            colorPalette={totalPercentSpent > 100 ? 'red' : totalPercentSpent > 80 ? 'yellow' : 'green'}
+                            size="sm"
+                          >
+                            {formatPercent(totalPercentSpent)}
+                          </Badge>
+                        </Table.Cell>
+                        <Table.Cell py={2} px={3} textAlign="right" fontSize="sm">100%</Table.Cell>
+                      </Table.Row>
+                    </Table.Body>
+                  </Table.Root>
+                </Box>
+              </>
             )}
           </Tabs.Content>
 
           {/* Setup Tab */}
           <Tabs.Content value="setup" pt={4}>
-            <VStack gap={4} align="flex-start">
-              <Box borderWidth="1px" borderRadius="lg" overflow="hidden" bg="white" maxW="400px" w="100%">
+            <VStack gap={4} align="stretch" w="100%">
+              {/* Mobile Card View for Setup */}
+              <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch">
+                {/* Total Card */}
+                <Box p={4} bg="blue.50" borderRadius="lg" borderWidth="1px" borderColor="blue.200">
+                  <Flex justify="space-between" align="center">
+                    <Text fontWeight="bold" fontSize="sm">Total Budget</Text>
+                    <Text fontWeight="bold" fontSize="lg" color="blue.600">
+                      {formatCurrency(
+                        Object.values(budgetLimits).reduce((sum, val) => sum + Number(val || 0), 0)
+                      )}
+                    </Text>
+                  </Flex>
+                </Box>
+
+                {/* Category Inputs */}
+                {categories
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((cat) => (
+                    <Flex
+                      key={cat.id}
+                      p={3}
+                      bg="white"
+                      borderRadius="lg"
+                      borderWidth="1px"
+                      borderColor="gray.200"
+                      justify="space-between"
+                      align="center"
+                      gap={3}
+                    >
+                      <Text fontWeight="medium" fontSize="sm" flex="1">{cat.name}</Text>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={budgetLimits[cat.id] ?? ''}
+                        onChange={(e) => handleLimitChange(cat.id, e.target.value)}
+                        placeholder="0.00"
+                        size="sm"
+                        w="100px"
+                        textAlign="right"
+                      />
+                    </Flex>
+                  ))}
+              </VStack>
+
+              {/* Desktop Table View for Setup */}
+              <Box display={{ base: 'none', md: 'block' }} borderWidth="1px" borderRadius="lg" overflow="hidden" bg="white" maxW="400px" w="100%">
                 <Table.Root size="sm">
                   <Table.Header bg="gray.100">
                     <Table.Row>
@@ -486,10 +601,11 @@ export default function Budget() {
 
               <Button
                 colorPalette="blue"
-                size="md"
+                size={{ base: 'md', md: 'md' }}
                 onClick={saveBudget}
                 loading={saving}
                 loadingText="Saving..."
+                w={{ base: '100%', md: 'auto' }}
               >
                 Save Budget
               </Button>

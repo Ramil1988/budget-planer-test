@@ -105,7 +105,7 @@ export default function Login() {
             <Link
               as={RouterLink}
               to="/forgot-password"
-              color="teal.600"
+              color="blue.600"
               fontSize="sm"
               alignSelf="flex-end"
             >
@@ -114,7 +114,7 @@ export default function Login() {
 
             <Button
               type="submit"
-              colorScheme="teal"
+              colorScheme="blue"
               size="lg"
               w="100%"
               mt={2}
@@ -125,7 +125,7 @@ export default function Login() {
 
             <Text textAlign="center" color="gray.600">
               Don't have an account?{' '}
-              <Link as={RouterLink} to="/signup" color="teal.600" fontWeight="medium">
+              <Link as={RouterLink} to="/signup" color="blue.600" fontWeight="medium">
                 Sign up
               </Link>
             </Text>

@@ -167,7 +167,7 @@ export default function Signup() {
 
             <Button
               type="submit"
-              colorScheme="teal"
+              colorScheme="blue"
               size="lg"
               w="100%"
               mt={2}
@@ -179,7 +179,7 @@ export default function Signup() {
 
             <Text textAlign="center" color="gray.600">
               Already have an account?{' '}
-              <Link as={RouterLink} to="/login" color="teal.600" fontWeight="medium">
+              <Link as={RouterLink} to="/login" color="blue.600" fontWeight="medium">
                 Sign in
               </Link>
             </Text>

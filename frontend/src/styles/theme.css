@@ -1,0 +1,405 @@
+/* BudgetWise Design System - Refined Financial Aesthetic */
+
+:root {
+  /* Typography */
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+
+  /* Core Colors */
+  --color-bg-primary: #FAFAF9;
+  --color-bg-secondary: #F5F5F4;
+  --color-bg-card: #FFFFFF;
+  --color-bg-elevated: #FFFFFF;
+
+  /* Text Colors */
+  --color-text-primary: #18181B;
+  --color-text-secondary: #71717A;
+  --color-text-muted: #A1A1AA;
+
+  /* Brand Colors - Blue */
+  --color-brand-primary: #2563EB;
+  --color-brand-secondary: #3B82F6;
+  --color-brand-light: #DBEAFE;
+
+  /* Semantic Colors */
+  --color-income: #059669;
+  --color-income-light: #D1FAE5;
+  --color-income-bg: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+
+  --color-expense: #E11D48;
+  --color-expense-light: #FFE4E6;
+  --color-expense-bg: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
+
+  --color-warning: #D97706;
+  --color-warning-light: #FEF3C7;
+
+  --color-info: #0EA5E9;
+  --color-info-light: #E0F2FE;
+  --color-info-bg: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
+
+  /* Border & Shadows */
+  --color-border: #E4E4E7;
+  --color-border-light: #F4F4F5;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  /* Spacing */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Global Styles */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Typography Overrides */
+h1, h2, h3, h4, h5, h6,
+[class*="chakra-heading"] {
+  font-family: var(--font-display) !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+/* Button Enhancements */
+button, [class*="chakra-button"] {
+  font-family: var(--font-body) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  transition: all var(--transition-normal) !important;
+}
+
+/* Card Styles - Apply to Chakra Box elements */
+.card {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--color-border-light);
+  transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Stat Card Styles */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.6;
+  z-index: 0;
+}
+
+.stat-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.stat-card.income {
+  background: var(--color-income-bg);
+}
+
+.stat-card.expense {
+  background: var(--color-expense-bg);
+}
+
+.stat-card.info {
+  background: var(--color-info-bg);
+}
+
+/* Progress Bar Enhancements */
+.progress-bar {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+
+.progress-bar-fill.success {
+  background: linear-gradient(90deg, #10B981 0%, #059669 100%);
+}
+
+.progress-bar-fill.warning {
+  background: linear-gradient(90deg, #FBBF24 0%, #D97706 100%);
+}
+
+.progress-bar-fill.danger {
+  background: linear-gradient(90deg, #FB7185 0%, #E11D48 100%);
+}
+
+/* Category Badge */
+.category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+/* Spending Item */
+.spending-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background-color var(--transition-fast);
+}
+
+.spending-item:last-child {
+  border-bottom: none;
+}
+
+.spending-item:hover {
+  background-color: var(--color-bg-secondary);
+  margin: 0 -12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+}
+
+/* Rank Number */
+.rank-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rank-number.top-3 {
+  background: linear-gradient(135deg, #2563EB 0%, #3B82F6 100%);
+  color: white;
+}
+
+/* Amount Display */
+.amount {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-feature-settings: 'tnum' 1;
+}
+
+.amount.income {
+  color: var(--color-income);
+}
+
+.amount.expense {
+  color: var(--color-expense);
+}
+
+.amount.large {
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+/* Input Styling */
+input[type="month"],
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+select {
+  font-family: var(--font-body) !important;
+  border-radius: var(--radius-md) !important;
+  border-color: var(--color-border) !important;
+  transition: all var(--transition-fast) !important;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--color-brand-primary) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* Section Headers */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+/* Quick Action Button */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 14px;
+  transition: all var(--transition-normal);
+  border: none;
+  cursor: pointer;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, var(--color-brand-primary) 0%, #1D4ED8 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.action-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.action-btn.secondary {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.action-btn.secondary:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-brand-primary);
+}
+
+/* Days Left Badge */
+.days-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Animated Gradient Background */
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.gradient-animated {
+  background: linear-gradient(135deg, #3B82F6, #2563EB, #1D4ED8);
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease infinite;
+}
+
+/* Category Color Dots */
+.category-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Percentage Badge */
+.percent-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.percent-badge.success {
+  background: var(--color-income-light);
+  color: var(--color-income);
+}
+
+.percent-badge.warning {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
+.percent-badge.danger {
+  background: var(--color-expense-light);
+  color: var(--color-expense);
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .amount.large {
+    font-size: 1.25rem;
+  }
+
+  .card {
+    border-radius: var(--radius-md);
+  }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

@@ -327,8 +327,8 @@ export default function CategoryManager() {
               p={6}
               borderRadius="lg"
               borderWidth="1px"
-              borderColor="teal.200"
-              bg="teal.50"
+              borderColor="blue.200"
+              bg="blue.50"
             >
               <Heading size="md" mb={4}>
                 Merchant Mappings
@@ -406,7 +406,7 @@ export default function CategoryManager() {
 
                   <Box w="140px">
                     <Button
-                      colorScheme="teal"
+                      colorScheme="blue"
                       size="lg"
                       onClick={handleAddPattern}
                       disabled={!selectedCategory || !newPattern.trim()}

@@ -191,17 +191,17 @@ export default function Transactions() {
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={6}>
+    <Box w="100%" h="100%" bg="gray.50" p={{ base: 3, md: 6 }}>
       <Box w="100%">
         <VStack gap={4} align="stretch" w="100%">
           {/* Header */}
-          <Flex justify="space-between" align="center" w="100%">
-            <Heading size="xl">Transactions</Heading>
+          <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
+            <Heading size={{ base: 'lg', md: 'xl' }}>Transactions</Heading>
             <Button
               as={RouterLink}
               to="/add-transaction"
               colorScheme="green"
-              size="md"
+              size={{ base: 'sm', md: 'md' }}
             >
               + Add Transaction
             </Button>
@@ -215,26 +215,27 @@ export default function Transactions() {
           )}
 
           {/* Filters Row */}
-          <Flex gap={4} align="center" flexWrap="wrap" w="100%">
+          <Flex gap={{ base: 2, md: 4 }} align="center" flexWrap="wrap" w="100%">
             <Input
               placeholder="Search transactions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              size="md"
+              size={{ base: 'sm', md: 'md' }}
               bg="white"
-              maxW="400px"
+              maxW={{ base: '100%', md: '400px' }}
               flex="1"
+              minW={{ base: '100%', sm: '200px' }}
             />
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
               style={{
-                padding: '8px 16px',
+                padding: '8px 12px',
                 fontSize: '14px',
                 borderRadius: '6px',
                 border: '1px solid #E2E8F0',
                 backgroundColor: 'white',
-                minWidth: '160px',
+                minWidth: '130px',
               }}
             >
               <option value="current">This month</option>
@@ -246,8 +247,64 @@ export default function Transactions() {
             </Text>
           </Flex>
 
-          {/* Transactions Table */}
+          {/* Mobile Card View */}
+          <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch" w="100%">
+            {filteredTransactions.length === 0 ? (
+              <Box p={6} bg="white" borderRadius="lg" borderWidth="1px" textAlign="center">
+                <Text color="gray.500">No transactions found</Text>
+              </Box>
+            ) : (
+              filteredTransactions.map((transaction) => (
+                <Box
+                  key={transaction.id}
+                  p={4}
+                  bg="white"
+                  borderRadius="lg"
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                >
+                  <Flex justify="space-between" align="flex-start" mb={2}>
+                    <Box flex="1">
+                      <Text fontWeight="semibold" fontSize="sm">{transaction.category}</Text>
+                      <Text fontSize="xs" color="gray.500" noOfLines={2}>
+                        {transaction.description}
+                      </Text>
+                    </Box>
+                    <Text
+                      fontWeight="bold"
+                      fontSize="md"
+                      color={transaction.type === 'income' ? 'green.600' : 'red.600'}
+                      ml={2}
+                    >
+                      {formatAmount(transaction.amount, transaction.type)}
+                    </Text>
+                  </Flex>
+                  <Flex justify="space-between" align="center">
+                    <Text fontSize="xs" color="gray.500">{formatDate(transaction.date)}</Text>
+                    <HStack gap={2}>
+                      <Text fontSize="xs" color={transaction.balance < 0 ? 'red.500' : 'gray.500'}>
+                        Bal: {formatBalance(transaction.balance)}
+                      </Text>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        colorScheme="red"
+                        onClick={() => handleDeleteTransaction(transaction.id)}
+                        opacity={0.6}
+                        _hover={{ opacity: 1 }}
+                      >
+                        ×
+                      </Button>
+                    </HStack>
+                  </Flex>
+                </Box>
+              ))
+            )}
+          </VStack>
+
+          {/* Desktop Table View */}
           <Box
+            display={{ base: 'none', md: 'block' }}
             borderWidth="1px"
             borderRadius="lg"
             overflow="hidden"

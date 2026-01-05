@@ -8,20 +8,43 @@ import {
   VStack,
   HStack,
   Spinner,
-  Badge,
   Button,
-  Progress,
   Input,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+
+// Category color mapping for visual distinction
+const categoryColors = {
+  'Mortgage': '#6366F1',
+  'Food/Costco': '#F59E0B',
+  'Food': '#F59E0B',
+  'Subscriptions': '#8B5CF6',
+  'Mobile/Internet': '#3B82F6',
+  'NB Power': '#EF4444',
+  'Autocredit': '#10B981',
+  'Fuel': '#F97316',
+  'Unexpected': '#EC4899',
+  'Clothes': '#14B8A6',
+  'Insurance': '#6366F1',
+  'Pharmacy': '#22C55E',
+  'Household items/Car': '#64748B',
+  'Weekend': '#A855F7',
+  'Haircut': '#06B6D4',
+  'Massage': '#D946EF',
+  'Afterschool': '#0EA5E9',
+  'Government Loan': '#78716C',
+  'Property tax': '#84CC16',
+  'default': '#94A3B8'
+};
+
+const getCategoryColor = (name) => categoryColors[name] || categoryColors.default;
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Month picker state - default to current month
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -30,7 +53,6 @@ export default function Dashboard() {
   const [monthlySummary, setMonthlySummary] = useState({ income: 0, expenses: 0, net: 0 });
   const [budgetProgress, setBudgetProgress] = useState({ used: 0, total: 0, percent: 0 });
   const [categoryBudgets, setCategoryBudgets] = useState([]);
-  const [recentTransactions, setRecentTransactions] = useState([]);
   const [daysLeft, setDaysLeft] = useState(0);
 
   useEffect(() => {
@@ -43,13 +65,11 @@ export default function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      // Parse selected month
       const [year, month] = selectedMonth.split('-').map(Number);
-
-      // Calculate days left only for current month
       const now = new Date();
       const isCurrentMonth = now.getFullYear() === year && (now.getMonth() + 1) === month;
       const lastDay = new Date(year, month, 0).getDate();
+
       if (isCurrentMonth) {
         setDaysLeft(lastDay - now.getDate());
       } else {
@@ -71,7 +91,6 @@ export default function Dashboard() {
           .lte('date', endDate)
           .order('date', { ascending: false })
           .order('created_at', { ascending: false }),
-
         supabase
           .from('budgets')
           .select(`id, total, budget_categories (category_id, limit_amount)`)
@@ -79,7 +98,6 @@ export default function Dashboard() {
           .gte('month', startDate)
           .lt('month', nextMonthStart)
           .maybeSingle(),
-
         supabase
           .from('categories')
           .select('id, name')
@@ -94,7 +112,6 @@ export default function Dashboard() {
       const budget = budgetResult.data;
       const categories = categoriesResult.data || [];
 
-      // Calculate income and expenses
       let income = 0;
       let expenses = 0;
       transactions.forEach(tx => {
@@ -106,7 +123,6 @@ export default function Dashboard() {
       });
       setMonthlySummary({ income, expenses, net: income - expenses });
 
-      // Overall budget progress
       const budgetTotal = budget?.total || 0;
       const budgetUsedPercent = budgetTotal > 0 ? (expenses / budgetTotal) * 100 : 0;
       setBudgetProgress({
@@ -115,7 +131,6 @@ export default function Dashboard() {
         percent: budgetUsedPercent
       });
 
-      // Build category spending and limits
       const categorySpending = {};
       const categoryLimits = {};
 
@@ -136,7 +151,6 @@ export default function Dashboard() {
         categoryNameMap[cat.id] = cat.name;
       });
 
-      // Build category budgets list - include all categories with limits OR spending
       const allCategoryIds = new Set([
         ...Object.keys(categorySpending),
         ...Object.keys(categoryLimits)
@@ -156,21 +170,10 @@ export default function Dashboard() {
             remaining: limit - spent
           };
         })
-        .filter(cat => cat.spent > 0 || cat.limit > 0) // Only show categories with activity or budget
+        .filter(cat => cat.spent > 0 || cat.limit > 0)
         .sort((a, b) => b.spent - a.spent);
 
       setCategoryBudgets(catBudgets);
-
-      // Recent transactions
-      const recent = transactions.slice(0, 8).map(tx => ({
-        id: tx.id,
-        description: tx.description,
-        date: tx.date,
-        amount: tx.amount,
-        type: tx.type,
-        category: tx.categories?.name || 'Uncategorized'
-      }));
-      setRecentTransactions(recent);
 
     } catch (err) {
       setError('Failed to load dashboard: ' + err.message);
@@ -188,12 +191,6 @@ export default function Dashboard() {
     }).format(amount);
   };
 
-  const formatDate = (dateString) => {
-    const [year, month, day] = dateString.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
   const getMonthName = (monthStr) => {
     const [year, month] = monthStr.split('-').map(Number);
     const date = new Date(year, month - 1, 1);
@@ -206,203 +203,359 @@ export default function Dashboard() {
     return selectedMonth === currentMonth;
   };
 
+  const getProgressColor = (percent) => {
+    if (percent > 100) return 'danger';
+    if (percent > 80) return 'warning';
+    return 'success';
+  };
+
   if (loading) {
     return (
-      <Flex w="100%" h="100%" align="center" justify="center">
+      <Flex w="100%" minH="60vh" align="center" justify="center">
         <VStack gap={4}>
-          <Spinner size="xl" />
-          <Text>Loading dashboard...</Text>
+          <Spinner size="xl" color="blue.500" thickness="3px" />
+          <Text color="gray.500" fontWeight="500">Loading your dashboard...</Text>
         </VStack>
       </Flex>
     );
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={6}>
-      <Box w="100%">
-        <VStack gap={6} align="stretch" w="100%">
-          {/* Header with Month Picker */}
-          <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={4}>
+    <Box w="100%" minH="100vh" bg="#FAFAF9" p={{ base: 4, md: 6, lg: 8 }}>
+      <Box maxW="1400px" mx="auto">
+        <VStack gap={{ base: 5, md: 6 }} align="stretch" w="100%">
+
+          {/* Header */}
+          <Flex
+            justify="space-between"
+            align={{ base: 'stretch', md: 'center' }}
+            direction={{ base: 'column', sm: 'row' }}
+            gap={4}
+          >
             <Box>
-              <Heading size="xl">Dashboard</Heading>
-              <Text color="gray.500" fontSize="sm">
+              <Heading
+                size={{ base: 'lg', md: 'xl' }}
+                color="#18181B"
+                letterSpacing="-0.02em"
+              >
+                Dashboard
+              </Heading>
+              <Text color="#71717A" fontSize="sm" mt={1}>
                 Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
               </Text>
             </Box>
-            <HStack gap={4}>
+            <Flex gap={3} align="center" flexWrap="wrap">
               <Input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 size="md"
-                w="180px"
+                w={{ base: '140px', md: '160px' }}
                 bg="white"
-                borderColor="gray.300"
+                borderColor="#E4E4E7"
+                borderRadius="12px"
+                _hover={{ borderColor: '#2563EB' }}
+                _focus={{ borderColor: '#2563EB', boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)' }}
               />
-              <Button as={RouterLink} to="/add-transaction" colorScheme="green" size="md">
+              <Button
+                as={RouterLink}
+                to="/add-transaction"
+                bg="linear-gradient(135deg, #18181B 0%, #2563EB 100%)"
+                color="white"
+                size="md"
+                borderRadius="12px"
+                fontWeight="600"
+                px={5}
+                _hover={{
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                }}
+                transition="all 0.2s"
+              >
                 + Add Transaction
               </Button>
-            </HStack>
+            </Flex>
           </Flex>
 
-          {/* Error Message */}
           {error && (
-            <Box p={3} bg="red.50" borderRadius="md" borderColor="red.200" borderWidth="1px" w="100%">
-              <Text color="red.700" fontSize="sm">{error}</Text>
+            <Box
+              p={4}
+              bg="#FEF2F2"
+              borderRadius="12px"
+              borderLeft="4px solid #EF4444"
+            >
+              <Text color="#DC2626" fontSize="sm" fontWeight="500">{error}</Text>
             </Box>
           )}
 
-          {/* Monthly Summary & Budget Progress - Full Width Row */}
-          <Flex gap={6} w="100%" direction={{ base: 'column', md: 'row' }}>
-            {/* Monthly Summary Card */}
-            <Box flex="1" p={6} borderRadius="lg" borderWidth="1px" borderColor="gray.200" bg="white">
-              <Flex justify="space-between" align="center" mb={4}>
-                <Heading size="md">{getMonthName(selectedMonth)}</Heading>
-                {isCurrentMonth() && daysLeft > 0 && (
-                  <Text fontSize="sm" color="gray.500">{daysLeft} days left</Text>
-                )}
-              </Flex>
-
-              <Flex gap={4} w="100%">
-                <Box flex="1" textAlign="center" p={4} bg="green.50" borderRadius="md">
-                  <Text fontSize="sm" color="gray.600" mb={1}>Income</Text>
-                  <Text fontSize="2xl" fontWeight="bold" color="green.600">
-                    {formatCurrency(monthlySummary.income)}
+          {/* Monthly Summary Cards */}
+          <Box
+            p={{ base: 5, md: 6 }}
+            borderRadius="16px"
+            bg="white"
+            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+            border="1px solid #F4F4F5"
+          >
+            <Flex justify="space-between" align="center" mb={5}>
+              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                {getMonthName(selectedMonth)}
+              </Heading>
+              {isCurrentMonth() && daysLeft > 0 && (
+                <Box
+                  bg="#F4F4F5"
+                  px={3}
+                  py={1}
+                  borderRadius="full"
+                >
+                  <Text fontSize="xs" fontWeight="600" color="#71717A">
+                    {daysLeft} days left
                   </Text>
                 </Box>
+              )}
+            </Flex>
 
-                <Box flex="1" textAlign="center" p={4} bg="red.50" borderRadius="md">
-                  <Text fontSize="sm" color="gray.600" mb={1}>Expenses</Text>
-                  <Text fontSize="2xl" fontWeight="bold" color="red.600">
-                    {formatCurrency(monthlySummary.expenses)}
-                  </Text>
-                </Box>
-
-                <Box flex="1" textAlign="center" p={4} bg={monthlySummary.net >= 0 ? "blue.50" : "orange.50"} borderRadius="md">
-                  <Text fontSize="sm" color="gray.600" mb={1}>Net</Text>
-                  <Text fontSize="2xl" fontWeight="bold" color={monthlySummary.net >= 0 ? "blue.600" : "orange.600"}>
-                    {formatCurrency(monthlySummary.net)}
-                  </Text>
-                </Box>
-              </Flex>
-            </Box>
-
-            {/* Overall Budget Progress Card */}
-            <Box flex="1" p={6} borderRadius="lg" borderWidth="1px" borderColor="gray.200" bg="white">
-              <Flex justify="space-between" align="center" mb={4}>
-                <Heading size="md">Overall Budget</Heading>
-                <Text fontSize="lg" fontWeight="bold" color={budgetProgress.percent > 100 ? 'red.600' : budgetProgress.percent > 80 ? 'yellow.600' : 'green.600'}>
-                  {budgetProgress.total > 0 ? `${budgetProgress.percent.toFixed(0)}%` : '-'}
+            <Flex gap={{ base: 3, md: 4 }} direction={{ base: 'column', sm: 'row' }}>
+              {/* Income Card */}
+              <Box
+                flex="1"
+                p={{ base: 4, md: 5 }}
+                borderRadius="14px"
+                bg="linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)"
+                position="relative"
+                overflow="hidden"
+              >
+                <Box
+                  position="absolute"
+                  top="-20px"
+                  right="-20px"
+                  w="80px"
+                  h="80px"
+                  borderRadius="full"
+                  bg="rgba(16, 185, 129, 0.1)"
+                />
+                <Text fontSize="xs" fontWeight="600" color="#059669" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+                  Income
                 </Text>
+                <Text
+                  fontSize={{ base: 'xl', md: '2xl' }}
+                  fontWeight="700"
+                  color="#059669"
+                  fontFamily="'Plus Jakarta Sans', sans-serif"
+                  letterSpacing="-0.02em"
+                >
+                  {formatCurrency(monthlySummary.income)}
+                </Text>
+              </Box>
+
+              {/* Expenses Card */}
+              <Box
+                flex="1"
+                p={{ base: 4, md: 5 }}
+                borderRadius="14px"
+                bg="linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%)"
+                position="relative"
+                overflow="hidden"
+              >
+                <Box
+                  position="absolute"
+                  top="-20px"
+                  right="-20px"
+                  w="80px"
+                  h="80px"
+                  borderRadius="full"
+                  bg="rgba(225, 29, 72, 0.1)"
+                />
+                <Text fontSize="xs" fontWeight="600" color="#E11D48" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+                  Expenses
+                </Text>
+                <Text
+                  fontSize={{ base: 'xl', md: '2xl' }}
+                  fontWeight="700"
+                  color="#E11D48"
+                  fontFamily="'Plus Jakarta Sans', sans-serif"
+                  letterSpacing="-0.02em"
+                >
+                  {formatCurrency(monthlySummary.expenses)}
+                </Text>
+              </Box>
+
+              {/* Net Card */}
+              <Box
+                flex="1"
+                p={{ base: 4, md: 5 }}
+                borderRadius="14px"
+                bg={monthlySummary.net >= 0
+                  ? "linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%)"
+                  : "linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)"
+                }
+                position="relative"
+                overflow="hidden"
+              >
+                <Box
+                  position="absolute"
+                  top="-20px"
+                  right="-20px"
+                  w="80px"
+                  h="80px"
+                  borderRadius="full"
+                  bg={monthlySummary.net >= 0 ? "rgba(14, 165, 233, 0.1)" : "rgba(234, 88, 12, 0.1)"}
+                />
+                <Text
+                  fontSize="xs"
+                  fontWeight="600"
+                  color={monthlySummary.net >= 0 ? "#0284C7" : "#EA580C"}
+                  textTransform="uppercase"
+                  letterSpacing="0.05em"
+                  mb={1}
+                >
+                  Net Balance
+                </Text>
+                <Text
+                  fontSize={{ base: 'xl', md: '2xl' }}
+                  fontWeight="700"
+                  color={monthlySummary.net >= 0 ? "#0284C7" : "#EA580C"}
+                  fontFamily="'Plus Jakarta Sans', sans-serif"
+                  letterSpacing="-0.02em"
+                >
+                  {formatCurrency(monthlySummary.net)}
+                </Text>
+              </Box>
+            </Flex>
+          </Box>
+
+          {/* Budget Progress & Top Spending Row */}
+          <Flex gap={{ base: 5, md: 6 }} direction={{ base: 'column', lg: 'row' }}>
+
+            {/* Overall Budget Progress */}
+            <Box
+              flex="1"
+              p={{ base: 5, md: 6 }}
+              borderRadius="16px"
+              bg="white"
+              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+              border="1px solid #F4F4F5"
+            >
+              <Flex justify="space-between" align="center" mb={5}>
+                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                  Budget Overview
+                </Heading>
+                {budgetProgress.total > 0 && (
+                  <Box
+                    bg={budgetProgress.percent > 100 ? '#FEF2F2' : budgetProgress.percent > 80 ? '#FFFBEB' : '#ECFDF5'}
+                    px={3}
+                    py={1}
+                    borderRadius="full"
+                  >
+                    <Text
+                      fontSize="sm"
+                      fontWeight="700"
+                      color={budgetProgress.percent > 100 ? '#DC2626' : budgetProgress.percent > 80 ? '#D97706' : '#059669'}
+                    >
+                      {budgetProgress.percent.toFixed(0)}%
+                    </Text>
+                  </Box>
+                )}
               </Flex>
 
               {budgetProgress.total > 0 ? (
                 <VStack align="stretch" gap={4}>
                   <Box>
-                    <Flex justify="space-between" mb={2}>
-                      <Text fontSize="md" color="gray.600">
-                        Spent: <Text as="span" fontWeight="bold">{formatCurrency(budgetProgress.used)}</Text>
+                    <Flex justify="space-between" mb={3}>
+                      <Text fontSize="sm" color="#71717A">
+                        Spent <Text as="span" fontWeight="700" color="#18181B">{formatCurrency(budgetProgress.used)}</Text>
                       </Text>
-                      <Text fontSize="md" color="gray.600">
-                        Limit: <Text as="span" fontWeight="bold">{formatCurrency(budgetProgress.total)}</Text>
+                      <Text fontSize="sm" color="#71717A">
+                        of <Text as="span" fontWeight="700" color="#18181B">{formatCurrency(budgetProgress.total)}</Text>
                       </Text>
                     </Flex>
-                    <Progress.Root value={Math.min(budgetProgress.percent, 100)} size="lg" borderRadius="full">
-                      <Progress.Track>
-                        <Progress.Range
-                          style={{
-                            backgroundColor: budgetProgress.percent > 100 ? '#E53E3E' : budgetProgress.percent > 80 ? '#D69E2E' : '#38A169'
-                          }}
-                        />
-                      </Progress.Track>
-                    </Progress.Root>
+
+                    {/* Custom Progress Bar */}
+                    <Box h="10px" bg="#F4F4F5" borderRadius="full" overflow="hidden">
+                      <Box
+                        h="100%"
+                        w={`${Math.min(budgetProgress.percent, 100)}%`}
+                        borderRadius="full"
+                        bg={
+                          budgetProgress.percent > 100
+                            ? 'linear-gradient(90deg, #FB7185 0%, #E11D48 100%)'
+                            : budgetProgress.percent > 80
+                              ? 'linear-gradient(90deg, #FBBF24 0%, #D97706 100%)'
+                              : 'linear-gradient(90deg, #34D399 0%, #059669 100%)'
+                        }
+                        transition="width 0.5s ease"
+                      />
+                    </Box>
                   </Box>
-                  <Text fontSize="md" fontWeight="medium" color={budgetProgress.percent > 100 ? 'red.600' : 'green.600'}>
-                    {budgetProgress.percent <= 100
-                      ? `${formatCurrency(budgetProgress.total - budgetProgress.used)} remaining`
-                      : `${formatCurrency(budgetProgress.used - budgetProgress.total)} over budget`
-                    }
-                  </Text>
+
+                  <Box
+                    p={3}
+                    borderRadius="10px"
+                    bg={budgetProgress.percent > 100 ? '#FEF2F2' : '#ECFDF5'}
+                  >
+                    <Text
+                      fontSize="sm"
+                      fontWeight="600"
+                      color={budgetProgress.percent > 100 ? '#DC2626' : '#059669'}
+                    >
+                      {budgetProgress.percent <= 100
+                        ? `${formatCurrency(budgetProgress.total - budgetProgress.used)} remaining this month`
+                        : `${formatCurrency(budgetProgress.used - budgetProgress.total)} over budget`
+                      }
+                    </Text>
+                  </Box>
                 </VStack>
               ) : (
-                <Flex direction="column" align="center" justify="center" py={6}>
-                  <Text color="gray.500" mb={3}>No budget set for this month</Text>
-                  <Button as={RouterLink} to="/budget" colorScheme="blue">
+                <Flex direction="column" align="center" justify="center" py={8}>
+                  <Box
+                    w="48px"
+                    h="48px"
+                    borderRadius="12px"
+                    bg="#F4F4F5"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    mb={3}
+                  >
+                    <Text fontSize="xl">📊</Text>
+                  </Box>
+                  <Text color="#71717A" mb={3} textAlign="center">No budget set for this month</Text>
+                  <Button
+                    as={RouterLink}
+                    to="/budget"
+                    size="sm"
+                    bg="#2563EB"
+                    color="white"
+                    borderRadius="10px"
+                    _hover={{ bg: '#1D4ED8' }}
+                  >
                     Set Budget
                   </Button>
                 </Flex>
               )}
             </Box>
-          </Flex>
 
-          {/* Category Budgets & Recent Transactions - Full Width Row */}
-          <Flex gap={6} w="100%" direction={{ base: 'column', lg: 'row' }}>
-            {/* Category Spending with Limits */}
-            <Box flex="1" p={6} borderRadius="lg" borderWidth="1px" borderColor="gray.200" bg="white">
+            {/* Top Spending */}
+            <Box
+              flex="1"
+              p={{ base: 5, md: 6 }}
+              borderRadius="16px"
+              bg="white"
+              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+              border="1px solid #F4F4F5"
+            >
               <Flex justify="space-between" align="center" mb={4}>
-                <Heading size="md">Spending by Category</Heading>
-                <Button as={RouterLink} to="/budget" variant="ghost" size="sm">
-                  Manage
-                </Button>
-              </Flex>
-
-              {categoryBudgets.length > 0 ? (
-                <VStack align="stretch" gap={3}>
-                  {categoryBudgets.map((cat) => (
-                    <Box key={cat.id} p={3} bg="gray.50" borderRadius="md">
-                      <Flex justify="space-between" align="center" mb={2}>
-                        <Text fontWeight="medium">{cat.name}</Text>
-                        <HStack gap={2}>
-                          {cat.limit > 0 && (
-                            <Badge
-                              colorScheme={cat.percent > 100 ? 'red' : cat.percent > 80 ? 'yellow' : 'green'}
-                              fontSize="sm"
-                            >
-                              {cat.percent.toFixed(0)}%
-                            </Badge>
-                          )}
-                        </HStack>
-                      </Flex>
-                      <Flex justify="space-between" align="center" mb={2}>
-                        <Text fontSize="sm" color="gray.600">
-                          {formatCurrency(cat.spent)} {cat.limit > 0 ? `of ${formatCurrency(cat.limit)}` : '(no limit)'}
-                        </Text>
-                        {cat.limit > 0 && (
-                          <Text
-                            fontSize="sm"
-                            fontWeight="medium"
-                            color={cat.remaining >= 0 ? 'green.600' : 'red.600'}
-                          >
-                            {cat.remaining >= 0 ? `${formatCurrency(cat.remaining)} left` : `${formatCurrency(Math.abs(cat.remaining))} over`}
-                          </Text>
-                        )}
-                      </Flex>
-                      {cat.limit > 0 && (
-                        <Progress.Root value={Math.min(cat.percent, 100)} size="sm" borderRadius="full">
-                          <Progress.Track>
-                            <Progress.Range
-                              style={{
-                                backgroundColor: cat.percent > 100 ? '#E53E3E' : cat.percent > 80 ? '#D69E2E' : '#38A169'
-                              }}
-                            />
-                          </Progress.Track>
-                        </Progress.Root>
-                      )}
-                    </Box>
-                  ))}
-                </VStack>
-              ) : (
-                <Flex justify="center" align="center" py={8}>
-                  <Text color="gray.500">No spending this month</Text>
-                </Flex>
-              )}
-            </Box>
-
-            {/* Top Spending - Simple List */}
-            <Box flex="1" p={6} borderRadius="lg" borderWidth="1px" borderColor="gray.200" bg="white" alignSelf="flex-start">
-              <Flex justify="space-between" align="center" mb={4}>
-                <Heading size="md">Top Spending</Heading>
-                <Button as={RouterLink} to="/transactions" variant="ghost" size="sm">
+                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                  Top Spending
+                </Heading>
+                <Button
+                  as={RouterLink}
+                  to="/transactions"
+                  variant="ghost"
+                  size="sm"
+                  color="#2563EB"
+                  fontWeight="600"
+                  _hover={{ bg: '#EFF6FF' }}
+                >
                   View All
                 </Button>
               </Flex>
@@ -412,44 +565,239 @@ export default function Dashboard() {
                   {categoryBudgets.slice(0, 8).map((cat, index) => (
                     <Flex
                       key={cat.id}
-                      justify="space-between"
                       align="center"
                       py={3}
                       borderBottomWidth="1px"
-                      borderColor="gray.100"
+                      borderColor="#F4F4F5"
                       _last={{ borderBottomWidth: 0 }}
+                      _hover={{ bg: '#FAFAFA', mx: -3, px: 3, borderRadius: '8px' }}
+                      transition="all 0.15s"
+                      cursor="pointer"
                     >
-                      <HStack>
-                        <Text fontSize="sm" color="gray.400" w="24px">{index + 1}.</Text>
-                        <Text fontWeight="medium">{cat.name}</Text>
+                      {/* Rank */}
+                      <Flex
+                        w="28px"
+                        h="28px"
+                        borderRadius="full"
+                        bg={index < 3 ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#F4F4F5'}
+                        color={index < 3 ? 'white' : '#A1A1AA'}
+                        align="center"
+                        justify="center"
+                        fontSize="xs"
+                        fontWeight="700"
+                        mr={3}
+                        flexShrink={0}
+                      >
+                        {index + 1}
+                      </Flex>
+
+                      {/* Category dot & name */}
+                      <HStack flex="1" gap={2}>
+                        <Box
+                          w="8px"
+                          h="8px"
+                          borderRadius="full"
+                          bg={getCategoryColor(cat.name)}
+                          flexShrink={0}
+                        />
+                        <Text
+                          fontWeight="500"
+                          fontSize="sm"
+                          color="#18181B"
+                          noOfLines={1}
+                        >
+                          {cat.name}
+                        </Text>
                       </HStack>
-                      <Text fontWeight="bold" color="red.600">{formatCurrency(cat.spent)}</Text>
+
+                      {/* Amount */}
+                      <Text
+                        fontWeight="700"
+                        fontSize="sm"
+                        color="#E11D48"
+                        fontFamily="'Plus Jakarta Sans', sans-serif"
+                        ml={2}
+                      >
+                        {formatCurrency(cat.spent)}
+                      </Text>
                     </Flex>
                   ))}
                 </VStack>
               ) : (
                 <Flex justify="center" align="center" py={8}>
-                  <Text color="gray.500">No spending this month</Text>
+                  <Text color="#71717A">No spending this month</Text>
                 </Flex>
               )}
             </Box>
           </Flex>
 
+          {/* Category Budgets */}
+          <Box
+            p={{ base: 5, md: 6 }}
+            borderRadius="16px"
+            bg="white"
+            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+            border="1px solid #F4F4F5"
+          >
+            <Flex justify="space-between" align="center" mb={5}>
+              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                Spending by Category
+              </Heading>
+              <Button
+                as={RouterLink}
+                to="/budget"
+                variant="ghost"
+                size="sm"
+                color="#2563EB"
+                fontWeight="600"
+                _hover={{ bg: '#EFF6FF' }}
+              >
+                Manage
+              </Button>
+            </Flex>
+
+            {categoryBudgets.length > 0 ? (
+              <VStack align="stretch" gap={3}>
+                {categoryBudgets.map((cat) => (
+                  <Box
+                    key={cat.id}
+                    p={4}
+                    bg="#FAFAFA"
+                    borderRadius="12px"
+                    border="1px solid #F4F4F5"
+                    _hover={{ borderColor: '#E4E4E7' }}
+                    transition="all 0.15s"
+                  >
+                    <Flex justify="space-between" align="center" mb={2}>
+                      <HStack gap={2}>
+                        <Box
+                          w="10px"
+                          h="10px"
+                          borderRadius="full"
+                          bg={getCategoryColor(cat.name)}
+                        />
+                        <Text fontWeight="600" fontSize="sm" color="#18181B">{cat.name}</Text>
+                      </HStack>
+                      {cat.limit > 0 && (
+                        <Box
+                          px={2}
+                          py={0.5}
+                          borderRadius="full"
+                          bg={cat.percent > 100 ? '#FEF2F2' : cat.percent > 80 ? '#FFFBEB' : '#ECFDF5'}
+                        >
+                          <Text
+                            fontSize="xs"
+                            fontWeight="700"
+                            color={cat.percent > 100 ? '#DC2626' : cat.percent > 80 ? '#D97706' : '#059669'}
+                          >
+                            {cat.percent.toFixed(0)}%
+                          </Text>
+                        </Box>
+                      )}
+                    </Flex>
+
+                    <Flex justify="space-between" align="center" mb={2}>
+                      <Text fontSize="sm" color="#71717A">
+                        <Text as="span" fontWeight="600" color="#18181B">{formatCurrency(cat.spent)}</Text>
+                        {cat.limit > 0 ? ` of ${formatCurrency(cat.limit)}` : ' (no limit)'}
+                      </Text>
+                      {cat.limit > 0 && (
+                        <Text
+                          fontSize="xs"
+                          fontWeight="600"
+                          color={cat.remaining >= 0 ? '#059669' : '#DC2626'}
+                        >
+                          {cat.remaining >= 0 ? `${formatCurrency(cat.remaining)} left` : `${formatCurrency(Math.abs(cat.remaining))} over`}
+                        </Text>
+                      )}
+                    </Flex>
+
+                    {cat.limit > 0 && (
+                      <Box h="6px" bg="#E4E4E7" borderRadius="full" overflow="hidden">
+                        <Box
+                          h="100%"
+                          w={`${Math.min(cat.percent, 100)}%`}
+                          borderRadius="full"
+                          bg={
+                            cat.percent > 100
+                              ? 'linear-gradient(90deg, #FB7185 0%, #E11D48 100%)'
+                              : cat.percent > 80
+                                ? 'linear-gradient(90deg, #FBBF24 0%, #D97706 100%)'
+                                : 'linear-gradient(90deg, #34D399 0%, #059669 100%)'
+                          }
+                          transition="width 0.3s ease"
+                        />
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+              </VStack>
+            ) : (
+              <Flex justify="center" align="center" py={8}>
+                <Text color="#71717A">No spending this month</Text>
+              </Flex>
+            )}
+          </Box>
+
           {/* Quick Actions */}
-          <HStack gap={4} flexWrap="wrap">
-            <Button as={RouterLink} to="/import" colorScheme="teal" size="md">
+          <Flex gap={3} flexWrap="wrap">
+            <Button
+              as={RouterLink}
+              to="/import"
+              bg="white"
+              color="#18181B"
+              size="md"
+              borderRadius="12px"
+              fontWeight="600"
+              border="1px solid #E4E4E7"
+              _hover={{ borderColor: '#2563EB', bg: '#EFF6FF' }}
+              transition="all 0.2s"
+            >
               Import Transactions
             </Button>
-            <Button as={RouterLink} to="/budget" colorScheme="blue" size="md">
+            <Button
+              as={RouterLink}
+              to="/budget"
+              bg="white"
+              color="#18181B"
+              size="md"
+              borderRadius="12px"
+              fontWeight="600"
+              border="1px solid #E4E4E7"
+              _hover={{ borderColor: '#2563EB', bg: '#EFF6FF' }}
+              transition="all 0.2s"
+            >
               Manage Budget
             </Button>
-            <Button as={RouterLink} to="/transactions" variant="outline" size="md">
+            <Button
+              as={RouterLink}
+              to="/transactions"
+              bg="white"
+              color="#18181B"
+              size="md"
+              borderRadius="12px"
+              fontWeight="600"
+              border="1px solid #E4E4E7"
+              _hover={{ borderColor: '#2563EB', bg: '#EFF6FF' }}
+              transition="all 0.2s"
+            >
               All Transactions
             </Button>
-            <Button as={RouterLink} to="/categories" variant="outline" size="md">
+            <Button
+              as={RouterLink}
+              to="/categories"
+              bg="white"
+              color="#18181B"
+              size="md"
+              borderRadius="12px"
+              fontWeight="600"
+              border="1px solid #E4E4E7"
+              _hover={{ borderColor: '#2563EB', bg: '#EFF6FF' }}
+              transition="all 0.2s"
+            >
               Categories
             </Button>
-          </HStack>
+          </Flex>
         </VStack>
       </Box>
     </Box>

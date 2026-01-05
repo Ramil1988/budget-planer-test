@@ -25,9 +25,8 @@ export default function Reports() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [totals, setTotals] = useState({ income: 0, expenses: 0, balance: 0 });
 
-  // Generate year options (current year and 5 years back)
-  const currentYear = new Date().getFullYear();
-  const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  // Generate year options - only 2025 and 2026
+  const yearOptions = [2026, 2025];
 
   useEffect(() => {
     if (user) {

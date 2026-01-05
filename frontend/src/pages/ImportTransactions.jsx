@@ -510,7 +510,7 @@ export default function ImportTransactions() {
                     </HStack>
                     {lastSyncTime && (
                       <Text fontSize="sm" color="gray.600">
-                        Last sync: {lastSyncTime.toLocaleTimeString()}
+                        Last sync: {lastSyncTime.toLocaleDateString()} {lastSyncTime.toLocaleTimeString()}
                       </Text>
                     )}
                     {lastSyncResult && (

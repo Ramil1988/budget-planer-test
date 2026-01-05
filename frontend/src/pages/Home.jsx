@@ -102,14 +102,15 @@ function Home() {
             </HStack>
           </Box>
 
-          {/* Right side - Image */}
-          <Box flex={1} maxW={{ base: '100%', lg: '600px' }}>
+          {/* Right side - Image (hidden on mobile) */}
+          <Box flex={1} maxW={{ base: '100%', lg: '600px' }} display={{ base: 'none', md: 'block' }}>
             <Box
               as="img"
               src="/images/hero-dashboard.png"
               alt="Budget dashboard preview"
               w="100%"
               h="auto"
+              style={{ mixBlendMode: 'multiply' }}
             />
           </Box>
         </Flex>
@@ -280,7 +281,7 @@ function Home() {
               </Stack>
             </VStack>
             <Box flex={1}>
-              <Box as="img" src="/images/visual.jpg" alt="Auto-categorization preview" w="100%" borderRadius="lg" />
+              <Box as="img" src="/images/visual.jpg" alt="Auto-categorization preview" w="100%" borderRadius="lg" style={{ mixBlendMode: 'multiply' }} />
             </Box>
           </Flex>
 
@@ -318,7 +319,7 @@ function Home() {
               </Stack>
             </VStack>
             <Box flex={1}>
-              <Box as="img" src="/images/OCR.jpg" alt="Transaction import feature" w="100%" borderRadius="lg" />
+              <Box as="img" src="/images/OCR.jpg" alt="Transaction import feature" w="100%" borderRadius="lg" style={{ mixBlendMode: 'multiply' }} />
             </Box>
           </Flex>
 
@@ -356,7 +357,7 @@ function Home() {
               </Stack>
             </VStack>
             <Box flex={1}>
-              <Box as="img" src="/images/goal-tracking.png" alt="Monthly budget planning" w="100%" borderRadius="lg" />
+              <Box as="img" src="/images/goal-tracking.png" alt="Monthly budget planning" w="100%" borderRadius="lg" style={{ mixBlendMode: 'multiply' }} />
             </Box>
           </Flex>
         </VStack>
