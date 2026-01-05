@@ -15,6 +15,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 export default function Budget() {
   const { user } = useAuth();
@@ -53,9 +54,16 @@ export default function Budget() {
         .order('name');
 
       if (catError) throw catError;
-      setCategories(data || []);
+      const categoryData = data || [];
+      setCategories(categoryData);
+
+      // If no categories exist, stop loading immediately
+      if (categoryData.length === 0) {
+        setLoading(false);
+      }
     } catch (err) {
       setError('Failed to load categories: ' + err.message);
+      setLoading(false);
     }
   };
 
@@ -289,19 +297,38 @@ export default function Budget() {
 
   if (loading && categories.length === 0) {
     return (
-      <Flex w="100%" minH="calc(100vh - 140px)" align="center" justify="center">
-        <VStack gap={4}>
-          <Spinner size="xl" />
-          <Text>Loading budget...</Text>
-        </VStack>
-      </Flex>
+      <PageContainer>
+        <Flex w="100%" minH="60vh" align="center" justify="center">
+          <VStack gap={4}>
+            <Spinner size="xl" />
+            <Text>Loading budget...</Text>
+          </VStack>
+        </Flex>
+      </PageContainer>
+    );
+  }
+
+  if (!loading && categories.length === 0) {
+    return (
+      <PageContainer>
+        <Flex w="100%" minH="60vh" align="center" justify="center">
+          <VStack gap={4} textAlign="center" p={6}>
+            <Heading size="lg">No Budget Categories</Heading>
+            <Text color="gray.600">
+              You need to create expense categories first before setting up a budget.
+            </Text>
+            <Text color="gray.500" fontSize="sm">
+              Go to Categories and add some expense categories to get started.
+            </Text>
+          </VStack>
+        </Flex>
+      </PageContainer>
     );
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={{ base: 3, md: 6 }}>
-      <Box w="100%">
-        <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
+    <PageContainer>
+      <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
         {/* Header */}
         <Flex justify="space-between" align={{ base: 'stretch', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} wrap="wrap" gap={{ base: 3, md: 4 }}>
           <Heading size={{ base: 'lg', md: 'xl' }}>Monthly Budget</Heading>
@@ -612,8 +639,7 @@ export default function Budget() {
             </VStack>
           </Tabs.Content>
         </Tabs.Root>
-        </VStack>
-      </Box>
-    </Box>
+      </VStack>
+    </PageContainer>
   );
 }

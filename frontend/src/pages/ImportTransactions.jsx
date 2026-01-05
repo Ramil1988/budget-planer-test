@@ -15,6 +15,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAutoSync } from '../contexts/AutoSyncContext';
+import PageContainer from '../components/PageContainer';
 import { fetchTransactionsFromGoogleSheets, parseCSVFile, validateTransactions, extractSheetId } from '../lib/importUtils';
 import { supabase } from '../lib/supabaseClient';
 
@@ -368,9 +369,8 @@ export default function ImportTransactions() {
   };
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={6}>
-      <Box w="100%">
-        <VStack gap={8} align="stretch" w="100%">
+    <PageContainer>
+      <VStack gap={8} align="stretch" w="100%">
           <Box>
             <Heading size="2xl">Import Transactions</Heading>
             <Text color="gray.600" mt={2}>
@@ -660,7 +660,6 @@ export default function ImportTransactions() {
           </>
         )}
         </VStack>
-      </Box>
-    </Box>
+      </PageContainer>
   );
 }

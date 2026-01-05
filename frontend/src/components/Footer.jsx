@@ -2,9 +2,12 @@ import { Box, Flex, Text } from '@chakra-ui/react'
 
 function Footer() {
   return (
-    <Box as="footer" bg="gray.800" color="white" w="100%" py={4} px={8}>
+    <Box as="footer" bg="gray.800" color="white" w="100%">
       <Flex
-        w="100%"
+        maxW="1200px"
+        mx="auto"
+        px={8}
+        py={4}
         justify="space-between"
         align="center"
         flexWrap="wrap"

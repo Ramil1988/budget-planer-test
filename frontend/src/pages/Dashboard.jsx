@@ -13,6 +13,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 // Category color mapping for visual distinction
 const categoryColors = {
@@ -211,19 +212,20 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <Flex w="100%" minH="60vh" align="center" justify="center">
-        <VStack gap={4}>
-          <Spinner size="xl" color="blue.500" thickness="3px" />
-          <Text color="gray.500" fontWeight="500">Loading your dashboard...</Text>
-        </VStack>
-      </Flex>
+      <PageContainer>
+        <Flex w="100%" minH="60vh" align="center" justify="center">
+          <VStack gap={4}>
+            <Spinner size="xl" color="blue.500" thickness="3px" />
+            <Text color="gray.500" fontWeight="500">Loading your dashboard...</Text>
+          </VStack>
+        </Flex>
+      </PageContainer>
     );
   }
 
   return (
-    <Box w="100%" minH="100vh" bg="#FAFAF9" p={{ base: 4, md: 6, lg: 8 }}>
-      <Box maxW="1400px" mx="auto">
-        <VStack gap={{ base: 5, md: 6 }} align="stretch" w="100%">
+    <PageContainer>
+      <VStack gap={{ base: 5, md: 6 }} align="stretch" w="100%">
 
           {/* Header */}
           <Flex
@@ -798,8 +800,7 @@ export default function Dashboard() {
               Categories
             </Button>
           </Flex>
-        </VStack>
-      </Box>
-    </Box>
+      </VStack>
+    </PageContainer>
   );
 }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Container,
   Heading,
   Text,
   VStack,
@@ -12,6 +11,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -102,19 +102,20 @@ export default function Reports() {
 
   if (loading) {
     return (
-      <Flex w="100%" minH="calc(100vh - 140px)" align="center" justify="center">
-        <VStack gap={4}>
-          <Spinner size="xl" />
-          <Text>Loading report...</Text>
-        </VStack>
-      </Flex>
+      <PageContainer>
+        <Flex w="100%" minH="60vh" align="center" justify="center">
+          <VStack gap={4}>
+            <Spinner size="xl" />
+            <Text>Loading report...</Text>
+          </VStack>
+        </Flex>
+      </PageContainer>
     );
   }
 
   return (
-    <Box minH="calc(100vh - 140px)" bg="gray.50" py={8}>
-      <Container maxW="container.lg">
-        <VStack gap={6} align="stretch">
+    <PageContainer>
+      <VStack gap={6} align="stretch">
           {/* Header */}
           <Flex justify="space-between" align="center">
             <Heading size="xl">Yearly Report</Heading>
@@ -219,8 +220,7 @@ export default function Reports() {
               </Table.Body>
             </Table.Root>
           </Box>
-        </VStack>
-      </Container>
-    </Box>
+      </VStack>
+    </PageContainer>
   );
 }

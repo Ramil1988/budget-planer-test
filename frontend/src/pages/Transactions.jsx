@@ -14,6 +14,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 export default function Transactions() {
   const { user } = useAuth();
@@ -181,19 +182,20 @@ export default function Transactions() {
 
   if (loading) {
     return (
-      <Flex w="100%" minH="calc(100vh - 140px)" align="center" justify="center">
-        <VStack gap={4}>
-          <Spinner size="xl" />
-          <Text>Loading transactions...</Text>
-        </VStack>
-      </Flex>
+      <PageContainer>
+        <Flex w="100%" minH="60vh" align="center" justify="center">
+          <VStack gap={4}>
+            <Spinner size="xl" />
+            <Text>Loading transactions...</Text>
+          </VStack>
+        </Flex>
+      </PageContainer>
     );
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={{ base: 3, md: 6 }}>
-      <Box w="100%">
-        <VStack gap={4} align="stretch" w="100%">
+    <PageContainer>
+      <VStack gap={4} align="stretch" w="100%">
           {/* Header */}
           <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
             <Heading size={{ base: 'lg', md: 'xl' }}>Transactions</Heading>
@@ -393,8 +395,7 @@ export default function Transactions() {
               </HStack>
             </Flex>
           )}
-        </VStack>
-      </Box>
-    </Box>
+      </VStack>
+    </PageContainer>
   );
 }

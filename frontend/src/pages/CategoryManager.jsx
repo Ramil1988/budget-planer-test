@@ -15,6 +15,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import PageContainer from '../components/PageContainer';
 
 export default function CategoryManager() {
   const { user } = useAuth();
@@ -199,19 +200,20 @@ export default function CategoryManager() {
 
   if (loading) {
     return (
-      <Flex w="100%" minH="calc(100vh - 140px)" align="center" justify="center">
-        <VStack gap={4}>
-          <Spinner size="xl" />
-          <Text>Loading categories...</Text>
-        </VStack>
-      </Flex>
+      <PageContainer>
+        <Flex w="100%" minH="60vh" align="center" justify="center">
+          <VStack gap={4}>
+            <Spinner size="xl" />
+            <Text>Loading categories...</Text>
+          </VStack>
+        </Flex>
+      </PageContainer>
     );
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={6}>
-      <Box w="100%">
-        <VStack gap={8} align="stretch" w="100%">
+    <PageContainer>
+      <VStack gap={8} align="stretch" w="100%">
           <Box>
             <Heading size="2xl">Category Manager</Heading>
             <Text color="gray.600" mt={2}>
@@ -545,8 +547,7 @@ export default function CategoryManager() {
           </Box>
         )}
 
-        </VStack>
-      </Box>
-    </Box>
+      </VStack>
+    </PageContainer>
   );
 }
