@@ -74,7 +74,17 @@ function Header() {
           >
             Home
           </Box>
-          {user ? (
+          {!user && (
+            <Button
+              as={RouterLink}
+              to="/login"
+              size="sm"
+              colorScheme="blue"
+            >
+              Sign In
+            </Button>
+          )}
+          {user && (
             <>
               <Box
                 as={RouterLink}
@@ -155,7 +165,7 @@ function Header() {
                 Sign Out
               </Button>
             </>
-          ) : null}
+          )}
         </HStack>
 
         {/* Mobile Menu Button */}
@@ -187,7 +197,18 @@ function Header() {
             >
               Home
             </Box>
-            {user ? (
+            {!user && (
+              <Button
+                as={RouterLink}
+                to="/login"
+                size="sm"
+                colorScheme="blue"
+                onClick={onToggle}
+              >
+                Sign In
+              </Button>
+            )}
+            {user && (
               <>
                 <Box
                   as={RouterLink}
@@ -264,7 +285,7 @@ function Header() {
                   Sign Out
                 </Button>
               </>
-            ) : null}
+            )}
           </Stack>
         </Box>
       )}
