@@ -59,6 +59,24 @@ CREATE TABLE budget_categories (
   UNIQUE(budget_id, category_id)
 );
 
+CREATE TABLE user_settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  google_sheet_url TEXT,
+  google_sheet_name TEXT DEFAULT 'Expenses',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE merchant_mappings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  transaction_description TEXT NOT NULL,
+  category_name TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, transaction_description)
+);
+
 -- Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
@@ -66,6 +84,8 @@ ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE merchant_mappings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "own_data" ON profiles FOR ALL USING (auth.uid() = id);
 CREATE POLICY "own_data" ON accounts FOR ALL USING (auth.uid() = user_id);
@@ -75,6 +95,8 @@ CREATE POLICY "own_data" ON budgets FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "own_data" ON budget_categories FOR ALL USING (
   EXISTS (SELECT 1 FROM budgets WHERE budgets.id = budget_categories.budget_id AND budgets.user_id = auth.uid())
 );
+CREATE POLICY "own_data" ON user_settings FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "own_data" ON merchant_mappings FOR ALL USING (auth.uid() = user_id);
 
 -- Functions (only if they don't exist)
 CREATE OR REPLACE FUNCTION update_balance()

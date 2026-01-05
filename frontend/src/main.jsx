@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react'
 import { AuthProvider } from './contexts/AuthContext'
+import { AutoSyncProvider } from './contexts/AutoSyncContext'
 import App from './App'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -10,7 +11,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ChakraProvider value={defaultSystem}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <AutoSyncProvider>
+            <App />
+          </AutoSyncProvider>
         </AuthProvider>
       </BrowserRouter>
     </ChakraProvider>

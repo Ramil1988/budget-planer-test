@@ -39,15 +39,23 @@ function Header() {
       shadow="sm"
     >
       <Flex
-        maxW="1200px"
-        mx="auto"
+        w="100%"
         px={8}
         py={4}
         align="center"
         justify="space-between"
       >
         {/* Logo */}
-        <Flex align="center" gap={2}>
+        <Flex
+          as={RouterLink}
+          to="/"
+          align="center"
+          gap={2}
+          mr={8}
+          flexShrink={0}
+          _hover={{ textDecoration: 'none', opacity: 0.8 }}
+          transition="opacity 0.2s"
+        >
           <Text fontSize="2xl">💰</Text>
           <Text fontSize="xl" fontWeight="bold">
             BudgetWise
@@ -66,17 +74,6 @@ function Header() {
           >
             Home
           </Box>
-          <Box
-            as={RouterLink}
-            to="/features"
-            color={isActive('/features') ? 'blue.600' : 'gray.600'}
-            fontWeight={isActive('/features') ? 'semibold' : 'normal'}
-            _hover={{ color: 'blue.600' }}
-            transition="color 0.2s"
-          >
-            Features
-          </Box>
-
           {user ? (
             <>
               <Box
@@ -89,6 +86,66 @@ function Header() {
               >
                 Dashboard
               </Box>
+              <Box
+                as={RouterLink}
+                to="/import"
+                color={isActive('/import') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/import') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Import
+              </Box>
+              <Box
+                as={RouterLink}
+                to="/categories"
+                color={isActive('/categories') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/categories') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Category Manager
+              </Box>
+              <Box
+                as={RouterLink}
+                to="/transactions"
+                color={isActive('/transactions') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/transactions') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Transactions
+              </Box>
+              <Box
+                as={RouterLink}
+                to="/budget"
+                color={isActive('/budget') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/budget') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Budget
+              </Box>
+              <Box
+                as={RouterLink}
+                to="/reports"
+                color={isActive('/reports') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/reports') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Reports
+              </Box>
+              <Box
+                as={RouterLink}
+                to="/settings"
+                color={isActive('/settings') ? 'blue.600' : 'gray.600'}
+                fontWeight={isActive('/settings') ? 'semibold' : 'normal'}
+                _hover={{ color: 'blue.600' }}
+                transition="color 0.2s"
+              >
+                Settings
+              </Box>
               <Button
                 onClick={handleSignOut}
                 size="sm"
@@ -98,26 +155,7 @@ function Header() {
                 Sign Out
               </Button>
             </>
-          ) : (
-            <>
-              <Button
-                as={RouterLink}
-                to="/login"
-                size="sm"
-                variant="ghost"
-              >
-                Login
-              </Button>
-              <Button
-                as={RouterLink}
-                to="/signup"
-                size="sm"
-                colorScheme="teal"
-              >
-                Sign Up
-              </Button>
-            </>
-          )}
+          ) : null}
         </HStack>
 
         {/* Mobile Menu Button */}
@@ -149,16 +187,6 @@ function Header() {
             >
               Home
             </Box>
-            <Box
-              as={RouterLink}
-              to="/features"
-              color={isActive('/features') ? 'blue.600' : 'gray.600'}
-              fontWeight={isActive('/features') ? 'semibold' : 'normal'}
-              onClick={onToggle}
-            >
-              Features
-            </Box>
-
             {user ? (
               <>
                 <Box
@@ -169,6 +197,60 @@ function Header() {
                   onClick={onToggle}
                 >
                   Dashboard
+                </Box>
+                <Box
+                  as={RouterLink}
+                  to="/import"
+                  color={isActive('/import') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/import') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Import
+                </Box>
+                <Box
+                  as={RouterLink}
+                  to="/categories"
+                  color={isActive('/categories') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/categories') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Category Manager
+                </Box>
+                <Box
+                  as={RouterLink}
+                  to="/transactions"
+                  color={isActive('/transactions') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/transactions') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Transactions
+                </Box>
+                <Box
+                  as={RouterLink}
+                  to="/budget"
+                  color={isActive('/budget') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/budget') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Budget
+                </Box>
+                <Box
+                  as={RouterLink}
+                  to="/reports"
+                  color={isActive('/reports') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/reports') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Reports
+                </Box>
+                <Box
+                  as={RouterLink}
+                  to="/settings"
+                  color={isActive('/settings') ? 'blue.600' : 'gray.600'}
+                  fontWeight={isActive('/settings') ? 'semibold' : 'normal'}
+                  onClick={onToggle}
+                >
+                  Settings
                 </Box>
                 <Button
                   onClick={() => {
@@ -182,28 +264,7 @@ function Header() {
                   Sign Out
                 </Button>
               </>
-            ) : (
-              <>
-                <Button
-                  as={RouterLink}
-                  to="/login"
-                  size="sm"
-                  variant="ghost"
-                  onClick={onToggle}
-                >
-                  Login
-                </Button>
-                <Button
-                  as={RouterLink}
-                  to="/signup"
-                  size="sm"
-                  colorScheme="teal"
-                  onClick={onToggle}
-                >
-                  Sign Up
-                </Button>
-              </>
-            )}
+            ) : null}
           </Stack>
         </Box>
       )}
