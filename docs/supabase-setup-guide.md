@@ -119,8 +119,8 @@ This will create:
    - **Redirect URLs:** Add `http://localhost:5173/**`
 
 Later, when you deploy to production:
-- **Site URL:** `https://budget-planer-test.netlify.app`
-- **Redirect URLs:** Add `https://budget-planer-test.netlify.app/**`
+- **Site URL:** `https://budgetwisetracker.netlify.app`
+- **Redirect URLs:** Add `https://budgetwisetracker.netlify.app/**`
 
 ---
 
@@ -221,8 +221,8 @@ When you're ready to deploy to Netlify:
    - Add `VITE_SUPABASE_ANON_KEY` with your anon key
 
 2. Update Supabase Auth URLs:
-   - Site URL: `https://budget-planer-test.netlify.app`
-   - Redirect URLs: `https://budget-planer-test.netlify.app/**`
+   - Site URL: `https://budgetwisetracker.netlify.app`
+   - Redirect URLs: `https://budgetwisetracker.netlify.app/**`
 
 3. Deploy!
 

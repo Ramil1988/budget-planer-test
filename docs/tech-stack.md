@@ -82,7 +82,7 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     NETLIFY HOSTING                      │
-│  https://budgetwise.netlify.app                         │
+│  https://budgetwisetracker.netlify.app                  │
 │                                                          │
 │  ┌────────────────────────────────────────────────────┐ │
 │  │  FRONTEND (Static Site)                            │ │
@@ -232,7 +232,7 @@ export const handler: Handler = async (event, context) => {
 
 ### Function Endpoints
 - Functions are accessed at: `/.netlify/functions/{function-name}`
-- Example: `https://budgetwise.netlify.app/.netlify/functions/accounts`
+- Example: `https://budgetwisetracker.netlify.app/.netlify/functions/accounts`
 
 ---
 
