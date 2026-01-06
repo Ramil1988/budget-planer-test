@@ -233,6 +233,88 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
   );
 };
 
+// Monthly Spending Bar Chart Component
+const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, formatCurrency }) => {
+  const barHeight = 80;
+  const maxAmount = Math.max(...dailyData, 1);
+  const [year, month] = selectedMonth.split('-').map(Number);
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
+  const todayDate = isCurrentMonth ? today.getDate() : -1;
+
+  return (
+    <Box>
+      <Box
+        overflowX="auto"
+        pb={2}
+        css={{
+          '&::-webkit-scrollbar': { height: '6px' },
+          '&::-webkit-scrollbar-track': { background: '#F4F4F5', borderRadius: '3px' },
+          '&::-webkit-scrollbar-thumb': { background: '#D4D4D8', borderRadius: '3px' },
+        }}
+      >
+        <Flex gap={1} minW={`${dailyData.length * 28}px`} align="flex-end" h={`${barHeight + 40}px`}>
+          {dailyData.map((amount, index) => {
+            const dayNum = index + 1;
+            const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
+            const isToday = dayNum === todayDate;
+            const isSelected = selectedDay === index;
+            const hasSpending = amount > 0;
+
+            return (
+              <VStack
+                key={dayNum}
+                gap={0.5}
+                flex="1"
+                minW="24px"
+                align="center"
+                cursor={hasSpending ? 'pointer' : 'default'}
+                onClick={() => hasSpending && onDayClick(index)}
+                opacity={selectedDay !== null && !isSelected ? 0.4 : 1}
+                transition="opacity 0.2s"
+              >
+                <Box
+                  w="100%"
+                  maxW="20px"
+                  h={`${barHeight}px`}
+                  bg="#F4F4F5"
+                  borderRadius="4px"
+                  overflow="hidden"
+                  position="relative"
+                  border={isSelected ? '2px solid #2563EB' : 'none'}
+                >
+                  <Box
+                    position="absolute"
+                    bottom="0"
+                    left="0"
+                    right="0"
+                    h={`${Math.max(heightPercent, hasSpending ? 5 : 0)}%`}
+                    bg={isToday
+                      ? 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)'
+                      : hasSpending
+                        ? 'linear-gradient(180deg, #10B981 0%, #059669 100%)'
+                        : '#E4E4E7'
+                    }
+                    borderRadius="3px"
+                    transition="height 0.3s ease"
+                  />
+                </Box>
+                <Text
+                  fontSize="9px"
+                  fontWeight={isToday || isSelected ? '700' : '500'}
+                  color={isToday ? '#2563EB' : isSelected ? '#18181B' : '#A1A1AA'}
+                >
+                  {dayNum}
+                </Text>
+              </VStack>
+            );
+          })}
+        </Flex>
+      </Box>
+    </Box>
+  );
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -255,6 +337,9 @@ export default function Dashboard() {
   const [dailyTransactions, setDailyTransactions] = useState([[], [], [], [], [], [], []]); // Transactions by day
   const [selectedDayIndex, setSelectedDayIndex] = useState(null); // Selected day for details
   const [hoveredCategory, setHoveredCategory] = useState(null); // Hovered category for donut chart
+  const [monthlyDailySpending, setMonthlyDailySpending] = useState([]); // Daily spending for entire month
+  const [selectedMonthDay, setSelectedMonthDay] = useState(null); // Selected day in monthly chart
+  const [monthlyDailyTransactions, setMonthlyDailyTransactions] = useState([]); // Transactions by day for month
 
   useEffect(() => {
     if (user) {
@@ -305,6 +390,30 @@ export default function Dashboard() {
     setWeekDates(dates);
     setDailyTransactions(dailyTxs);
     setSelectedDayIndex(null); // Reset selection when week changes
+  };
+
+  // Calculate monthly spending for all days in the month
+  const calculateMonthlySpending = (transactions, monthStr) => {
+    const [year, month] = monthStr.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const dailySpending = Array(daysInMonth).fill(0);
+    const dailyTxs = Array(daysInMonth).fill(null).map(() => []);
+
+    transactions.forEach(tx => {
+      if (tx.type === 'expense') {
+        const txDate = new Date(tx.date + 'T00:00:00');
+        const dayOfMonth = txDate.getDate() - 1; // 0-indexed
+        if (dayOfMonth >= 0 && dayOfMonth < daysInMonth) {
+          dailySpending[dayOfMonth] += Number(tx.amount);
+          dailyTxs[dayOfMonth].push(tx);
+        }
+      }
+    });
+
+    setMonthlyDailySpending(dailySpending);
+    setMonthlyDailyTransactions(dailyTxs);
+    setSelectedMonthDay(null);
   };
 
   // Get the date range label for the current week view
@@ -449,6 +558,9 @@ export default function Dashboard() {
       setAllTransactions(transactions);
       setWeekOffset(0); // Reset to current week when month changes
       calculateWeeklySpending(transactions, 0);
+
+      // Calculate monthly daily spending
+      calculateMonthlySpending(transactions, selectedMonth);
 
     } catch (err) {
       setError('Failed to load dashboard: ' + err.message);
@@ -697,6 +809,99 @@ export default function Dashboard() {
                 </Text>
               </Box>
             </Flex>
+          </Box>
+
+          {/* Monthly Daily Spending Chart */}
+          <Box
+            p={{ base: 5, md: 6 }}
+            borderRadius="16px"
+            bg="white"
+            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+            border="1px solid #F4F4F5"
+          >
+            <Flex justify="space-between" align="center" mb={4}>
+              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                Daily Spending
+              </Heading>
+              <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
+                <Text fontSize="xs" fontWeight="600" color="#71717A">
+                  {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0))} total
+                </Text>
+              </Box>
+            </Flex>
+
+            {monthlyDailySpending.length > 0 ? (
+              <MonthlyBarChart
+                dailyData={monthlyDailySpending}
+                selectedDay={selectedMonthDay}
+                onDayClick={(index) => setSelectedMonthDay(selectedMonthDay === index ? null : index)}
+                selectedMonth={selectedMonth}
+                formatCurrency={formatCurrency}
+              />
+            ) : (
+              <Flex justify="center" align="center" h="100px">
+                <Text color="#71717A">No spending data</Text>
+              </Flex>
+            )}
+
+            {/* Transaction Details Section */}
+            <Box mt={3} p={3} borderRadius="10px" bg="#F4F4F5">
+              {selectedMonthDay !== null && monthlyDailyTransactions[selectedMonthDay]?.length > 0 ? (
+                <VStack align="stretch" gap={2}>
+                  <Flex justify="space-between" align="center" mb={1}>
+                    <Text fontSize="sm" fontWeight="600" color="#18181B">
+                      {new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1] - 1, selectedMonthDay + 1)
+                        .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </Text>
+                    <Text fontSize="sm" fontWeight="700" color="#059669">
+                      {formatCurrency(monthlyDailySpending[selectedMonthDay])}
+                    </Text>
+                  </Flex>
+                  <Box maxH="120px" overflowY="auto">
+                    {monthlyDailyTransactions[selectedMonthDay].map((tx, idx) => (
+                      <Flex
+                        key={tx.id || idx}
+                        justify="space-between"
+                        align="center"
+                        py={1.5}
+                        borderBottomWidth={idx < monthlyDailyTransactions[selectedMonthDay].length - 1 ? '1px' : '0'}
+                        borderColor="#E4E4E7"
+                      >
+                        <HStack gap={2} flex="1" minW="0">
+                          <Box
+                            w="6px"
+                            h="6px"
+                            borderRadius="full"
+                            bg={getCategoryColor(tx.categories?.name || 'default')}
+                            flexShrink={0}
+                          />
+                          <VStack align="start" gap={0} flex="1" minW="0">
+                            <Text fontSize="xs" color="#18181B" fontWeight="600" noOfLines={1}>
+                              {tx.categories?.name || 'Uncategorized'}
+                            </Text>
+                            <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
+                              {tx.description || 'No description'}
+                            </Text>
+                          </VStack>
+                        </HStack>
+                        <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={2}>
+                          {formatCurrency(tx.amount)}
+                        </Text>
+                      </Flex>
+                    ))}
+                  </Box>
+                </VStack>
+              ) : (
+                <Flex justify="space-between" align="center">
+                  <Text fontSize="sm" color="#71717A">
+                    {selectedMonthDay !== null ? 'No transactions' : 'Click a bar to see details'}
+                  </Text>
+                  <Text fontSize="sm" fontWeight="600" color="#18181B">
+                    Avg: {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0) / monthlyDailySpending.length || 0)}/day
+                  </Text>
+                </Flex>
+              )}
+            </Box>
           </Box>
 
           {/* Charts Row - Donut & Weekly */}
