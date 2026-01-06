@@ -82,80 +82,217 @@ const MonthlyBarChart = ({ data, formatCurrency }) => {
   );
 };
 
-// Trend Line Chart Component
-const TrendLineChart = ({ data, formatCurrency }) => {
+// Trend Line Chart Component with hover effects
+const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) => {
   const values = data.map(d => d.balance);
   const maxVal = Math.max(...values.map(Math.abs), 1);
-  const width = 700;
-  const height = 120;
-  const padding = 20;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  const width = 800;
+  const height = 220;
+  const paddingTop = 40;
+  const paddingBottom = 50;
+  const paddingLeft = 60;
+  const paddingRight = 30;
+  const chartWidth = width - paddingLeft - paddingRight;
+  const chartHeight = height - paddingTop - paddingBottom;
+  const zeroY = paddingTop + chartHeight / 2;
 
   // Generate points for the line
   const points = data.map((d, i) => {
-    const x = padding + (i / (data.length - 1)) * chartWidth;
-    const y = padding + chartHeight / 2 - (d.balance / maxVal) * (chartHeight / 2);
-    return { x, y, balance: d.balance };
+    const x = paddingLeft + (i / (data.length - 1)) * chartWidth;
+    const y = zeroY - (d.balance / maxVal) * (chartHeight / 2);
+    return { x, y, balance: d.balance, month: MONTH_ABBR[i], income: d.income, expenses: d.expenses };
   });
 
   const pathD = points
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
     .join(' ');
 
-  // Area fill
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${padding + chartHeight / 2} L ${padding} ${padding + chartHeight / 2} Z`;
+  // Area fill paths (separate for positive and negative)
+  const areaD = `${pathD} L ${points[points.length - 1].x} ${zeroY} L ${paddingLeft} ${zeroY} Z`;
+
+  // Y-axis labels
+  const yLabels = [
+    { value: maxVal, y: paddingTop },
+    { value: maxVal / 2, y: paddingTop + chartHeight / 4 },
+    { value: 0, y: zeroY },
+    { value: -maxVal / 2, y: zeroY + chartHeight / 4 },
+    { value: -maxVal, y: paddingTop + chartHeight },
+  ];
+
+  const formatShort = (val) => {
+    if (Math.abs(val) >= 1000) {
+      return `$${(val / 1000).toFixed(0)}k`;
+    }
+    return `$${val.toFixed(0)}`;
+  };
+
+  const hoveredPoint = hoveredMonth !== null ? points[hoveredMonth] : null;
 
   return (
-    <Box overflowX="auto">
+    <Box overflowX="auto" position="relative">
       <svg width={width} height={height} style={{ minWidth: '100%' }}>
-        {/* Zero line */}
-        <line
-          x1={padding}
-          y1={padding + chartHeight / 2}
-          x2={width - padding}
-          y2={padding + chartHeight / 2}
-          stroke="#E5E7EB"
-          strokeWidth="1"
-          strokeDasharray="4,4"
-        />
-        {/* Area under the line */}
+        {/* Grid lines */}
+        {yLabels.map((label, i) => (
+          <g key={i}>
+            <line
+              x1={paddingLeft}
+              y1={label.y}
+              x2={width - paddingRight}
+              y2={label.y}
+              stroke={label.value === 0 ? '#9CA3AF' : '#F3F4F6'}
+              strokeWidth={label.value === 0 ? 1.5 : 1}
+              strokeDasharray={label.value === 0 ? '0' : '4,4'}
+            />
+            <text
+              x={paddingLeft - 10}
+              y={label.y + 4}
+              textAnchor="end"
+              fontSize="11"
+              fill="#9CA3AF"
+            >
+              {formatShort(label.value)}
+            </text>
+          </g>
+        ))}
+
+        {/* Area gradient fill */}
         <path
           d={areaD}
-          fill="url(#balanceGradient)"
-          opacity="0.3"
+          fill="url(#balanceTrendGradient)"
+          opacity="0.4"
         />
+
         {/* Line */}
         <path
           d={pathD}
           fill="none"
-          stroke="#3B82F6"
+          stroke="url(#lineGradient)"
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Points */}
-        {points.map((p, i) => (
-          <g key={i}>
-            <circle
-              cx={p.x}
-              cy={p.y}
-              r="5"
-              fill={p.balance >= 0 ? '#10B981' : '#EF4444'}
-              stroke="white"
-              strokeWidth="2"
-            />
-            <title>{`${MONTH_ABBR[i]}: ${formatCurrency(p.balance)}`}</title>
-          </g>
-        ))}
-        {/* Gradient definition */}
+
+        {/* Hover vertical line */}
+        {hoveredPoint && (
+          <line
+            x1={hoveredPoint.x}
+            y1={paddingTop}
+            x2={hoveredPoint.x}
+            y2={height - paddingBottom}
+            stroke="#6B7280"
+            strokeWidth="1"
+            strokeDasharray="4,4"
+          />
+        )}
+
+        {/* Points and month labels */}
+        {points.map((p, i) => {
+          const isHovered = hoveredMonth === i;
+          const hasData = p.income > 0 || p.expenses > 0;
+          return (
+            <g key={i}>
+              {/* Clickable area */}
+              <rect
+                x={p.x - 25}
+                y={paddingTop}
+                width={50}
+                height={chartHeight}
+                fill="transparent"
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => onHoverMonth(i)}
+                onMouseLeave={() => onHoverMonth(null)}
+              />
+              {/* Point */}
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={isHovered ? 8 : hasData ? 6 : 4}
+                fill={p.balance >= 0 ? '#10B981' : '#EF4444'}
+                stroke="white"
+                strokeWidth={isHovered ? 3 : 2}
+                style={{ transition: 'all 0.15s ease', cursor: 'pointer' }}
+                onMouseEnter={() => onHoverMonth(i)}
+                onMouseLeave={() => onHoverMonth(null)}
+              />
+              {/* Month label */}
+              <text
+                x={p.x}
+                y={height - paddingBottom + 20}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight={isHovered ? '600' : '400'}
+                fill={isHovered ? '#1F2937' : '#9CA3AF'}
+              >
+                {p.month}
+              </text>
+              {/* Value label on hover or if significant */}
+              {(isHovered || (hasData && Math.abs(p.balance) > maxVal * 0.3)) && (
+                <text
+                  x={p.x}
+                  y={p.y - 12}
+                  textAnchor="middle"
+                  fontSize="11"
+                  fontWeight="600"
+                  fill={p.balance >= 0 ? '#059669' : '#DC2626'}
+                >
+                  {formatShort(p.balance)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Gradient definitions */}
         <defs>
-          <linearGradient id="balanceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#3B82F6" />
+          <linearGradient id="balanceTrendGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.5" />
+            <stop offset="50%" stopColor="#3B82F6" stopOpacity="0.1" />
             <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#8B5CF6" />
           </linearGradient>
         </defs>
       </svg>
+
+      {/* Hover tooltip */}
+      {hoveredPoint && (
+        <Box
+          position="absolute"
+          top="10px"
+          right="20px"
+          bg="white"
+          p={3}
+          borderRadius="12px"
+          boxShadow="0 4px 12px rgba(0,0,0,0.15)"
+          border="1px solid #E5E7EB"
+          minW="140px"
+        >
+          <Text fontSize="sm" fontWeight="700" color="gray.800" mb={1}>
+            {data[hoveredMonth]?.month}
+          </Text>
+          <Flex justify="space-between" mb={1}>
+            <Text fontSize="xs" color="gray.500">Income:</Text>
+            <Text fontSize="xs" fontWeight="600" color="green.600">
+              {formatCurrency(hoveredPoint.income)}
+            </Text>
+          </Flex>
+          <Flex justify="space-between" mb={1}>
+            <Text fontSize="xs" color="gray.500">Expenses:</Text>
+            <Text fontSize="xs" fontWeight="600" color="red.500">
+              {formatCurrency(hoveredPoint.expenses)}
+            </Text>
+          </Flex>
+          <Box h="1px" bg="gray.200" my={1} />
+          <Flex justify="space-between">
+            <Text fontSize="xs" color="gray.500">Balance:</Text>
+            <Text fontSize="sm" fontWeight="700" color={hoveredPoint.balance >= 0 ? 'green.600' : 'red.500'}>
+              {hoveredPoint.balance >= 0 ? '+' : ''}{formatCurrency(hoveredPoint.balance)}
+            </Text>
+          </Flex>
+        </Box>
+      )}
     </Box>
   );
 };
@@ -349,6 +486,7 @@ export default function Reports() {
   const [categoryData, setCategoryData] = useState([]);
   const [totals, setTotals] = useState({ income: 0, expenses: 0, balance: 0 });
   const [hoveredCategory, setHoveredCategory] = useState(null);
+  const [hoveredMonth, setHoveredMonth] = useState(null);
 
   // Generate year options
   const yearOptions = [2026, 2025];
@@ -605,7 +743,12 @@ export default function Reports() {
         >
           <Heading size="md" color="gray.800" mb={1}>Balance Trend</Heading>
           <Text fontSize="sm" color="gray.500" mb={4}>Monthly net balance throughout the year</Text>
-          <TrendLineChart data={monthlyData} formatCurrency={formatCurrency} />
+          <TrendLineChart
+              data={monthlyData}
+              formatCurrency={formatCurrency}
+              hoveredMonth={hoveredMonth}
+              onHoverMonth={setHoveredMonth}
+            />
         </Box>
 
         {/* Detailed Table */}
