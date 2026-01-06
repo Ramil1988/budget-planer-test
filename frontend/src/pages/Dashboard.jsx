@@ -114,7 +114,7 @@ const DonutChart = ({ data, total, size = 200, formatCurrency }) => {
 };
 
 // Weekly Spending Bar Chart Component
-const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency }) => {
+const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency, weekOffset = 0 }) => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const barHeight = 100;
 
@@ -128,7 +128,8 @@ const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency }) => {
         {days.map((day, index) => {
           const amount = dailyData[index] || 0;
           const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
-          const isToday = index === todayIndex;
+          // Only highlight "today" when viewing current week
+          const isToday = weekOffset === 0 && index === todayIndex;
           const hasSpending = amount > 0;
 
           return (
@@ -198,12 +199,70 @@ export default function Dashboard() {
   const [daysLeft, setDaysLeft] = useState(0);
   const [weeklySpending, setWeeklySpending] = useState([0, 0, 0, 0, 0, 0, 0]);
   const [maxDailySpending, setMaxDailySpending] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week, etc.
+  const [allTransactions, setAllTransactions] = useState([]); // Store for week navigation
 
   useEffect(() => {
     if (user) {
       loadDashboardData();
     }
   }, [user, selectedMonth]);
+
+  // Recalculate weekly spending when week offset changes
+  useEffect(() => {
+    if (allTransactions.length > 0) {
+      calculateWeeklySpending(allTransactions, weekOffset);
+    }
+  }, [weekOffset, allTransactions]);
+
+  // Calculate weekly spending for a given week offset
+  const calculateWeeklySpending = (transactions, offset) => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset + (offset * 7));
+    monday.setHours(0, 0, 0, 0);
+
+    const dailySpending = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun
+
+    transactions.forEach(tx => {
+      if (tx.type === 'expense') {
+        const txDate = new Date(tx.date + 'T00:00:00');
+        const dayDiff = Math.floor((txDate - monday) / (1000 * 60 * 60 * 24));
+        if (dayDiff >= 0 && dayDiff < 7) {
+          dailySpending[dayDiff] += Number(tx.amount);
+        }
+      }
+    });
+
+    setWeeklySpending(dailySpending);
+    setMaxDailySpending(Math.max(...dailySpending, 1));
+  };
+
+  // Get the date range label for the current week view
+  const getWeekLabel = () => {
+    const today = new Date();
+    const currentDay = today.getDay();
+    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset + (weekOffset * 7));
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const formatDate = (date) => {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    if (weekOffset === 0) {
+      return 'This Week';
+    } else if (weekOffset === -1) {
+      return 'Last Week';
+    } else {
+      return `${formatDate(monday)} - ${formatDate(sunday)}`;
+    }
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -319,28 +378,10 @@ export default function Dashboard() {
 
       setCategoryBudgets(catBudgets);
 
-      // Calculate weekly spending (current week)
-      const today = new Date();
-      const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
-      const monday = new Date(today);
-      monday.setDate(today.getDate() + mondayOffset);
-      monday.setHours(0, 0, 0, 0);
-
-      const dailySpending = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun
-
-      transactions.forEach(tx => {
-        if (tx.type === 'expense') {
-          const txDate = new Date(tx.date + 'T00:00:00');
-          const dayDiff = Math.floor((txDate - monday) / (1000 * 60 * 60 * 24));
-          if (dayDiff >= 0 && dayDiff < 7) {
-            dailySpending[dayDiff] += Number(tx.amount);
-          }
-        }
-      });
-
-      setWeeklySpending(dailySpending);
-      setMaxDailySpending(Math.max(...dailySpending, 1));
+      // Store transactions for week navigation and calculate initial weekly spending
+      setAllTransactions(transactions);
+      setWeekOffset(0); // Reset to current week when month changes
+      calculateWeeklySpending(transactions, 0);
 
     } catch (err) {
       setError('Failed to load dashboard: ' + err.message);
@@ -692,9 +733,42 @@ export default function Dashboard() {
               border="1px solid #F4F4F5"
             >
               <Flex justify="space-between" align="center" mb={5}>
-                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
-                  This Week
-                </Heading>
+                <HStack gap={2}>
+                  {/* Previous Week Button */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setWeekOffset(prev => prev - 1)}
+                    p={1}
+                    minW="28px"
+                    h="28px"
+                    borderRadius="8px"
+                    color="#71717A"
+                    _hover={{ bg: '#F4F4F5', color: '#18181B' }}
+                  >
+                    ←
+                  </Button>
+                  <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em" minW="100px" textAlign="center">
+                    {getWeekLabel()}
+                  </Heading>
+                  {/* Next Week Button */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setWeekOffset(prev => prev + 1)}
+                    p={1}
+                    minW="28px"
+                    h="28px"
+                    borderRadius="8px"
+                    color="#71717A"
+                    _hover={{ bg: '#F4F4F5', color: '#18181B' }}
+                    disabled={weekOffset >= 0}
+                    opacity={weekOffset >= 0 ? 0.3 : 1}
+                    cursor={weekOffset >= 0 ? 'not-allowed' : 'pointer'}
+                  >
+                    →
+                  </Button>
+                </HStack>
                 <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
                   <Text fontSize="xs" fontWeight="600" color="#71717A">
                     {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
@@ -702,7 +776,7 @@ export default function Dashboard() {
                 </Box>
               </Flex>
 
-              <WeeklyBarChart dailyData={weeklySpending} maxAmount={maxDailySpending} />
+              <WeeklyBarChart dailyData={weeklySpending} maxAmount={maxDailySpending} weekOffset={weekOffset} />
 
               <Box mt={4} p={3} borderRadius="10px" bg="#F4F4F5">
                 <Flex justify="space-between" align="center">
