@@ -74,11 +74,23 @@ export const AuthProvider = ({ children }) => {
   // Sign out
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      // Sign out from Supabase (local scope to avoid network issues)
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
       if (error) throw error;
+
+      // Force clear local state immediately
+      setUser(null);
+      setSession(null);
+
+      // Clear any cached auth data from localStorage
+      localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0] + '-auth-token');
+
       return { error: null };
     } catch (error) {
       console.error('Error signing out:', error.message);
+      // Even on error, clear local state to ensure user is logged out locally
+      setUser(null);
+      setSession(null);
       return { error };
     }
   };
