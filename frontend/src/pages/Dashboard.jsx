@@ -811,99 +811,6 @@ export default function Dashboard() {
             </Flex>
           </Box>
 
-          {/* Monthly Daily Spending Chart */}
-          <Box
-            p={{ base: 5, md: 6 }}
-            borderRadius="16px"
-            bg="white"
-            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-            border="1px solid #F4F4F5"
-          >
-            <Flex justify="space-between" align="center" mb={4}>
-              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
-                Daily Spending
-              </Heading>
-              <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
-                <Text fontSize="xs" fontWeight="600" color="#71717A">
-                  {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0))} total
-                </Text>
-              </Box>
-            </Flex>
-
-            {monthlyDailySpending.length > 0 ? (
-              <MonthlyBarChart
-                dailyData={monthlyDailySpending}
-                selectedDay={selectedMonthDay}
-                onDayClick={(index) => setSelectedMonthDay(selectedMonthDay === index ? null : index)}
-                selectedMonth={selectedMonth}
-                formatCurrency={formatCurrency}
-              />
-            ) : (
-              <Flex justify="center" align="center" h="100px">
-                <Text color="#71717A">No spending data</Text>
-              </Flex>
-            )}
-
-            {/* Transaction Details Section */}
-            <Box mt={3} p={3} borderRadius="10px" bg="#F4F4F5">
-              {selectedMonthDay !== null && monthlyDailyTransactions[selectedMonthDay]?.length > 0 ? (
-                <VStack align="stretch" gap={2}>
-                  <Flex justify="space-between" align="center" mb={1}>
-                    <Text fontSize="sm" fontWeight="600" color="#18181B">
-                      {new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1] - 1, selectedMonthDay + 1)
-                        .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                    </Text>
-                    <Text fontSize="sm" fontWeight="700" color="#059669">
-                      {formatCurrency(monthlyDailySpending[selectedMonthDay])}
-                    </Text>
-                  </Flex>
-                  <Box maxH="120px" overflowY="auto">
-                    {monthlyDailyTransactions[selectedMonthDay].map((tx, idx) => (
-                      <Flex
-                        key={tx.id || idx}
-                        justify="space-between"
-                        align="center"
-                        py={1.5}
-                        borderBottomWidth={idx < monthlyDailyTransactions[selectedMonthDay].length - 1 ? '1px' : '0'}
-                        borderColor="#E4E4E7"
-                      >
-                        <HStack gap={2} flex="1" minW="0">
-                          <Box
-                            w="6px"
-                            h="6px"
-                            borderRadius="full"
-                            bg={getCategoryColor(tx.categories?.name || 'default')}
-                            flexShrink={0}
-                          />
-                          <VStack align="start" gap={0} flex="1" minW="0">
-                            <Text fontSize="xs" color="#18181B" fontWeight="600" noOfLines={1}>
-                              {tx.categories?.name || 'Uncategorized'}
-                            </Text>
-                            <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
-                              {tx.description || 'No description'}
-                            </Text>
-                          </VStack>
-                        </HStack>
-                        <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={2}>
-                          {formatCurrency(tx.amount)}
-                        </Text>
-                      </Flex>
-                    ))}
-                  </Box>
-                </VStack>
-              ) : (
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="#71717A">
-                    {selectedMonthDay !== null ? 'No transactions' : 'Click a bar to see details'}
-                  </Text>
-                  <Text fontSize="sm" fontWeight="600" color="#18181B">
-                    Avg: {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0) / monthlyDailySpending.length || 0)}/day
-                  </Text>
-                </Flex>
-              )}
-            </Box>
-          </Box>
-
           {/* Charts Row - Donut & Weekly */}
           <Flex gap={{ base: 5, md: 6 }} direction={{ base: 'column', lg: 'row' }}>
             {/* Spending Breakdown Donut Chart */}
@@ -1354,6 +1261,99 @@ export default function Dashboard() {
               )}
             </Box>
           </Flex>
+
+          {/* Monthly Daily Spending Chart */}
+          <Box
+            p={{ base: 5, md: 6 }}
+            borderRadius="16px"
+            bg="white"
+            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+            border="1px solid #F4F4F5"
+          >
+            <Flex justify="space-between" align="center" mb={4}>
+              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                Daily Spending
+              </Heading>
+              <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
+                <Text fontSize="xs" fontWeight="600" color="#71717A">
+                  {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0))} total
+                </Text>
+              </Box>
+            </Flex>
+
+            {monthlyDailySpending.length > 0 ? (
+              <MonthlyBarChart
+                dailyData={monthlyDailySpending}
+                selectedDay={selectedMonthDay}
+                onDayClick={(index) => setSelectedMonthDay(selectedMonthDay === index ? null : index)}
+                selectedMonth={selectedMonth}
+                formatCurrency={formatCurrency}
+              />
+            ) : (
+              <Flex justify="center" align="center" h="100px">
+                <Text color="#71717A">No spending data</Text>
+              </Flex>
+            )}
+
+            {/* Transaction Details Section */}
+            <Box mt={3} p={3} borderRadius="10px" bg="#F4F4F5">
+              {selectedMonthDay !== null && monthlyDailyTransactions[selectedMonthDay]?.length > 0 ? (
+                <VStack align="stretch" gap={2}>
+                  <Flex justify="space-between" align="center" mb={1}>
+                    <Text fontSize="sm" fontWeight="600" color="#18181B">
+                      {new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1] - 1, selectedMonthDay + 1)
+                        .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </Text>
+                    <Text fontSize="sm" fontWeight="700" color="#059669">
+                      {formatCurrency(monthlyDailySpending[selectedMonthDay])}
+                    </Text>
+                  </Flex>
+                  <Box maxH="120px" overflowY="auto">
+                    {monthlyDailyTransactions[selectedMonthDay].map((tx, idx) => (
+                      <Flex
+                        key={tx.id || idx}
+                        justify="space-between"
+                        align="center"
+                        py={1.5}
+                        borderBottomWidth={idx < monthlyDailyTransactions[selectedMonthDay].length - 1 ? '1px' : '0'}
+                        borderColor="#E4E4E7"
+                      >
+                        <HStack gap={2} flex="1" minW="0">
+                          <Box
+                            w="6px"
+                            h="6px"
+                            borderRadius="full"
+                            bg={getCategoryColor(tx.categories?.name || 'default')}
+                            flexShrink={0}
+                          />
+                          <VStack align="start" gap={0} flex="1" minW="0">
+                            <Text fontSize="xs" color="#18181B" fontWeight="600" noOfLines={1}>
+                              {tx.categories?.name || 'Uncategorized'}
+                            </Text>
+                            <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
+                              {tx.description || 'No description'}
+                            </Text>
+                          </VStack>
+                        </HStack>
+                        <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={2}>
+                          {formatCurrency(tx.amount)}
+                        </Text>
+                      </Flex>
+                    ))}
+                  </Box>
+                </VStack>
+              ) : (
+                <Flex justify="space-between" align="center">
+                  <Text fontSize="sm" color="#71717A">
+                    {selectedMonthDay !== null ? 'No transactions' : 'Click a bar to see details'}
+                  </Text>
+                  <Text fontSize="sm" fontWeight="600" color="#18181B">
+                    Avg: {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0) / monthlyDailySpending.length || 0)}/day
+                  </Text>
+                </Flex>
+              )}
+            </Box>
+          </Box>
 
           {/* Category Budgets */}
           <Box
