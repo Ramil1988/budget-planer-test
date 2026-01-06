@@ -10,6 +10,9 @@ import {
   Input,
   Button,
   Tabs,
+  Dialog,
+  Portal,
+  CloseButton,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -90,7 +93,7 @@ const ProgressBar = ({ percent, height = '8px', showOverflow = true }) => {
 };
 
 // Category Budget Card Component
-const BudgetCard = ({ item, formatCurrency, index }) => {
+const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
   const isOver = item.percentOfLimit > 100;
   const isWarning = item.percentOfLimit > 80 && item.percentOfLimit <= 100;
   const hasLimit = item.limit > 0;
@@ -107,10 +110,12 @@ const BudgetCard = ({ item, formatCurrency, index }) => {
       _hover={{
         transform: 'translateY(-2px)',
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        cursor: 'pointer',
       }}
       style={{
         animation: `fadeSlideIn 0.4s ease-out ${index * 0.05}s both`,
       }}
+      onClick={onClick}
     >
       <Flex justify="space-between" align="flex-start" mb={3}>
         <Box flex="1">
@@ -184,6 +189,9 @@ export default function Budget() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [activeTab, setActiveTab] = useState('tracking');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categoryTransactions, setCategoryTransactions] = useState([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -431,6 +439,40 @@ export default function Budget() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const loadCategoryTransactions = async (categoryId, categoryName) => {
+    setLoadingTransactions(true);
+    setSelectedCategory({ id: categoryId, name: categoryName });
+
+    try {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`;
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, description, amount, date')
+        .eq('user_id', user.id)
+        .eq('category_id', categoryId)
+        .eq('type', 'expense')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      setCategoryTransactions(data || []);
+    } catch (err) {
+      console.error('Failed to load transactions:', err);
+      setCategoryTransactions([]);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
+
+  const closeTransactionsModal = () => {
+    setSelectedCategory(null);
+    setCategoryTransactions([]);
   };
 
   const formatCurrency = (amount) => {
@@ -688,6 +730,7 @@ export default function Budget() {
                         item={item}
                         formatCurrency={formatCurrency}
                         index={index}
+                        onClick={() => loadCategoryTransactions(item.id, item.name)}
                       />
                     ))}
                   </Box>
@@ -830,6 +873,110 @@ export default function Budget() {
           </Tabs.Content>
         </Tabs.Root>
       </VStack>
+
+      {/* Category Transactions Modal */}
+      <Dialog.Root open={!!selectedCategory} onOpenChange={(e) => !e.open && closeTransactionsModal()}>
+        <Portal>
+          <Dialog.Backdrop bg="blackAlpha.600" />
+          <Dialog.Positioner>
+            <Dialog.Content
+              maxW="500px"
+              w="90%"
+              maxH="80vh"
+              borderRadius="20px"
+              overflow="hidden"
+              bg="white"
+            >
+              <Dialog.Header
+                bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)"
+                color="white"
+                p={5}
+              >
+                <Flex justify="space-between" align="center">
+                  <Box>
+                    <Dialog.Title fontSize="lg" fontWeight="700">
+                      {selectedCategory?.name}
+                    </Dialog.Title>
+                    <Text fontSize="sm" color="rgba(255,255,255,0.7)" mt={1}>
+                      {getMonthName(selectedMonth)} Transactions
+                    </Text>
+                  </Box>
+                  <Dialog.CloseTrigger asChild>
+                    <CloseButton
+                      color="white"
+                      _hover={{ bg: 'whiteAlpha.200' }}
+                      borderRadius="full"
+                    />
+                  </Dialog.CloseTrigger>
+                </Flex>
+              </Dialog.Header>
+
+              <Dialog.Body p={0} overflowY="auto" maxH="calc(80vh - 140px)">
+                {loadingTransactions ? (
+                  <Flex justify="center" align="center" py={10}>
+                    <Spinner size="lg" color="blue.500" />
+                  </Flex>
+                ) : categoryTransactions.length === 0 ? (
+                  <Flex justify="center" align="center" py={10}>
+                    <Text color="gray.500">No transactions found</Text>
+                  </Flex>
+                ) : (
+                  <VStack gap={0} align="stretch">
+                    {categoryTransactions.map((tx, idx) => (
+                      <Box
+                        key={tx.id}
+                        px={5}
+                        py={4}
+                        borderBottomWidth={idx < categoryTransactions.length - 1 ? '1px' : '0'}
+                        borderColor="gray.100"
+                        _hover={{ bg: 'gray.50' }}
+                        transition="background 0.15s"
+                      >
+                        <Flex justify="space-between" align="flex-start">
+                          <Box flex="1" pr={3}>
+                            <Text fontWeight="600" color="gray.800" fontSize="sm">
+                              {tx.description || 'No description'}
+                            </Text>
+                            <Text fontSize="xs" color="gray.500" mt={0.5}>
+                              {new Date(tx.date + 'T00:00:00').toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </Text>
+                          </Box>
+                          <Text fontWeight="700" color="red.500" fontSize="sm">
+                            {formatCurrency(tx.amount)}
+                          </Text>
+                        </Flex>
+                      </Box>
+                    ))}
+                  </VStack>
+                )}
+              </Dialog.Body>
+
+              <Dialog.Footer
+                p={4}
+                bg="gray.50"
+                borderTopWidth="1px"
+                borderColor="gray.100"
+              >
+                <Flex justify="space-between" align="center" w="100%">
+                  <Text fontSize="sm" color="gray.600">
+                    {categoryTransactions.length} transaction{categoryTransactions.length !== 1 ? 's' : ''}
+                  </Text>
+                  <HStack gap={2}>
+                    <Text fontSize="sm" color="gray.600">Total:</Text>
+                    <Text fontSize="lg" fontWeight="700" color="red.500">
+                      {formatCurrency(categoryTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0))}
+                    </Text>
+                  </HStack>
+                </Flex>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
     </PageContainer>
   );
 }

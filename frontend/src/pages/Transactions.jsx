@@ -180,6 +180,57 @@ export default function Transactions() {
     }
   };
 
+  const downloadCSV = () => {
+    if (filteredTransactions.length === 0) return;
+
+    // CSV header
+    const headers = ['Date', 'Category', 'Description', 'Amount', 'Type', 'Bank'];
+
+    // CSV rows
+    const rows = filteredTransactions.map(t => [
+      t.date,
+      t.category,
+      `"${(t.description || '').replace(/"/g, '""')}"`, // Escape quotes in description
+      t.amount.toFixed(2),
+      t.type,
+      t.bank || '',
+    ]);
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+
+    // Generate filename with period info
+    let periodLabel = 'all-time';
+    if (selectedPeriod === 'current') {
+      const now = new Date();
+      periodLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    } else if (selectedPeriod === 'last-month') {
+      const now = new Date();
+      let month = now.getMonth();
+      let year = now.getFullYear();
+      if (month === 0) {
+        month = 12;
+        year -= 1;
+      }
+      periodLabel = `${year}-${String(month).padStart(2, '0')}`;
+    }
+
+    link.setAttribute('download', `transactions-${periodLabel}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -199,14 +250,25 @@ export default function Transactions() {
           {/* Header */}
           <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
             <Heading size={{ base: 'lg', md: 'xl' }}>Transactions</Heading>
-            <Button
-              as={RouterLink}
-              to="/add-transaction"
-              colorScheme="green"
-              size={{ base: 'sm', md: 'md' }}
-            >
-              + Add Transaction
-            </Button>
+            <HStack gap={2}>
+              <Button
+                onClick={downloadCSV}
+                variant="outline"
+                size={{ base: 'sm', md: 'md' }}
+                disabled={filteredTransactions.length === 0}
+                _hover={{ bg: 'gray.50' }}
+              >
+                Download CSV
+              </Button>
+              <Button
+                as={RouterLink}
+                to="/add-transaction"
+                colorScheme="green"
+                size={{ base: 'sm', md: 'md' }}
+              >
+                + Add Transaction
+              </Button>
+            </HStack>
           </Flex>
 
           {/* Error Message */}
