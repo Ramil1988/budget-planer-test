@@ -41,6 +41,129 @@ const categoryColors = {
 
 const getCategoryColor = (name) => categoryColors[name] || categoryColors.default;
 
+// Donut Chart Component
+const DonutChart = ({ data, total, size = 200 }) => {
+  const strokeWidth = 35;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const center = size / 2;
+
+  // Calculate segments
+  let currentOffset = 0;
+  const segments = data.map((item, index) => {
+    const percent = total > 0 ? (item.spent / total) * 100 : 0;
+    const segmentLength = (percent / 100) * circumference;
+    const segment = {
+      ...item,
+      percent,
+      offset: currentOffset,
+      length: segmentLength,
+      color: getCategoryColor(item.name)
+    };
+    currentOffset += segmentLength;
+    return segment;
+  });
+
+  return (
+    <Box position="relative" w={size} h={size}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        {/* Background circle */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke="#F4F4F5"
+          strokeWidth={strokeWidth}
+        />
+        {/* Segments */}
+        {segments.map((segment, index) => (
+          <circle
+            key={segment.id || index}
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            stroke={segment.color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${segment.length} ${circumference - segment.length}`}
+            strokeDashoffset={-segment.offset}
+            style={{
+              transition: 'stroke-dasharray 0.5s ease, stroke-dashoffset 0.5s ease',
+            }}
+          />
+        ))}
+      </svg>
+      {/* Center text */}
+      <Box
+        position="absolute"
+        top="50%"
+        left="50%"
+        transform="translate(-50%, -50%)"
+        textAlign="center"
+      >
+        <Text fontSize="2xl" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
+          {data.length}
+        </Text>
+        <Text fontSize="xs" color="#71717A" fontWeight="500">
+          categories
+        </Text>
+      </Box>
+    </Box>
+  );
+};
+
+// Weekly Spending Bar Chart Component
+const WeeklyBarChart = ({ dailyData, maxAmount }) => {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const barHeight = 100;
+
+  return (
+    <Flex align="flex-end" justify="space-between" h={`${barHeight + 30}px`} gap={2}>
+      {days.map((day, index) => {
+        const amount = dailyData[index] || 0;
+        const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
+        const isToday = new Date().getDay() === (index + 1) % 7;
+
+        return (
+          <VStack key={day} gap={1} flex="1" align="center">
+            <Box
+              w="100%"
+              maxW="40px"
+              h={`${barHeight}px`}
+              bg="#F4F4F5"
+              borderRadius="8px"
+              overflow="hidden"
+              position="relative"
+            >
+              <Box
+                position="absolute"
+                bottom="0"
+                left="0"
+                right="0"
+                h={`${heightPercent}%`}
+                bg={isToday
+                  ? 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)'
+                  : 'linear-gradient(180deg, #A855F7 0%, #7C3AED 100%)'
+                }
+                borderRadius="8px"
+                transition="height 0.5s ease"
+              />
+            </Box>
+            <Text
+              fontSize="xs"
+              fontWeight={isToday ? '700' : '500'}
+              color={isToday ? '#2563EB' : '#71717A'}
+            >
+              {day}
+            </Text>
+          </VStack>
+        );
+      })}
+    </Flex>
+  );
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -55,6 +178,8 @@ export default function Dashboard() {
   const [budgetProgress, setBudgetProgress] = useState({ used: 0, total: 0, percent: 0 });
   const [categoryBudgets, setCategoryBudgets] = useState([]);
   const [daysLeft, setDaysLeft] = useState(0);
+  const [weeklySpending, setWeeklySpending] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [maxDailySpending, setMaxDailySpending] = useState(0);
 
   useEffect(() => {
     if (user) {
@@ -175,6 +300,29 @@ export default function Dashboard() {
         .sort((a, b) => b.spent - a.spent);
 
       setCategoryBudgets(catBudgets);
+
+      // Calculate weekly spending (current week)
+      const today = new Date();
+      const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + mondayOffset);
+      monday.setHours(0, 0, 0, 0);
+
+      const dailySpending = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun
+
+      transactions.forEach(tx => {
+        if (tx.type === 'expense') {
+          const txDate = new Date(tx.date + 'T00:00:00');
+          const dayDiff = Math.floor((txDate - monday) / (1000 * 60 * 60 * 24));
+          if (dayDiff >= 0 && dayDiff < 7) {
+            dailySpending[dayDiff] += Number(tx.amount);
+          }
+        }
+      });
+
+      setWeeklySpending(dailySpending);
+      setMaxDailySpending(Math.max(...dailySpending, 1));
 
     } catch (err) {
       setError('Failed to load dashboard: ' + err.message);
@@ -425,6 +573,132 @@ export default function Dashboard() {
             </Flex>
           </Box>
 
+          {/* Charts Row - Donut & Weekly */}
+          <Flex gap={{ base: 5, md: 6 }} direction={{ base: 'column', lg: 'row' }}>
+            {/* Spending Breakdown Donut Chart */}
+            <Box
+              flex="1"
+              p={{ base: 5, md: 6 }}
+              borderRadius="16px"
+              bg="white"
+              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+              border="1px solid #F4F4F5"
+            >
+              <Flex justify="space-between" align="center" mb={5}>
+                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                  Spending Breakdown
+                </Heading>
+                <Button
+                  as={RouterLink}
+                  to="/budget"
+                  variant="ghost"
+                  size="sm"
+                  color="#2563EB"
+                  fontWeight="600"
+                  _hover={{ bg: '#EFF6FF' }}
+                >
+                  Details
+                </Button>
+              </Flex>
+
+              {categoryBudgets.length > 0 ? (
+                <Flex direction={{ base: 'column', md: 'row' }} align="center" gap={6}>
+                  {/* Donut Chart */}
+                  <Box flexShrink={0}>
+                    <DonutChart
+                      data={categoryBudgets.slice(0, 8)}
+                      total={monthlySummary.expenses}
+                      size={180}
+                    />
+                  </Box>
+
+                  {/* Legend */}
+                  <VStack align="stretch" gap={2} flex="1" w="100%">
+                    {categoryBudgets.slice(0, 6).map((cat) => (
+                      <Flex
+                        key={cat.id}
+                        align="center"
+                        justify="space-between"
+                        py={1.5}
+                        px={2}
+                        borderRadius="8px"
+                        _hover={{ bg: '#FAFAFA' }}
+                        transition="all 0.15s"
+                      >
+                        <HStack gap={2}>
+                          <Box
+                            w="10px"
+                            h="10px"
+                            borderRadius="full"
+                            bg={getCategoryColor(cat.name)}
+                            flexShrink={0}
+                          />
+                          <Text fontSize="sm" fontWeight="500" color="#18181B" noOfLines={1}>
+                            {cat.name}
+                          </Text>
+                        </HStack>
+                        <HStack gap={2}>
+                          <Text fontSize="sm" fontWeight="600" color="#18181B">
+                            {formatCurrency(cat.spent)}
+                          </Text>
+                          <Text fontSize="xs" color="#71717A">
+                            {monthlySummary.expenses > 0
+                              ? `${((cat.spent / monthlySummary.expenses) * 100).toFixed(0)}%`
+                              : '0%'
+                            }
+                          </Text>
+                        </HStack>
+                      </Flex>
+                    ))}
+                    {categoryBudgets.length > 6 && (
+                      <Text fontSize="xs" color="#71717A" textAlign="center" pt={1}>
+                        +{categoryBudgets.length - 6} more categories
+                      </Text>
+                    )}
+                  </VStack>
+                </Flex>
+              ) : (
+                <Flex justify="center" align="center" py={12}>
+                  <Text color="#71717A">No spending this month</Text>
+                </Flex>
+              )}
+            </Box>
+
+            {/* Weekly Spending Chart */}
+            <Box
+              flex="1"
+              p={{ base: 5, md: 6 }}
+              borderRadius="16px"
+              bg="white"
+              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+              border="1px solid #F4F4F5"
+            >
+              <Flex justify="space-between" align="center" mb={5}>
+                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                  This Week
+                </Heading>
+                <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
+                  <Text fontSize="xs" fontWeight="600" color="#71717A">
+                    {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
+                  </Text>
+                </Box>
+              </Flex>
+
+              <WeeklyBarChart dailyData={weeklySpending} maxAmount={maxDailySpending} />
+
+              <Box mt={4} p={3} borderRadius="10px" bg="#F4F4F5">
+                <Flex justify="space-between" align="center">
+                  <Text fontSize="sm" color="#71717A">
+                    Daily average
+                  </Text>
+                  <Text fontSize="sm" fontWeight="700" color="#18181B">
+                    {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0) / 7)}
+                  </Text>
+                </Flex>
+              </Box>
+            </Box>
+          </Flex>
+
           {/* Budget Progress & Top Spending Row */}
           <Flex gap={{ base: 5, md: 6 }} direction={{ base: 'column', lg: 'row' }}>
 
@@ -564,7 +838,7 @@ export default function Dashboard() {
 
               {categoryBudgets.length > 0 ? (
                 <VStack align="stretch" gap={0}>
-                  {categoryBudgets.slice(0, 8).map((cat, index) => (
+                  {categoryBudgets.slice(0, 6).map((cat, index) => (
                     <Flex
                       key={cat.id}
                       align="center"
