@@ -36,6 +36,7 @@ const categoryColors = {
   'Afterschool': '#0EA5E9',
   'Government Loan': '#78716C',
   'Property tax': '#84CC16',
+  'Others': '#9CA3AF',
   'default': '#94A3B8'
 };
 
@@ -728,69 +729,88 @@ export default function Dashboard() {
 
               {categoryBudgets.length > 0 ? (
                 <Flex direction={{ base: 'column', md: 'row' }} align="center" gap={6}>
-                  {/* Donut Chart */}
+                  {/* Donut Chart - show top 5 + Others */}
                   <Box flexShrink={0}>
-                    <DonutChart
-                      data={categoryBudgets.slice(0, 8)}
-                      total={monthlySummary.expenses}
-                      size={180}
-                      formatCurrency={formatCurrency}
-                      hoveredCategory={hoveredCategory}
-                      onHoverCategory={setHoveredCategory}
-                    />
+                    {(() => {
+                      const TOP_COUNT = 5;
+                      const topCategories = categoryBudgets.slice(0, TOP_COUNT);
+                      const otherCategories = categoryBudgets.slice(TOP_COUNT);
+                      const othersTotal = otherCategories.reduce((sum, cat) => sum + cat.spent, 0);
+
+                      const chartData = othersTotal > 0
+                        ? [...topCategories, { id: 'others', name: 'Others', spent: othersTotal }]
+                        : topCategories;
+
+                      return (
+                        <DonutChart
+                          data={chartData}
+                          total={monthlySummary.expenses}
+                          size={180}
+                          formatCurrency={formatCurrency}
+                          hoveredCategory={hoveredCategory}
+                          onHoverCategory={setHoveredCategory}
+                        />
+                      );
+                    })()}
                   </Box>
 
-                  {/* Legend */}
+                  {/* Legend - show top 5 + Others */}
                   <VStack align="stretch" gap={2} flex="1" w="100%">
-                    {categoryBudgets.slice(0, 6).map((cat) => {
-                      const isHovered = hoveredCategory === cat.name;
-                      const isOtherHovered = hoveredCategory && !isHovered;
-                      return (
-                      <Flex
-                        key={cat.id}
-                        align="center"
-                        justify="space-between"
-                        py={1.5}
-                        px={2}
-                        borderRadius="8px"
-                        bg={isHovered ? '#F4F4F5' : 'transparent'}
-                        opacity={isOtherHovered ? 0.4 : 1}
-                        transition="all 0.15s"
-                        cursor="pointer"
-                        onMouseEnter={() => setHoveredCategory(cat.name)}
-                        onMouseLeave={() => setHoveredCategory(null)}
-                      >
-                        <HStack gap={2}>
-                          <Box
-                            w="10px"
-                            h="10px"
-                            borderRadius="full"
-                            bg={getCategoryColor(cat.name)}
-                            flexShrink={0}
-                          />
-                          <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color="#18181B" noOfLines={1}>
-                            {cat.name}
-                          </Text>
-                        </HStack>
-                        <HStack gap={2}>
-                          <Text fontSize="sm" fontWeight="600" color="#18181B">
-                            {formatCurrency(cat.spent)}
-                          </Text>
-                          <Text fontSize="xs" color="#71717A">
-                            {monthlySummary.expenses > 0
-                              ? `${((cat.spent / monthlySummary.expenses) * 100).toFixed(0)}%`
-                              : '0%'
-                            }
-                          </Text>
-                        </HStack>
-                      </Flex>
-                    );
-                    })}
-                    {categoryBudgets.length > 6 && (
-                      <Text fontSize="xs" color="#71717A" textAlign="center" pt={1}>
-                        +{categoryBudgets.length - 6} more categories
-                      </Text>
-                    )}
+                    {(() => {
+                      const TOP_COUNT = 5;
+                      const topCategories = categoryBudgets.slice(0, TOP_COUNT);
+                      const otherCategories = categoryBudgets.slice(TOP_COUNT);
+                      const othersTotal = otherCategories.reduce((sum, cat) => sum + cat.spent, 0);
+
+                      const legendItems = othersTotal > 0
+                        ? [...topCategories, { id: 'others', name: 'Others', spent: othersTotal }]
+                        : topCategories;
+
+                      return legendItems.map((cat) => {
+                        const isHovered = hoveredCategory === cat.name;
+                        const isOtherHovered = hoveredCategory && !isHovered;
+                        return (
+                          <Flex
+                            key={cat.id}
+                            align="center"
+                            justify="space-between"
+                            py={1.5}
+                            px={2}
+                            borderRadius="8px"
+                            bg={isHovered ? '#F4F4F5' : 'transparent'}
+                            opacity={isOtherHovered ? 0.4 : 1}
+                            transition="all 0.15s"
+                            cursor="pointer"
+                            onMouseEnter={() => setHoveredCategory(cat.name)}
+                            onMouseLeave={() => setHoveredCategory(null)}
+                          >
+                            <HStack gap={2}>
+                              <Box
+                                w="10px"
+                                h="10px"
+                                borderRadius="full"
+                                bg={getCategoryColor(cat.name)}
+                                flexShrink={0}
+                              />
+                              <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color="#18181B" noOfLines={1}>
+                                {cat.name}
+                              </Text>
+                            </HStack>
+                            <HStack gap={2}>
+                              <Text fontSize="sm" fontWeight="600" color="#18181B">
+                                {formatCurrency(cat.spent)}
+                              </Text>
+                              <Text fontSize="xs" color="#71717A">
+                                {monthlySummary.expenses > 0
+                                  ? `${((cat.spent / monthlySummary.expenses) * 100).toFixed(0)}%`
+                                  : '0%'
+                                }
+                              </Text>
+                            </HStack>
+                          </Flex>
+                        );
+                      });
+                    })()}
                   </VStack>
                 </Flex>
               ) : (
