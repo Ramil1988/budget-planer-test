@@ -72,7 +72,7 @@ function Home() {
               Track spending across categories, set monthly budgets, and manage your finances
               - all with automatic balance calculations.
             </Text>
-            <HStack gap={4}>
+            <Stack direction={{ base: 'column', sm: 'row' }} gap={4}>
               <Button
                 as={RouterLink}
                 to="/signup"
@@ -99,7 +99,7 @@ function Home() {
               >
                 Learn More
               </Button>
-            </HStack>
+            </Stack>
           </Box>
 
           {/* Right side - Image (hidden on mobile) */}
