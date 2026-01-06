@@ -845,18 +845,24 @@ export default function Dashboard() {
                           borderBottomWidth={idx < dailyTransactions[selectedDayIndex].length - 1 ? '1px' : '0'}
                           borderColor="#E4E4E7"
                         >
-                          <HStack gap={2}>
+                          <HStack gap={2} flex="1" minW="0">
                             <Box
                               w="6px"
                               h="6px"
                               borderRadius="full"
                               bg={getCategoryColor(tx.categories?.name || 'default')}
+                              flexShrink={0}
                             />
-                            <Text fontSize="xs" color="#71717A" noOfLines={1} maxW="120px">
-                              {tx.description || tx.categories?.name || 'Expense'}
-                            </Text>
+                            <VStack align="start" gap={0} flex="1" minW="0">
+                              <Text fontSize="xs" color="#18181B" fontWeight="500" noOfLines={1}>
+                                {tx.description || 'Expense'}
+                              </Text>
+                              <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
+                                {tx.categories?.name || 'Uncategorized'}
+                              </Text>
+                            </VStack>
                           </HStack>
-                          <Text fontSize="xs" fontWeight="600" color="#E11D48">
+                          <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={2}>
                             {formatCurrency(tx.amount)}
                           </Text>
                         </Flex>
