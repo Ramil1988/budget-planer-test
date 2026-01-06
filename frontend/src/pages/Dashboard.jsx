@@ -854,11 +854,11 @@ export default function Dashboard() {
                               flexShrink={0}
                             />
                             <VStack align="start" gap={0} flex="1" minW="0">
-                              <Text fontSize="xs" color="#18181B" fontWeight="500" noOfLines={1}>
-                                {tx.description || 'Expense'}
+                              <Text fontSize="xs" color="#18181B" fontWeight="600" noOfLines={1}>
+                                {tx.categories?.name || 'Uncategorized'}
                               </Text>
                               <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
-                                {tx.categories?.name || 'Uncategorized'}
+                                {tx.description || 'No description'}
                               </Text>
                             </VStack>
                           </HStack>
