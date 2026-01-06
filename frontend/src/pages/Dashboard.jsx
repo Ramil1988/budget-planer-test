@@ -41,8 +41,8 @@ const categoryColors = {
 
 const getCategoryColor = (name) => categoryColors[name] || categoryColors.default;
 
-// Donut Chart Component
-const DonutChart = ({ data, total, size = 200, formatCurrency }) => {
+// Donut Chart Component with hover effects
+const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, onHoverCategory }) => {
   const strokeWidth = 35;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -64,6 +64,8 @@ const DonutChart = ({ data, total, size = 200, formatCurrency }) => {
     return segment;
   });
 
+  const hoveredSegment = hoveredCategory ? segments.find(s => s.name === hoveredCategory) : null;
+
   return (
     <Box position="relative" w={size} h={size}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
@@ -77,37 +79,62 @@ const DonutChart = ({ data, total, size = 200, formatCurrency }) => {
           strokeWidth={strokeWidth}
         />
         {/* Segments */}
-        {segments.map((segment, index) => (
-          <circle
-            key={segment.id || index}
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke={segment.color}
-            strokeWidth={strokeWidth}
-            strokeDasharray={`${segment.length} ${circumference - segment.length}`}
-            strokeDashoffset={-segment.offset}
-            style={{
-              transition: 'stroke-dasharray 0.5s ease, stroke-dashoffset 0.5s ease',
-            }}
-          />
-        ))}
+        {segments.map((segment, index) => {
+          const isHovered = hoveredCategory === segment.name;
+          const isOtherHovered = hoveredCategory && !isHovered;
+          return (
+            <circle
+              key={segment.id || index}
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="none"
+              stroke={segment.color}
+              strokeWidth={isHovered ? strokeWidth + 6 : strokeWidth}
+              strokeDasharray={`${segment.length} ${circumference - segment.length}`}
+              strokeDashoffset={-segment.offset}
+              style={{
+                transition: 'all 0.2s ease',
+                opacity: isOtherHovered ? 0.3 : 1,
+                cursor: 'pointer',
+              }}
+              onMouseEnter={() => onHoverCategory(segment.name)}
+              onMouseLeave={() => onHoverCategory(null)}
+            />
+          );
+        })}
       </svg>
-      {/* Center text - Total Amount */}
+      {/* Center text - Shows hovered category or total */}
       <Box
         position="absolute"
         top="50%"
         left="50%"
         transform="translate(-50%, -50%)"
         textAlign="center"
+        pointerEvents="none"
       >
-        <Text fontSize="xs" color="#71717A" fontWeight="500" mb={0.5}>
-          Total Spent
-        </Text>
-        <Text fontSize="xl" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
-          {formatCurrency ? formatCurrency(total) : `$${total.toFixed(0)}`}
-        </Text>
+        {hoveredSegment ? (
+          <>
+            <Text fontSize="10px" color={hoveredSegment.color} fontWeight="600" mb={0.5} noOfLines={1} maxW="90px">
+              {hoveredSegment.name}
+            </Text>
+            <Text fontSize="lg" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
+              {formatCurrency ? formatCurrency(hoveredSegment.spent) : `$${hoveredSegment.spent.toFixed(0)}`}
+            </Text>
+            <Text fontSize="10px" color="#71717A" fontWeight="600">
+              {hoveredSegment.percent.toFixed(0)}%
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text fontSize="xs" color="#71717A" fontWeight="500" mb={0.5}>
+              Total Spent
+            </Text>
+            <Text fontSize="xl" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
+              {formatCurrency ? formatCurrency(total) : `$${total.toFixed(0)}`}
+            </Text>
+          </>
+        )}
       </Box>
     </Box>
   );
@@ -226,6 +253,7 @@ export default function Dashboard() {
   const [weekDates, setWeekDates] = useState(['', '', '', '', '', '', '']); // Date numbers for each day
   const [dailyTransactions, setDailyTransactions] = useState([[], [], [], [], [], [], []]); // Transactions by day
   const [selectedDayIndex, setSelectedDayIndex] = useState(null); // Selected day for details
+  const [hoveredCategory, setHoveredCategory] = useState(null); // Hovered category for donut chart
 
   useEffect(() => {
     if (user) {
@@ -706,12 +734,18 @@ export default function Dashboard() {
                       data={categoryBudgets.slice(0, 8)}
                       total={monthlySummary.expenses}
                       size={180}
+                      formatCurrency={formatCurrency}
+                      hoveredCategory={hoveredCategory}
+                      onHoverCategory={setHoveredCategory}
                     />
                   </Box>
 
                   {/* Legend */}
                   <VStack align="stretch" gap={2} flex="1" w="100%">
-                    {categoryBudgets.slice(0, 6).map((cat) => (
+                    {categoryBudgets.slice(0, 6).map((cat) => {
+                      const isHovered = hoveredCategory === cat.name;
+                      const isOtherHovered = hoveredCategory && !isHovered;
+                      return (
                       <Flex
                         key={cat.id}
                         align="center"
@@ -719,8 +753,12 @@ export default function Dashboard() {
                         py={1.5}
                         px={2}
                         borderRadius="8px"
-                        _hover={{ bg: '#FAFAFA' }}
+                        bg={isHovered ? '#F4F4F5' : 'transparent'}
+                        opacity={isOtherHovered ? 0.4 : 1}
                         transition="all 0.15s"
+                        cursor="pointer"
+                        onMouseEnter={() => setHoveredCategory(cat.name)}
+                        onMouseLeave={() => setHoveredCategory(null)}
                       >
                         <HStack gap={2}>
                           <Box
@@ -730,7 +768,7 @@ export default function Dashboard() {
                             bg={getCategoryColor(cat.name)}
                             flexShrink={0}
                           />
-                          <Text fontSize="sm" fontWeight="500" color="#18181B" noOfLines={1}>
+                          <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color="#18181B" noOfLines={1}>
                             {cat.name}
                           </Text>
                         </HStack>
@@ -746,7 +784,8 @@ export default function Dashboard() {
                           </Text>
                         </HStack>
                       </Flex>
-                    ))}
+                    );
+                    })}
                     {categoryBudgets.length > 6 && (
                       <Text fontSize="xs" color="#71717A" textAlign="center" pt={1}>
                         +{categoryBudgets.length - 6} more categories
