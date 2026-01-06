@@ -114,7 +114,7 @@ const DonutChart = ({ data, total, size = 200, formatCurrency }) => {
 };
 
 // Weekly Spending Bar Chart Component
-const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency, weekOffset = 0 }) => {
+const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selectedDayIndex, onDayClick }) => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const barHeight = 100;
 
@@ -124,16 +124,27 @@ const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency, weekOffset = 0 }
 
   return (
     <VStack gap={3} align="stretch">
-      <Flex align="flex-end" justify="space-between" h={`${barHeight + 30}px`} gap={2}>
+      <Flex align="flex-end" justify="space-between" h={`${barHeight + 50}px`} gap={2}>
         {days.map((day, index) => {
           const amount = dailyData[index] || 0;
           const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
           // Only highlight "today" when viewing current week
           const isToday = weekOffset === 0 && index === todayIndex;
           const hasSpending = amount > 0;
+          const isSelected = selectedDayIndex === index;
+          const dateNum = weekDates[index];
 
           return (
-            <VStack key={day} gap={1} flex="1" align="center">
+            <VStack
+              key={day}
+              gap={1}
+              flex="1"
+              align="center"
+              cursor={hasSpending ? 'pointer' : 'default'}
+              onClick={() => hasSpending && onDayClick(index)}
+              opacity={selectedDayIndex !== null && !isSelected ? 0.5 : 1}
+              transition="opacity 0.2s"
+            >
               {/* Amount label above bar */}
               <Text
                 fontSize="xs"
@@ -151,6 +162,8 @@ const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency, weekOffset = 0 }
                 borderRadius="8px"
                 overflow="hidden"
                 position="relative"
+                border={isSelected ? '2px solid #2563EB' : 'none'}
+                boxSizing="border-box"
               >
                 <Box
                   position="absolute"
@@ -164,16 +177,25 @@ const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency, weekOffset = 0 }
                       ? 'linear-gradient(180deg, #A855F7 0%, #7C3AED 100%)'
                       : '#E4E4E7'
                   }
-                  borderRadius="8px"
+                  borderRadius="6px"
                   transition="height 0.5s ease"
                 />
               </Box>
               <Text
                 fontSize="xs"
-                fontWeight={isToday ? '700' : '500'}
-                color={isToday ? '#2563EB' : '#71717A'}
+                fontWeight={isToday || isSelected ? '700' : '500'}
+                color={isToday ? '#2563EB' : isSelected ? '#18181B' : '#71717A'}
               >
                 {day}
+              </Text>
+              {/* Date number under day name */}
+              <Text
+                fontSize="10px"
+                fontWeight="500"
+                color="#A1A1AA"
+                mt={-1}
+              >
+                {dateNum}
               </Text>
             </VStack>
           );
@@ -201,6 +223,9 @@ export default function Dashboard() {
   const [maxDailySpending, setMaxDailySpending] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week, etc.
   const [allTransactions, setAllTransactions] = useState([]); // Store for week navigation
+  const [weekDates, setWeekDates] = useState(['', '', '', '', '', '', '']); // Date numbers for each day
+  const [dailyTransactions, setDailyTransactions] = useState([[], [], [], [], [], [], []]); // Transactions by day
+  const [selectedDayIndex, setSelectedDayIndex] = useState(null); // Selected day for details
 
   useEffect(() => {
     if (user) {
@@ -225,6 +250,15 @@ export default function Dashboard() {
     monday.setHours(0, 0, 0, 0);
 
     const dailySpending = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun
+    const dailyTxs = [[], [], [], [], [], [], []]; // Transactions by day
+    const dates = []; // Date strings for each day
+
+    // Calculate date numbers for the week
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + i);
+      dates.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    }
 
     transactions.forEach(tx => {
       if (tx.type === 'expense') {
@@ -232,12 +266,16 @@ export default function Dashboard() {
         const dayDiff = Math.floor((txDate - monday) / (1000 * 60 * 60 * 24));
         if (dayDiff >= 0 && dayDiff < 7) {
           dailySpending[dayDiff] += Number(tx.amount);
+          dailyTxs[dayDiff].push(tx);
         }
       }
     });
 
     setWeeklySpending(dailySpending);
     setMaxDailySpending(Math.max(...dailySpending, 1));
+    setWeekDates(dates);
+    setDailyTransactions(dailyTxs);
+    setSelectedDayIndex(null); // Reset selection when week changes
   };
 
   // Get the date range label for the current week view
@@ -776,17 +814,65 @@ export default function Dashboard() {
                 </Box>
               </Flex>
 
-              <WeeklyBarChart dailyData={weeklySpending} maxAmount={maxDailySpending} weekOffset={weekOffset} />
+              <WeeklyBarChart
+                dailyData={weeklySpending}
+                maxAmount={maxDailySpending}
+                weekOffset={weekOffset}
+                weekDates={weekDates}
+                selectedDayIndex={selectedDayIndex}
+                onDayClick={(index) => setSelectedDayIndex(selectedDayIndex === index ? null : index)}
+              />
 
+              {/* Transaction Details Section */}
               <Box mt={4} p={3} borderRadius="10px" bg="#F4F4F5">
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="#71717A">
-                    Daily average
-                  </Text>
-                  <Text fontSize="sm" fontWeight="700" color="#18181B">
-                    {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0) / 7)}
-                  </Text>
-                </Flex>
+                {selectedDayIndex !== null && dailyTransactions[selectedDayIndex]?.length > 0 ? (
+                  <VStack align="stretch" gap={2}>
+                    <Flex justify="space-between" align="center" mb={1}>
+                      <Text fontSize="sm" fontWeight="600" color="#18181B">
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIndex]}, {weekDates[selectedDayIndex]}
+                      </Text>
+                      <Text fontSize="sm" fontWeight="700" color="#7C3AED">
+                        {formatCurrency(weeklySpending[selectedDayIndex])}
+                      </Text>
+                    </Flex>
+                    <Box maxH="150px" overflowY="auto">
+                      {dailyTransactions[selectedDayIndex].map((tx, idx) => (
+                        <Flex
+                          key={tx.id || idx}
+                          justify="space-between"
+                          align="center"
+                          py={1.5}
+                          borderBottomWidth={idx < dailyTransactions[selectedDayIndex].length - 1 ? '1px' : '0'}
+                          borderColor="#E4E4E7"
+                        >
+                          <HStack gap={2}>
+                            <Box
+                              w="6px"
+                              h="6px"
+                              borderRadius="full"
+                              bg={getCategoryColor(tx.categories?.name || 'default')}
+                            />
+                            <Text fontSize="xs" color="#71717A" noOfLines={1} maxW="120px">
+                              {tx.description || tx.categories?.name || 'Expense'}
+                            </Text>
+                          </HStack>
+                          <Text fontSize="xs" fontWeight="600" color="#E11D48">
+                            {formatCurrency(tx.amount)}
+                          </Text>
+                        </Flex>
+                      ))}
+                    </Box>
+                  </VStack>
+                ) : (
+                  <Flex justify="space-between" align="center">
+                    <Text fontSize="sm" color="#71717A">
+                      {selectedDayIndex !== null ? 'No transactions' : 'Click a bar to see details'}
+                    </Text>
+                    <Text fontSize="sm" fontWeight="700" color="#18181B">
+                      {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
+                    </Text>
+                  </Flex>
+                )}
               </Box>
             </Box>
           </Flex>
