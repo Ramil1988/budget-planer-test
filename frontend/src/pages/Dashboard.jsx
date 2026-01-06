@@ -42,7 +42,7 @@ const categoryColors = {
 const getCategoryColor = (name) => categoryColors[name] || categoryColors.default;
 
 // Donut Chart Component
-const DonutChart = ({ data, total, size = 200 }) => {
+const DonutChart = ({ data, total, size = 200, formatCurrency }) => {
   const strokeWidth = 35;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -94,7 +94,7 @@ const DonutChart = ({ data, total, size = 200 }) => {
           />
         ))}
       </svg>
-      {/* Center text */}
+      {/* Center text - Total Amount */}
       <Box
         position="absolute"
         top="50%"
@@ -102,11 +102,11 @@ const DonutChart = ({ data, total, size = 200 }) => {
         transform="translate(-50%, -50%)"
         textAlign="center"
       >
-        <Text fontSize="2xl" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
-          {data.length}
+        <Text fontSize="xs" color="#71717A" fontWeight="500" mb={0.5}>
+          Total Spent
         </Text>
-        <Text fontSize="xs" color="#71717A" fontWeight="500">
-          categories
+        <Text fontSize="xl" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
+          {formatCurrency ? formatCurrency(total) : `$${total.toFixed(0)}`}
         </Text>
       </Box>
     </Box>
@@ -114,53 +114,71 @@ const DonutChart = ({ data, total, size = 200 }) => {
 };
 
 // Weekly Spending Bar Chart Component
-const WeeklyBarChart = ({ dailyData, maxAmount }) => {
+const WeeklyBarChart = ({ dailyData, maxAmount, formatCurrency }) => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const barHeight = 100;
 
-  return (
-    <Flex align="flex-end" justify="space-between" h={`${barHeight + 30}px`} gap={2}>
-      {days.map((day, index) => {
-        const amount = dailyData[index] || 0;
-        const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
-        const isToday = new Date().getDay() === (index + 1) % 7;
+  // Get current day (0 = Sunday, so we need to adjust for Mon-Sun array)
+  const today = new Date().getDay();
+  const todayIndex = today === 0 ? 6 : today - 1; // Convert to Mon=0, Sun=6
 
-        return (
-          <VStack key={day} gap={1} flex="1" align="center">
-            <Box
-              w="100%"
-              maxW="40px"
-              h={`${barHeight}px`}
-              bg="#F4F4F5"
-              borderRadius="8px"
-              overflow="hidden"
-              position="relative"
-            >
+  return (
+    <VStack gap={3} align="stretch">
+      <Flex align="flex-end" justify="space-between" h={`${barHeight + 30}px`} gap={2}>
+        {days.map((day, index) => {
+          const amount = dailyData[index] || 0;
+          const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
+          const isToday = index === todayIndex;
+          const hasSpending = amount > 0;
+
+          return (
+            <VStack key={day} gap={1} flex="1" align="center">
+              {/* Amount label above bar */}
+              <Text
+                fontSize="xs"
+                fontWeight="600"
+                color={hasSpending ? '#18181B' : '#A1A1AA'}
+                h="16px"
+              >
+                {hasSpending ? `$${amount.toFixed(0)}` : ''}
+              </Text>
               <Box
-                position="absolute"
-                bottom="0"
-                left="0"
-                right="0"
-                h={`${heightPercent}%`}
-                bg={isToday
-                  ? 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)'
-                  : 'linear-gradient(180deg, #A855F7 0%, #7C3AED 100%)'
-                }
+                w="100%"
+                maxW="40px"
+                h={`${barHeight - 20}px`}
+                bg="#F4F4F5"
                 borderRadius="8px"
-                transition="height 0.5s ease"
-              />
-            </Box>
-            <Text
-              fontSize="xs"
-              fontWeight={isToday ? '700' : '500'}
-              color={isToday ? '#2563EB' : '#71717A'}
-            >
-              {day}
-            </Text>
-          </VStack>
-        );
-      })}
-    </Flex>
+                overflow="hidden"
+                position="relative"
+              >
+                <Box
+                  position="absolute"
+                  bottom="0"
+                  left="0"
+                  right="0"
+                  h={`${Math.max(heightPercent, hasSpending ? 8 : 0)}%`}
+                  bg={isToday
+                    ? 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)'
+                    : hasSpending
+                      ? 'linear-gradient(180deg, #A855F7 0%, #7C3AED 100%)'
+                      : '#E4E4E7'
+                  }
+                  borderRadius="8px"
+                  transition="height 0.5s ease"
+                />
+              </Box>
+              <Text
+                fontSize="xs"
+                fontWeight={isToday ? '700' : '500'}
+                color={isToday ? '#2563EB' : '#71717A'}
+              >
+                {day}
+              </Text>
+            </VStack>
+          );
+        })}
+      </Flex>
+    </VStack>
   );
 };
 
