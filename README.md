@@ -1,60 +1,68 @@
 # BudgetWise
 
-A modern budget tracking application built with React, Vite, and Chakra UI.
+Personal budget tracking app with transaction management, budget planning, and financial reports.
 
-## Project Structure
+**Live:** https://budgetwisetracker.netlify.app
 
-This is a monorepo containing:
-- **frontend/** - React frontend application
-- **backend/** - Backend API (coming soon)
+## Features
+
+- **Dashboard** - Overview of accounts, balances, and recent activity
+- **Transactions** - Add, edit, delete, and filter transactions
+- **Import** - Bulk import transactions from CSV
+- **Budget** - Set monthly spending limits by category, track progress
+- **Reports** - Visual spending breakdown and trends
+- **Categories** - Custom income and expense categories
+- **Settings** - Account preferences and user settings
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 19, Vite, Chakra UI |
+| Backend | Netlify Functions (Serverless) |
+| Database | Supabase (PostgreSQL) |
+| Auth | Supabase Auth |
+| Hosting | Netlify |
 
 ## Development
 
-**Package Manager:** This project uses `pnpm` (v10.24.0)
+**Requirements:** Node.js 18+, pnpm
 
-### Getting Started
-
-1. Install dependencies:
 ```bash
-pnpm run install:all
+# Install dependencies
+pnpm install:all
+
+# Start dev server (frontend + functions)
+netlify dev
+
+# Build for production
+pnpm run build:frontend
+
+# Deploy
+netlify deploy --prod
 ```
 
-2. Start the frontend development server:
-```bash
-pnpm run dev:frontend
+## Project Structure
+
 ```
-
-The application will be available at http://localhost:5173/
-
-### Available Scripts
-
-From the root directory:
-- `pnpm run dev:frontend` - Start frontend development server
-- `pnpm run dev:backend` - Start backend server (not yet implemented)
-- `pnpm run build:frontend` - Build frontend for production
-- `pnpm run build:backend` - Build backend for production
-- `pnpm run test:frontend` - Run frontend tests
-- `pnpm run install:all` - Install all dependencies
+├── frontend/          # React app
+│   └── src/
+│       ├── pages/     # Route components
+│       ├── components/# Reusable UI
+│       ├── contexts/  # Auth, state
+│       └── lib/       # Supabase client
+├── netlify/
+│   └── functions/     # Serverless API
+├── backend/
+│   └── database/      # SQL schema
+└── docs/              # Documentation
+```
 
 ## Documentation
 
-See the `docs/` directory for comprehensive documentation:
-- `docs/architecture.md` - Technical architecture and design patterns
-- `docs/changelog.md` - Version history
-- `docs/project-status.md` - Current status and roadmap
-- `docs/technical-reference.md` - Code patterns and examples
-
-## Technology Stack
-
-### Frontend
-- React 19.2.3
-- Vite 7.3.0
-- Chakra UI 3.30.0
-- React Router 7.11.0
-- Playwright (testing)
-
-### Backend
-- Coming soon
+- [Architecture](docs/architecture.md)
+- [Changelog](docs/changelog.md)
+- [Project Status](docs/project-status.md)
 
 ## License
 

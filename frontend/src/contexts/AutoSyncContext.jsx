@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { fetchTransactionsFromGoogleSheets, validateTransactions, extractSheetId } from '../lib/importUtils';
+import { showNotification, checkBudgetAndNotify, getNotificationPermission } from '../lib/notifications';
 
 const AutoSyncContext = createContext();
 
@@ -18,6 +19,7 @@ export function AutoSyncProvider({ children }) {
   const [lastSyncResult, setLastSyncResult] = useState(null);
   const [sheetSettings, setSheetSettings] = useState(null);
   const intervalRef = useRef(null);
+  const isSyncingRef = useRef(false); // Synchronous guard to prevent race conditions
 
   // Load settings on mount
   useEffect(() => {
@@ -74,8 +76,12 @@ export function AutoSyncProvider({ children }) {
   };
 
   const performSync = useCallback(async () => {
-    if (!user || !sheetSettings?.google_sheet_url || isSyncing) return;
+    // Use synchronous ref check to prevent race conditions
+    // (React state updates are async, so two calls can pass state check simultaneously)
+    if (!user || !sheetSettings?.google_sheet_url || isSyncingRef.current) return;
 
+    // Set ref immediately (synchronous) to block concurrent calls
+    isSyncingRef.current = true;
     setIsSyncing(true);
     setLastSyncResult(null);
 
@@ -111,15 +117,19 @@ export function AutoSyncProvider({ children }) {
       if (fetchError) throw fetchError;
 
       // Create a set of existing transaction signatures for fast lookup
+      // Normalize: uppercase, trim, collapse whitespace, use absolute amounts
+      const normalizeDesc = (desc) => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ');
+      const normalizeAmount = (amt) => Math.abs(Number(amt)).toFixed(2);
+
       const existingSet = new Set(
         (existingTransactions || []).map(t =>
-          `${t.date}|${t.description.toUpperCase()}|${Number(t.amount).toFixed(2)}`
+          `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`
         )
       );
 
       // Filter out duplicates
       const uniqueTransactions = newTransactions.filter(t => {
-        const signature = `${t.date}|${t.description.toUpperCase()}|${Number(t.amount).toFixed(2)}`;
+        const signature = `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`;
         return !existingSet.has(signature);
       });
 
@@ -167,6 +177,27 @@ export function AutoSyncProvider({ children }) {
 
       if (insertError) throw insertError;
 
+      // Send notification for new transactions
+      if (insertedTransactions.length > 0 && getNotificationPermission() === 'granted') {
+        const totalAmount = insertedTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+        const formattedTotal = new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD'
+        }).format(totalAmount);
+
+        showNotification('New Transactions Imported', {
+          body: `${insertedTransactions.length} transaction${insertedTransactions.length !== 1 ? 's' : ''} imported (${formattedTotal} total)`,
+          tag: 'sync-' + Date.now()
+        });
+
+        // Check budget limits for each imported transaction
+        for (const transaction of insertedTransactions) {
+          if (transaction.category_id) {
+            await checkBudgetAndNotify(supabase, user.id, transaction.category_id, transaction.amount);
+          }
+        }
+      }
+
       setLastSyncResult({
         success: true,
         message: `Imported ${insertedTransactions.length} new transaction${insertedTransactions.length !== 1 ? 's' : ''}`,
@@ -181,10 +212,11 @@ export function AutoSyncProvider({ children }) {
         imported: 0,
       });
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
       setLastSyncTime(new Date());
     }
-  }, [user, sheetSettings, isSyncing]);
+  }, [user, sheetSettings]);
 
   const categorizeTransactions = async (transactions) => {
     // Fetch merchant mappings

@@ -14,6 +14,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { notifyNewTransaction, checkBudgetAndNotify } from '../lib/notifications';
 
 export default function AddTransaction() {
   const { user } = useAuth();
@@ -124,6 +125,21 @@ export default function AddTransaction() {
         });
 
       if (insertError) throw insertError;
+
+      // Get category name for notification
+      const selectedCategory = categories.find(c => c.id === categoryId);
+      const categoryName = selectedCategory?.name || 'Unknown';
+
+      // Send notification for new transaction
+      notifyNewTransaction(
+        { amount: parseFloat(amount), type, description },
+        categoryName
+      );
+
+      // Check budget and notify if approaching limit (only for expenses)
+      if (type === 'expense') {
+        await checkBudgetAndNotify(supabase, user.id, categoryId, parseFloat(amount));
+      }
 
       setSuccess('Transaction added successfully!');
 

@@ -18,6 +18,7 @@ import { useAutoSync } from '../contexts/AutoSyncContext';
 import PageContainer from '../components/PageContainer';
 import { fetchTransactionsFromGoogleSheets, parseCSVFile, validateTransactions, extractSheetId } from '../lib/importUtils';
 import { supabase } from '../lib/supabaseClient';
+import { showNotification, checkBudgetAndNotify, getNotificationPermission } from '../lib/notifications';
 
 export default function ImportTransactions() {
   const { user } = useAuth();
@@ -337,8 +338,45 @@ export default function ImportTransactions() {
         categoryMap[cat.name] = cat.id;
       });
 
+      // Check for duplicates - get existing transactions
+      const { data: existingTransactions, error: fetchError } = await supabase
+        .from('transactions')
+        .select('date, description, amount')
+        .eq('user_id', user.id);
+
+      if (fetchError) throw fetchError;
+
+      // Create a set of existing transaction signatures for fast lookup
+      // Normalize: uppercase, trim, collapse whitespace, use absolute amounts
+      const normalizeDesc = (desc) => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ');
+      const normalizeAmount = (amt) => Math.abs(Number(amt)).toFixed(2);
+
+      const existingSet = new Set(
+        (existingTransactions || []).map(t =>
+          `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`
+        )
+      );
+
+      // Filter out duplicates
+      const uniqueTransactions = transactions.filter(t => {
+        const signature = `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`;
+        return !existingSet.has(signature);
+      });
+
+      const duplicateCount = transactions.length - uniqueTransactions.length;
+
+      if (uniqueTransactions.length === 0) {
+        setError(`All ${transactions.length} transactions already exist in the database.`);
+        setLoading(false);
+        return;
+      }
+
+      if (duplicateCount > 0) {
+        setError(`Skipped ${duplicateCount} duplicate transaction(s). Importing ${uniqueTransactions.length} new ones.`);
+      }
+
       // Prepare and insert transactions
-      const transactionsToInsert = transactions.map(t => ({
+      const transactionsToInsert = uniqueTransactions.map(t => ({
         user_id: user.id,
         account_id: accountId,
         category_id: categoryMap[t.category] || categoryMap['Unexpected'],
@@ -355,6 +393,27 @@ export default function ImportTransactions() {
         .select();
 
       if (insertError) throw insertError;
+
+      // Send notification for imported transactions
+      if (insertedTransactions.length > 0 && getNotificationPermission() === 'granted') {
+        const totalAmount = insertedTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+        const formattedTotal = new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD'
+        }).format(totalAmount);
+
+        showNotification('Transactions Imported', {
+          body: `${insertedTransactions.length} transaction${insertedTransactions.length !== 1 ? 's' : ''} saved (${formattedTotal} total)`,
+          tag: 'import-' + Date.now()
+        });
+
+        // Check budget limits for each imported transaction
+        for (const transaction of insertedTransactions) {
+          if (transaction.category_id) {
+            await checkBudgetAndNotify(supabase, user.id, transaction.category_id, transaction.amount);
+          }
+        }
+      }
 
       setSuccess(`Successfully saved ${insertedTransactions.length} transactions!`);
       setTimeout(() => setSuccess(''), 3000);

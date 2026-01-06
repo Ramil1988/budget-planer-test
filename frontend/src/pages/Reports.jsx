@@ -88,27 +88,35 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
   const maxVal = Math.max(...values.map(Math.abs), 1);
   const width = 800;
   const height = 220;
-  const paddingTop = 40;
-  const paddingBottom = 50;
+  const paddingTop = 30;
+  const paddingBottom = 45;
   const paddingLeft = 60;
   const paddingRight = 30;
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
   const zeroY = paddingTop + chartHeight / 2;
 
+  // Find last month with data
+  const lastMonthWithData = data.reduce((last, d, i) => (d.income > 0 || d.expenses > 0) ? i : last, 0);
+
   // Generate points for the line
   const points = data.map((d, i) => {
     const x = paddingLeft + (i / (data.length - 1)) * chartWidth;
     const y = zeroY - (d.balance / maxVal) * (chartHeight / 2);
-    return { x, y, balance: d.balance, month: MONTH_ABBR[i], income: d.income, expenses: d.expenses };
+    return { x, y, balance: d.balance, month: MONTH_ABBR[i], income: d.income, expenses: d.expenses, hasData: d.income > 0 || d.expenses > 0 };
   });
 
-  const pathD = points
+  // Only draw line up to last month with data
+  const pointsWithData = points.slice(0, lastMonthWithData + 1);
+
+  const pathD = pointsWithData
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
     .join(' ');
 
-  // Area fill paths (separate for positive and negative)
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${zeroY} L ${paddingLeft} ${zeroY} Z`;
+  // Area fill paths - only up to last month with data
+  const areaD = pointsWithData.length > 0
+    ? `${pathD} L ${pointsWithData[pointsWithData.length - 1].x} ${zeroY} L ${paddingLeft} ${zeroY} Z`
+    : '';
 
   // Y-axis labels
   const yLabels = [
@@ -129,8 +137,14 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
   const hoveredPoint = hoveredMonth !== null ? points[hoveredMonth] : null;
 
   return (
-    <Box overflowX="auto" position="relative">
-      <svg width={width} height={height} style={{ minWidth: '100%' }}>
+    <Box overflowX={{ base: 'auto', md: 'visible' }} position="relative">
+      <Box minW={{ base: '700px', md: 'auto' }}>
+        <svg
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ width: '100%', height: 'auto', maxWidth: '100%' }}
+        >
         {/* Grid lines */}
         {yLabels.map((label, i) => (
           <g key={i}>
@@ -202,19 +216,21 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
                 onMouseEnter={() => onHoverMonth(i)}
                 onMouseLeave={() => onHoverMonth(null)}
               />
-              {/* Point */}
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={isHovered ? 8 : hasData ? 6 : 4}
-                fill={p.balance >= 0 ? '#10B981' : '#EF4444'}
-                stroke="white"
-                strokeWidth={isHovered ? 3 : 2}
-                style={{ transition: 'all 0.15s ease', cursor: 'pointer' }}
-                onMouseEnter={() => onHoverMonth(i)}
-                onMouseLeave={() => onHoverMonth(null)}
-              />
-              {/* Month label */}
+              {/* Point - only show if has data */}
+              {hasData && (
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={isHovered ? 8 : 6}
+                  fill={p.balance >= 0 ? '#10B981' : '#EF4444'}
+                  stroke="white"
+                  strokeWidth={isHovered ? 3 : 2}
+                  style={{ transition: 'all 0.15s ease', cursor: 'pointer' }}
+                  onMouseEnter={() => onHoverMonth(i)}
+                  onMouseLeave={() => onHoverMonth(null)}
+                />
+              )}
+              {/* Month label - always show */}
               <text
                 x={p.x}
                 y={height - paddingBottom + 20}
@@ -225,19 +241,6 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
               >
                 {p.month}
               </text>
-              {/* Value label on hover or if significant */}
-              {(isHovered || (hasData && Math.abs(p.balance) > maxVal * 0.3)) && (
-                <text
-                  x={p.x}
-                  y={p.y - 12}
-                  textAnchor="middle"
-                  fontSize="11"
-                  fontWeight="600"
-                  fill={p.balance >= 0 ? '#059669' : '#DC2626'}
-                >
-                  {formatShort(p.balance)}
-                </text>
-              )}
             </g>
           );
         })}
@@ -254,40 +257,42 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
             <stop offset="100%" stopColor="#8B5CF6" />
           </linearGradient>
         </defs>
-      </svg>
+        </svg>
+      </Box>
 
       {/* Hover tooltip */}
       {hoveredPoint && (
         <Box
           position="absolute"
-          top="10px"
-          right="20px"
+          top={{ base: '5px', md: '10px' }}
+          right={{ base: '10px', md: '20px' }}
           bg="white"
-          p={3}
+          p={{ base: 3, md: 4 }}
           borderRadius="12px"
-          boxShadow="0 4px 12px rgba(0,0,0,0.15)"
+          boxShadow="0 4px 16px rgba(0,0,0,0.15)"
           border="1px solid #E5E7EB"
-          minW="140px"
+          minW={{ base: '150px', md: '180px' }}
+          zIndex={10}
         >
-          <Text fontSize="sm" fontWeight="700" color="gray.800" mb={1}>
+          <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color="gray.800" mb={2}>
             {data[hoveredMonth]?.month}
           </Text>
-          <Flex justify="space-between" mb={1}>
-            <Text fontSize="xs" color="gray.500">Income:</Text>
-            <Text fontSize="xs" fontWeight="600" color="green.600">
+          <Flex justify="space-between" mb={2} gap={4}>
+            <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500">Income:</Text>
+            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="green.600">
               {formatCurrency(hoveredPoint.income)}
             </Text>
           </Flex>
-          <Flex justify="space-between" mb={1}>
-            <Text fontSize="xs" color="gray.500">Expenses:</Text>
-            <Text fontSize="xs" fontWeight="600" color="red.500">
+          <Flex justify="space-between" mb={2} gap={4}>
+            <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500">Expenses:</Text>
+            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="red.500">
               {formatCurrency(hoveredPoint.expenses)}
             </Text>
           </Flex>
-          <Box h="1px" bg="gray.200" my={1} />
-          <Flex justify="space-between">
-            <Text fontSize="xs" color="gray.500">Balance:</Text>
-            <Text fontSize="sm" fontWeight="700" color={hoveredPoint.balance >= 0 ? 'green.600' : 'red.500'}>
+          <Box h="1px" bg="gray.200" my={2} />
+          <Flex justify="space-between" gap={4}>
+            <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500">Balance:</Text>
+            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color={hoveredPoint.balance >= 0 ? 'green.600' : 'red.500'}>
               {hoveredPoint.balance >= 0 ? '+' : ''}{formatCurrency(hoveredPoint.balance)}
             </Text>
           </Flex>

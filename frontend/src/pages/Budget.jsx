@@ -894,7 +894,7 @@ export default function Budget() {
               >
                 <Flex justify="space-between" align="center">
                   <Box>
-                    <Dialog.Title fontSize="lg" fontWeight="700">
+                    <Dialog.Title fontSize="lg" fontWeight="700" color="white">
                       {selectedCategory?.name}
                     </Dialog.Title>
                     <Text fontSize="sm" color="rgba(255,255,255,0.7)" mt={1}>

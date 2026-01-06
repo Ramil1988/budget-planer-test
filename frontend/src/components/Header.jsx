@@ -105,11 +105,11 @@ function Header() {
           {user && (
             <>
               <NavLink to="/dashboard">Dashboard</NavLink>
-              <NavLink to="/transactions">Transactions</NavLink>
               <NavLink to="/budget">Budget</NavLink>
-              <NavLink to="/categories">Categories</NavLink>
+              <NavLink to="/reports">Report</NavLink>
+              <NavLink to="/transactions">Transactions</NavLink>
               <NavLink to="/import">Import</NavLink>
-              <NavLink to="/reports">Reports</NavLink>
+              <NavLink to="/categories">Categories</NavLink>
               <NavLink to="/settings">Settings</NavLink>
             </>
           )}
@@ -227,20 +227,20 @@ function Header() {
                 <MobileNavLink to="/dashboard" active={isActive('/dashboard')} onClick={onToggle}>
                   Dashboard
                 </MobileNavLink>
-                <MobileNavLink to="/transactions" active={isActive('/transactions')} onClick={onToggle}>
-                  Transactions
-                </MobileNavLink>
                 <MobileNavLink to="/budget" active={isActive('/budget')} onClick={onToggle}>
                   Budget
                 </MobileNavLink>
-                <MobileNavLink to="/categories" active={isActive('/categories')} onClick={onToggle}>
-                  Categories
+                <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle}>
+                  Report
+                </MobileNavLink>
+                <MobileNavLink to="/transactions" active={isActive('/transactions')} onClick={onToggle}>
+                  Transactions
                 </MobileNavLink>
                 <MobileNavLink to="/import" active={isActive('/import')} onClick={onToggle}>
                   Import
                 </MobileNavLink>
-                <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle}>
-                  Reports
+                <MobileNavLink to="/categories" active={isActive('/categories')} onClick={onToggle}>
+                  Categories
                 </MobileNavLink>
                 <MobileNavLink to="/settings" active={isActive('/settings')} onClick={onToggle}>
                   Settings

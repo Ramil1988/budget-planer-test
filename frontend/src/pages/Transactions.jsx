@@ -11,7 +11,10 @@ import {
   Text,
   Spinner,
   Table,
+  Icon,
+  Collapsible,
 } from '@chakra-ui/react';
+import { LuFilter, LuX } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
@@ -25,6 +28,14 @@ export default function Transactions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('current');
 
+  // Custom filter states
+  const [showCustomFilters, setShowCustomFilters] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
+
   useEffect(() => {
     if (user) {
       loadTransactions();
@@ -33,7 +44,7 @@ export default function Transactions() {
 
   useEffect(() => {
     filterTransactions();
-  }, [transactions, searchQuery, selectedPeriod]);
+  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount]);
 
   const loadTransactions = async () => {
     setLoading(true);
@@ -104,7 +115,29 @@ export default function Transactions() {
       );
     }
 
-    if (selectedPeriod === 'current') {
+    // Apply custom filters if enabled
+    if (customFiltersApplied) {
+      // Date range filter
+      if (startDate) {
+        filtered = filtered.filter(t => t.date >= startDate);
+      }
+      if (endDate) {
+        filtered = filtered.filter(t => t.date <= endDate);
+      }
+      // Amount range filter
+      if (minAmount !== '') {
+        const min = parseFloat(minAmount);
+        if (!isNaN(min)) {
+          filtered = filtered.filter(t => t.amount >= min);
+        }
+      }
+      if (maxAmount !== '') {
+        const max = parseFloat(maxAmount);
+        if (!isNaN(max)) {
+          filtered = filtered.filter(t => t.amount <= max);
+        }
+      }
+    } else if (selectedPeriod === 'current') {
       const now = new Date();
       const currentMonth = now.getMonth() + 1; // 1-indexed
       const currentYear = now.getFullYear();
@@ -180,6 +213,26 @@ export default function Transactions() {
     }
   };
 
+  const applyCustomFilters = () => {
+    setCustomFiltersApplied(true);
+    setSelectedPeriod('custom');
+    setShowCustomFilters(false);
+  };
+
+  const clearCustomFilters = () => {
+    setStartDate('');
+    setEndDate('');
+    setMinAmount('');
+    setMaxAmount('');
+    setCustomFiltersApplied(false);
+    setSelectedPeriod('current');
+    setShowCustomFilters(false);
+  };
+
+  const toggleCustomFilters = () => {
+    setShowCustomFilters(!showCustomFilters);
+  };
+
   const downloadCSV = () => {
     if (filteredTransactions.length === 0) return;
 
@@ -202,12 +255,6 @@ export default function Transactions() {
       ...rows.map(row => row.join(','))
     ].join('\n');
 
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-
     // Generate filename with period info
     let periodLabel = 'all-time';
     if (selectedPeriod === 'current') {
@@ -224,11 +271,25 @@ export default function Transactions() {
       periodLabel = `${year}-${String(month).padStart(2, '0')}`;
     }
 
-    link.setAttribute('download', `transactions-${periodLabel}.csv`);
+    const filename = `transactions-${periodLabel}.csv`;
+
+    // Create blob with BOM for Excel compatibility
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8' });
+
+    // Use modern download approach
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+
+    // Cleanup after a short delay
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }, 100);
   };
 
   if (loading) {
@@ -290,26 +351,140 @@ export default function Transactions() {
               flex="1"
               minW={{ base: '100%', sm: '200px' }}
             />
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                border: '1px solid #E2E8F0',
-                backgroundColor: 'white',
-                minWidth: '130px',
-              }}
+            {!customFiltersApplied && (
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '14px',
+                  borderRadius: '6px',
+                  border: '1px solid #E2E8F0',
+                  backgroundColor: 'white',
+                  minWidth: '130px',
+                }}
+              >
+                <option value="current">This month</option>
+                <option value="last-month">Last month</option>
+                <option value="all">All time</option>
+              </select>
+            )}
+            <Button
+              variant={showCustomFilters || customFiltersApplied ? 'solid' : 'outline'}
+              colorScheme={customFiltersApplied ? 'blue' : 'gray'}
+              size={{ base: 'sm', md: 'md' }}
+              onClick={toggleCustomFilters}
             >
-              <option value="current">This month</option>
-              <option value="last-month">Last month</option>
-              <option value="all">All time</option>
-            </select>
+              <Icon as={LuFilter} mr={2} />
+              {customFiltersApplied ? 'Custom filters' : 'Filters'}
+            </Button>
+            {customFiltersApplied && (
+              <Button
+                variant="ghost"
+                size={{ base: 'sm', md: 'md' }}
+                onClick={clearCustomFilters}
+                color="red.500"
+              >
+                <Icon as={LuX} mr={1} />
+                Reset
+              </Button>
+            )}
             <Text fontSize="sm" color="gray.500">
               {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
             </Text>
           </Flex>
+
+          {/* Custom Filters Panel */}
+          <Collapsible.Root open={showCustomFilters}>
+            <Collapsible.Content>
+              <Box
+                bg="white"
+                borderRadius="xl"
+                borderWidth="1px"
+                borderColor="gray.200"
+                p={{ base: 4, md: 6 }}
+                w="100%"
+              >
+                <VStack gap={5} align="stretch">
+                  {/* Date Range */}
+                  <Box>
+                    <Text fontWeight="600" color="gray.700" mb={3}>Date range</Text>
+                    <Flex gap={4} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
+                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
+                        <Text fontSize="sm" color="gray.500" mb={1}>Start date</Text>
+                        <Input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          bg="white"
+                          size="md"
+                        />
+                      </Box>
+                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
+                        <Text fontSize="sm" color="gray.500" mb={1}>End date</Text>
+                        <Input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          bg="white"
+                          size="md"
+                        />
+                      </Box>
+                    </Flex>
+                  </Box>
+
+                  {/* Amount Range */}
+                  <Box>
+                    <Text fontWeight="600" color="gray.700" mb={3}>Amount range</Text>
+                    <Flex gap={4} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
+                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
+                        <Text fontSize="sm" color="gray.500" mb={1}>Minimum amount</Text>
+                        <Input
+                          type="number"
+                          placeholder="$0.00"
+                          value={minAmount}
+                          onChange={(e) => setMinAmount(e.target.value)}
+                          bg="white"
+                          size="md"
+                          min="0"
+                          step="0.01"
+                        />
+                      </Box>
+                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
+                        <Text fontSize="sm" color="gray.500" mb={1}>Maximum amount</Text>
+                        <Input
+                          type="number"
+                          placeholder="$999,999.00"
+                          value={maxAmount}
+                          onChange={(e) => setMaxAmount(e.target.value)}
+                          bg="white"
+                          size="md"
+                          min="0"
+                          step="0.01"
+                        />
+                      </Box>
+                    </Flex>
+                  </Box>
+
+                  {/* Action Buttons */}
+                  <Flex gap={3} justify="flex-end" pt={2}>
+                    <Button
+                      variant="outline"
+                      onClick={clearCustomFilters}
+                    >
+                      Clear filters
+                    </Button>
+                    <Button
+                      colorScheme="red"
+                      onClick={applyCustomFilters}
+                    >
+                      Apply filters
+                    </Button>
+                  </Flex>
+                </VStack>
+              </Box>
+            </Collapsible.Content>
+          </Collapsible.Root>
 
           {/* Mobile Card View */}
           <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch" w="100%">

@@ -62,3 +62,6 @@ tailwindcss
 *.orig
 .temp/
 .tmp/
+
+# Local Netlify folder
+.netlify

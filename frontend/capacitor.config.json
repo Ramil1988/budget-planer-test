@@ -1,0 +1,12 @@
+{
+  "appId": "com.budgetwise.app",
+  "appName": "BudgetWise",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#ffffff"
+  },
+  "server": {
+    "allowNavigation": ["*.supabase.co"]
+  }
+}
