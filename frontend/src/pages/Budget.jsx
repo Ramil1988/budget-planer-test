@@ -327,8 +327,18 @@ export default function Budget() {
         };
       });
 
-      // Sort by spent (descending) for tracking view
-      data.sort((a, b) => b.spent - a.spent);
+      // Sort: Over budget first, then by percent used (descending)
+      data.sort((a, b) => {
+        const aOverBudget = a.limit > 0 && a.spent > a.limit;
+        const bOverBudget = b.limit > 0 && b.spent > b.limit;
+
+        // Over budget items come first
+        if (aOverBudget && !bOverBudget) return -1;
+        if (!aOverBudget && bOverBudget) return 1;
+
+        // Then sort by percent of limit used (descending)
+        return b.percentOfLimit - a.percentOfLimit;
+      });
       setBudgetData(data);
     } catch (err) {
       setError('Failed to load budget: ' + err.message);
