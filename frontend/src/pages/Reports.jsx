@@ -270,7 +270,7 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
       </Box>
       {/* Legend */}
       <VStack gap={1} align="stretch" w="100%">
-        {categories.slice(0, 6).map((cat, index) => {
+        {categories.map((cat, index) => {
           const isHovered = hoveredCategory === cat.name;
           const isOtherHovered = hoveredCategory && !isHovered;
           return (
@@ -408,10 +408,20 @@ export default function Reports() {
         m.balance = m.income - m.expenses;
       });
 
-      // Convert category map to sorted array
-      const categoryArray = Object.entries(categoryMap)
+      // Convert category map to sorted array and combine small categories into "Others"
+      const sortedCategories = Object.entries(categoryMap)
         .map(([name, amount]) => ({ name, amount }))
         .sort((a, b) => b.amount - a.amount);
+
+      // Take top 5 and combine rest into "Others"
+      let categoryArray;
+      if (sortedCategories.length > 5) {
+        const top5 = sortedCategories.slice(0, 5);
+        const othersAmount = sortedCategories.slice(5).reduce((sum, cat) => sum + cat.amount, 0);
+        categoryArray = [...top5, { name: 'Others', amount: othersAmount }];
+      } else {
+        categoryArray = sortedCategories;
+      }
 
       // Calculate totals
       const totalIncome = monthly.reduce((sum, m) => sum + m.income, 0);

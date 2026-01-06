@@ -327,103 +327,106 @@ export default function CategoryManager() {
             {/* Merchant Mappings Section */}
             <Box
               p={6}
-              borderRadius="lg"
-              borderWidth="1px"
+              borderRadius="16px"
+              borderWidth="2px"
               borderColor="blue.200"
-              bg="blue.50"
+              bg="white"
+              boxShadow="0 2px 8px rgba(0,0,0,0.05)"
             >
-              <Heading size="md" mb={4}>
+              <Heading size="lg" mb={2} color="gray.800">
                 Merchant Mappings
               </Heading>
-              <Text color="gray.700" mb={4}>
-                Map merchant names (transaction descriptions) to expense categories for auto-categorization when importing transactions
+              <Text color="gray.600" mb={6} fontSize="md">
+                Map merchant names to categories for automatic categorization when importing
               </Text>
-              <VStack gap={4} align="stretch">
-                {/* Labels Row */}
-                <HStack gap={4}>
-                  <Box flex={1}>
-                    <Text fontWeight="medium">Merchant Name</Text>
-                  </Box>
-                  <Box flex={1}>
-                    <Text fontWeight="medium">Category</Text>
-                  </Box>
-                  <Box w="140px">
-                    <Text visibility="hidden">Button</Text>
-                  </Box>
-                </HStack>
+              <VStack gap={5} align="stretch">
+                {/* Merchant Name Input */}
+                <Box>
+                  <Text fontWeight="600" mb={2} color="gray.700" fontSize="sm">
+                    Merchant Name
+                  </Text>
+                  <Input
+                    placeholder="e.g., GLOBAL PET FOODS, PC-ENERGIE NB POWER, AMAZON.CA"
+                    value={newPattern}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setNewPattern(value);
 
-                {/* Inputs Row */}
-                <HStack gap={4} align="start">
-                  <Box flex={1}>
-                    <Input
-                      placeholder="e.g., GLOBAL PET FOODS or PC-ENERGIE NB POWER"
-                      value={newPattern}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setNewPattern(value);
-
-                        // Auto-populate category if merchant exists
-                        const normalizedValue = value.toUpperCase().trim();
-                        for (const [categoryName, merchants] of Object.entries(patterns)) {
-                          if (merchants.includes(normalizedValue)) {
-                            setSelectedCategory(categoryName);
-                            break;
-                          }
+                      // Auto-populate category if merchant exists
+                      const normalizedValue = value.toUpperCase().trim();
+                      for (const [categoryName, merchants] of Object.entries(patterns)) {
+                        if (merchants.includes(normalizedValue)) {
+                          setSelectedCategory(categoryName);
+                          break;
                         }
-                      }}
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
-                      size="lg"
-                      bg="white"
-                      list="merchant-suggestions"
-                    />
-                    <datalist id="merchant-suggestions">
-                      {allExistingPatterns.map((pattern) => (
-                        <option key={pattern} value={pattern} />
-                      ))}
-                    </datalist>
-                  </Box>
+                      }
+                    }}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
+                    size="lg"
+                    bg="gray.50"
+                    borderColor="gray.300"
+                    _hover={{ borderColor: 'blue.400' }}
+                    _focus={{ borderColor: 'blue.500', bg: 'white', boxShadow: '0 0 0 1px #3B82F6' }}
+                    fontSize="md"
+                    h="56px"
+                    borderRadius="12px"
+                    list="merchant-suggestions"
+                  />
+                  <datalist id="merchant-suggestions">
+                    {allExistingPatterns.map((pattern) => (
+                      <option key={pattern} value={pattern} />
+                    ))}
+                  </datalist>
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    Enter the exact merchant name as it appears in your bank statements
+                  </Text>
+                </Box>
 
-                  <Box flex={1}>
-                    <select
-                      value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
-                      style={{
-                        padding: '12px',
-                        fontSize: '16px',
-                        borderRadius: '8px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: 'white',
-                        height: '48px',
-                        width: '100%',
-                      }}
-                    >
-                      <option value="">Select category</option>
-                      {expenseCategoryNames.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
-                  </Box>
+                {/* Category Select */}
+                <Box>
+                  <Text fontWeight="600" mb={2} color="gray.700" fontSize="sm">
+                    Assign to Category
+                  </Text>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    style={{
+                      padding: '16px 14px',
+                      fontSize: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid #CBD5E0',
+                      backgroundColor: '#F7FAFC',
+                      height: '56px',
+                      width: '100%',
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">Select a category...</option>
+                    {expenseCategoryNames.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </Box>
 
-                  <Box w="140px">
-                    <Button
-                      colorScheme="blue"
-                      size="lg"
-                      onClick={handleAddPattern}
-                      disabled={!selectedCategory || !newPattern.trim()}
-                      h="48px"
-                      w="100%"
-                    >
-                      Add Mapping
-                    </Button>
-                  </Box>
-                </HStack>
-
-                {/* Helper Text Row */}
-                <Text fontSize="sm" color="gray.600">
-                  Enter exact merchant name as it appears in transactions (case-insensitive)
-                </Text>
+                {/* Add Button */}
+                <Button
+                  colorScheme="blue"
+                  size="lg"
+                  onClick={handleAddPattern}
+                  disabled={!selectedCategory || !newPattern.trim()}
+                  h="56px"
+                  w="100%"
+                  fontSize="md"
+                  fontWeight="600"
+                  borderRadius="12px"
+                  _hover={{ transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+                  transition="all 0.2s"
+                >
+                  Add Merchant Mapping
+                </Button>
 
                 {/* Show existing mappings for selected category */}
                 {selectedCategory && patterns[selectedCategory]?.length > 0 && (
