@@ -8,20 +8,21 @@ const iconsDir = join(__dirname, '../public/icons');
 
 const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
 
-// Create a simple icon with a "B" letter
+// Create icon with gradient background and money bag emoji
 async function createIcon(size) {
+  const rx = Math.round(size * 0.2); // Rounded corners
+  const fontSize = Math.round(size * 0.55);
+
   const svg = `
     <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" rx="${size * 0.15}" fill="#3182ce"/>
-      <text
-        x="50%"
-        y="62%"
-        font-family="Arial, sans-serif"
-        font-size="${size * 0.55}"
-        font-weight="bold"
-        fill="white"
-        text-anchor="middle"
-      >B</text>
+      <defs>
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#18181B"/>
+          <stop offset="100%" style="stop-color:#3B82F6"/>
+        </linearGradient>
+      </defs>
+      <rect width="${size}" height="${size}" rx="${rx}" fill="url(#bgGradient)"/>
+      <text x="50%" y="66%" font-size="${fontSize}" text-anchor="middle">💰</text>
     </svg>
   `;
 
