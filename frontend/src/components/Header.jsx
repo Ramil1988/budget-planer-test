@@ -106,6 +106,7 @@ function Header() {
             <>
               <NavLink to="/dashboard">Dashboard</NavLink>
               <NavLink to="/budget">Budget</NavLink>
+              <NavLink to="/recurring">Recurring</NavLink>
               <NavLink to="/reports">Report</NavLink>
               <NavLink to="/transactions">Transactions</NavLink>
               <NavLink to="/import">Import</NavLink>
@@ -229,6 +230,9 @@ function Header() {
                 </MobileNavLink>
                 <MobileNavLink to="/budget" active={isActive('/budget')} onClick={onToggle}>
                   Budget
+                </MobileNavLink>
+                <MobileNavLink to="/recurring" active={isActive('/recurring')} onClick={onToggle}>
+                  Recurring
                 </MobileNavLink>
                 <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle}>
                   Report

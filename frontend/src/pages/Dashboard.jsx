@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { getUpcomingPayments, formatFrequency } from '../lib/recurringUtils';
 
 // Category color mapping for visual distinction
 const categoryColors = {
@@ -343,6 +344,7 @@ export default function Dashboard() {
   const [monthlyDailySpending, setMonthlyDailySpending] = useState([]); // Daily spending for entire month
   const [selectedMonthDay, setSelectedMonthDay] = useState(null); // Selected day in monthly chart
   const [monthlyDailyTransactions, setMonthlyDailyTransactions] = useState([]); // Transactions by day for month
+  const [upcomingPayments, setUpcomingPayments] = useState([]); // Upcoming recurring payments
 
   useEffect(() => {
     if (user) {
@@ -564,6 +566,18 @@ export default function Dashboard() {
 
       // Calculate monthly daily spending
       calculateMonthlySpending(transactions, selectedMonth);
+
+      // Fetch recurring payments for upcoming payments widget
+      const recurringResult = await supabase
+        .from('recurring_payments')
+        .select('*, categories(name)')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+
+      if (!recurringResult.error && recurringResult.data) {
+        const upcoming = getUpcomingPayments(recurringResult.data, 14);
+        setUpcomingPayments(upcoming);
+      }
 
     } catch (err) {
       setError('Failed to load dashboard: ' + err.message);
@@ -813,6 +827,106 @@ export default function Dashboard() {
               </Box>
             </Flex>
           </Box>
+
+          {/* Upcoming Recurring Payments Widget */}
+          {upcomingPayments.length > 0 && (
+            <Box
+              p={{ base: 5, md: 6 }}
+              borderRadius="16px"
+              bg="white"
+              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
+              border="1px solid #F4F4F5"
+            >
+              <Flex justify="space-between" align="center" mb={4}>
+                <HStack gap={2}>
+                  <Box
+                    w="8px"
+                    h="8px"
+                    borderRadius="full"
+                    bg="#F59E0B"
+                  />
+                  <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                    Upcoming Payments
+                  </Heading>
+                </HStack>
+                <Button
+                  as={RouterLink}
+                  to="/recurring"
+                  variant="ghost"
+                  size="sm"
+                  color="#2563EB"
+                  fontWeight="600"
+                  _hover={{ bg: '#EFF6FF' }}
+                >
+                  Manage
+                </Button>
+              </Flex>
+
+              <VStack align="stretch" gap={2}>
+                {upcomingPayments.slice(0, 5).map((payment, index) => (
+                  <Flex
+                    key={`${payment.id}-${index}`}
+                    align="center"
+                    justify="space-between"
+                    p={3}
+                    borderRadius="12px"
+                    bg={payment.daysUntil === 0 ? '#FEF2F2' : payment.daysUntil <= 3 ? '#FFFBEB' : '#F9FAFB'}
+                    border="1px solid"
+                    borderColor={payment.daysUntil === 0 ? '#FECACA' : payment.daysUntil <= 3 ? '#FDE68A' : 'transparent'}
+                  >
+                    <HStack gap={3}>
+                      <Box
+                        w="40px"
+                        h="40px"
+                        borderRadius="10px"
+                        bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <Box
+                          w="10px"
+                          h="10px"
+                          borderRadius="full"
+                          bg={getCategoryColor(payment.categories?.name)}
+                        />
+                      </Box>
+                      <Box>
+                        <Text fontWeight="600" fontSize="sm" color="#18181B">
+                          {payment.name}
+                        </Text>
+                        <Text fontSize="xs" color="#71717A">
+                          {payment.categories?.name || 'Uncategorized'} • {formatFrequency(payment.frequency)}
+                        </Text>
+                      </Box>
+                    </HStack>
+                    <Box textAlign="right">
+                      <Text
+                        fontWeight="700"
+                        fontSize="sm"
+                        color={payment.type === 'expense' ? '#E11D48' : '#059669'}
+                      >
+                        {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
+                      </Text>
+                      <Text
+                        fontSize="xs"
+                        color={payment.daysUntil === 0 ? '#DC2626' : '#71717A'}
+                        fontWeight={payment.daysUntil <= 1 ? '600' : '400'}
+                      >
+                        {payment.daysUntil === 0 ? 'Today' : payment.daysUntil === 1 ? 'Tomorrow' : `In ${payment.daysUntil} days`}
+                      </Text>
+                    </Box>
+                  </Flex>
+                ))}
+              </VStack>
+
+              {upcomingPayments.length > 5 && (
+                <Text fontSize="xs" color="#71717A" textAlign="center" mt={3}>
+                  +{upcomingPayments.length - 5} more upcoming payments
+                </Text>
+              )}
+            </Box>
+          )}
 
           {/* Charts Row - Donut & Weekly */}
           <Flex gap={{ base: 5, md: 6 }} direction={{ base: 'column', lg: 'row' }}>

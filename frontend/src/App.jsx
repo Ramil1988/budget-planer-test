@@ -12,6 +12,7 @@ import CategoryManager from './pages/CategoryManager'
 import Transactions from './pages/Transactions'
 import AddTransaction from './pages/AddTransaction'
 import Budget from './pages/Budget'
+import RecurringPayments from './pages/RecurringPayments'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 
@@ -72,6 +73,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Budget />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/recurring"
+          element={
+            <ProtectedRoute>
+              <RecurringPayments />
             </ProtectedRoute>
           }
         />

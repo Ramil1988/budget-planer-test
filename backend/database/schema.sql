@@ -77,6 +77,21 @@ CREATE TABLE merchant_mappings (
   UNIQUE(user_id, transaction_description)
 );
 
+CREATE TABLE recurring_payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  amount DECIMAL(12, 2) NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly')),
+  start_date DATE NOT NULL,
+  end_date DATE,
+  is_active BOOLEAN DEFAULT true,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
@@ -86,6 +101,7 @@ ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE merchant_mappings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recurring_payments ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "own_data" ON profiles FOR ALL USING (auth.uid() = id);
 CREATE POLICY "own_data" ON accounts FOR ALL USING (auth.uid() = user_id);
@@ -97,6 +113,7 @@ CREATE POLICY "own_data" ON budget_categories FOR ALL USING (
 );
 CREATE POLICY "own_data" ON user_settings FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "own_data" ON merchant_mappings FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "own_data" ON recurring_payments FOR ALL USING (auth.uid() = user_id);
 
 -- Functions (only if they don't exist)
 CREATE OR REPLACE FUNCTION update_balance()
