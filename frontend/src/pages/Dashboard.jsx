@@ -45,9 +45,12 @@ const getCategoryColor = (name) => categoryColors[name] || categoryColors.defaul
 // Donut Chart Component with hover effects
 const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, onHoverCategory }) => {
   const strokeWidth = 35;
+  const hoverExpand = 8; // Extra space for hover effect
+  const padding = hoverExpand; // Padding to prevent clipping on hover
+  const svgSize = size + padding * 2; // Larger SVG to accommodate hover
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const center = size / 2;
+  const center = svgSize / 2;
 
   // Calculate segments
   let currentOffset = 0;
@@ -68,8 +71,8 @@ const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, 
   const hoveredSegment = hoveredCategory ? segments.find(s => s.name === hoveredCategory) : null;
 
   return (
-    <Box position="relative" w={size} h={size}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+    <Box position="relative" w={svgSize} h={svgSize}>
+      <svg width={svgSize} height={svgSize} style={{ transform: 'rotate(-90deg)' }}>
         {/* Background circle */}
         <circle
           cx={center}
@@ -91,7 +94,7 @@ const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, 
               r={radius}
               fill="none"
               stroke={segment.color}
-              strokeWidth={isHovered ? strokeWidth + 6 : strokeWidth}
+              strokeWidth={isHovered ? strokeWidth + hoverExpand : strokeWidth}
               strokeDasharray={`${segment.length} ${circumference - segment.length}`}
               strokeDashoffset={-segment.offset}
               style={{
