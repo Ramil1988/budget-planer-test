@@ -271,20 +271,27 @@ export default function RecurringPayments() {
 
   return (
     <PageContainer>
-      <VStack gap={6} align="stretch" w="100%">
+      <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
         {/* Header */}
-        <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
+        <Flex
+          justify="space-between"
+          align={{ base: 'stretch', sm: 'center' }}
+          direction={{ base: 'column', sm: 'row' }}
+          gap={3}
+        >
           <Box>
-            <Heading size="xl">Recurring Payments</Heading>
-            <Text color="gray.500" mt={1}>Manage your recurring bills and income</Text>
+            <Heading size={{ base: 'lg', md: 'xl' }}>Recurring Payments</Heading>
+            <Text color="gray.500" mt={1} fontSize={{ base: 'sm', md: 'md' }}>Manage your recurring bills and income</Text>
           </Box>
           <Button
             onClick={openCreateModal}
             bg="linear-gradient(135deg, #18181B 0%, #2563EB 100%)"
             color="white"
-            px={6}
+            px={{ base: 4, md: 6 }}
             fontWeight="600"
             borderRadius="12px"
+            size={{ base: 'md', md: 'lg' }}
+            w={{ base: '100%', sm: 'auto' }}
             _hover={{ transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)' }}
           >
             + Add Recurring
@@ -304,54 +311,58 @@ export default function RecurringPayments() {
         )}
 
         {/* Monthly Projection Summary */}
-        <SimpleGrid columns={{ base: 1, md: 3 }} gap={4}>
+        <SimpleGrid columns={{ base: 3, md: 3 }} gap={{ base: 2, md: 4 }}>
           <Box
-            p={5}
-            borderRadius="16px"
+            p={{ base: 3, md: 5 }}
+            borderRadius={{ base: '12px', md: '16px' }}
             bg="linear-gradient(135deg, #10B981 0%, #059669 100%)"
             color="white"
           >
-            <Text fontSize="sm" opacity={0.9}>Monthly Income</Text>
-            <Text fontSize="2xl" fontWeight="700">{formatCurrency(projection.income)}</Text>
-            <Text fontSize="xs" opacity={0.8}>{projection.payments.filter(p => p.type === 'income').length} payments</Text>
+            <Text fontSize={{ base: 'xs', md: 'sm' }} opacity={0.9}>Monthly Income</Text>
+            <Text fontSize={{ base: 'md', md: '2xl' }} fontWeight="700">{formatCurrency(projection.income)}</Text>
+            <Text fontSize={{ base: '10px', md: 'xs' }} opacity={0.8}>{projection.payments.filter(p => p.type === 'income').length} payments</Text>
           </Box>
           <Box
-            p={5}
-            borderRadius="16px"
+            p={{ base: 3, md: 5 }}
+            borderRadius={{ base: '12px', md: '16px' }}
             bg="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)"
             color="white"
           >
-            <Text fontSize="sm" opacity={0.9}>Monthly Expenses</Text>
-            <Text fontSize="2xl" fontWeight="700">{formatCurrency(projection.expenses)}</Text>
-            <Text fontSize="xs" opacity={0.8}>{projection.payments.filter(p => p.type === 'expense').length} payments</Text>
+            <Text fontSize={{ base: 'xs', md: 'sm' }} opacity={0.9}>Monthly Expenses</Text>
+            <Text fontSize={{ base: 'md', md: '2xl' }} fontWeight="700">{formatCurrency(projection.expenses)}</Text>
+            <Text fontSize={{ base: '10px', md: 'xs' }} opacity={0.8}>{projection.payments.filter(p => p.type === 'expense').length} payments</Text>
           </Box>
           <Box
-            p={5}
-            borderRadius="16px"
+            p={{ base: 3, md: 5 }}
+            borderRadius={{ base: '12px', md: '16px' }}
             bg={projection.net >= 0 ? 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)' : 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)'}
             color="white"
           >
-            <Text fontSize="sm" opacity={0.9}>Net Cash Flow</Text>
-            <Text fontSize="2xl" fontWeight="700">{projection.net >= 0 ? '+' : ''}{formatCurrency(projection.net)}</Text>
-            <Text fontSize="xs" opacity={0.8}>{projection.net >= 0 ? 'Surplus' : 'Deficit'}</Text>
+            <Text fontSize={{ base: 'xs', md: 'sm' }} opacity={0.9}>Net Cash Flow</Text>
+            <Text fontSize={{ base: 'md', md: '2xl' }} fontWeight="700">{projection.net >= 0 ? '+' : ''}{formatCurrency(projection.net)}</Text>
+            <Text fontSize={{ base: '10px', md: 'xs' }} opacity={0.8}>{projection.net >= 0 ? 'Surplus' : 'Deficit'}</Text>
           </Box>
         </SimpleGrid>
 
         {/* Tab Navigation */}
-        <HStack gap={4}>
+        <Flex gap={{ base: 2, md: 4 }} wrap="wrap" align="center">
           <Button
-            size="lg"
+            size={{ base: 'md', md: 'lg' }}
             variant={activeTab === 'expense' ? 'solid' : 'outline'}
             colorPalette="red"
             onClick={() => setActiveTab('expense')}
+            fontSize={{ base: 'sm', md: 'md' }}
+            px={{ base: 3, md: 4 }}
           >
             Expenses ({recurringPayments.filter(p => p.type === 'expense' && (showInactive || p.is_active)).length})
           </Button>
           <Button
-            size="lg"
+            size={{ base: 'md', md: 'lg' }}
             variant={activeTab === 'income' ? 'solid' : 'outline'}
             colorPalette="green"
             onClick={() => setActiveTab('income')}
+            fontSize={{ base: 'sm', md: 'md' }}
+            px={{ base: 3, md: 4 }}
           >
             Income ({recurringPayments.filter(p => p.type === 'income' && (showInactive || p.is_active)).length})
           </Button>
@@ -360,10 +371,11 @@ export default function RecurringPayments() {
             variant="ghost"
             onClick={() => setShowInactive(!showInactive)}
             color={showInactive ? 'blue.600' : 'gray.500'}
+            fontSize={{ base: 'xs', md: 'sm' }}
           >
             {showInactive ? 'Hide' : 'Show'} Inactive
           </Button>
-        </HStack>
+        </Flex>
 
         {/* Recurring Payments List */}
         {filteredPayments.length === 0 ? (
@@ -383,7 +395,7 @@ export default function RecurringPayments() {
             </Button>
           </Box>
         ) : (
-          <VStack gap={3} align="stretch">
+          <VStack gap={{ base: 2, md: 3 }} align="stretch">
             {filteredPayments.map((payment) => {
               const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date);
               const daysUntil = nextDate ? Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
@@ -391,8 +403,8 @@ export default function RecurringPayments() {
               return (
                 <Box
                   key={payment.id}
-                  p={4}
-                  borderRadius="16px"
+                  p={{ base: 3, md: 4 }}
+                  borderRadius={{ base: '12px', md: '16px' }}
                   bg="white"
                   boxShadow="0 1px 3px rgba(0,0,0,0.05)"
                   border="1px solid #F3F4F6"
@@ -400,9 +412,106 @@ export default function RecurringPayments() {
                   _hover={{ boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   transition="all 0.2s"
                 >
-                  <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
+                  {/* Mobile Layout */}
+                  <Box display={{ base: 'block', md: 'none' }}>
+                    <Flex justify="space-between" align="flex-start" mb={2}>
+                      <HStack gap={2}>
+                        <Box
+                          w="36px"
+                          h="36px"
+                          borderRadius="10px"
+                          bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          flexShrink={0}
+                        >
+                          <Box
+                            w="10px"
+                            h="10px"
+                            borderRadius="full"
+                            bg={getCategoryColor(payment.categories?.name)}
+                          />
+                        </Box>
+                        <Box>
+                          <HStack gap={1} mb={0.5}>
+                            <Text fontWeight="600" fontSize="sm" color="#18181B">
+                              {payment.name}
+                            </Text>
+                            {!payment.is_active && (
+                              <Badge colorPalette="gray" size="sm" fontSize="10px">Paused</Badge>
+                            )}
+                          </HStack>
+                          <HStack gap={1} flexWrap="wrap">
+                            <Badge colorPalette={payment.type === 'expense' ? 'red' : 'green'} variant="subtle" fontSize="10px">
+                              {payment.categories?.name || 'Uncategorized'}
+                            </Badge>
+                            <Text fontSize="10px" color="gray.500">
+                              {formatFrequency(payment.frequency)}
+                            </Text>
+                            {payment.end_date && (
+                              <Text fontSize="10px" color="gray.400">
+                                until {formatDate(payment.end_date)}
+                              </Text>
+                            )}
+                          </HStack>
+                        </Box>
+                      </HStack>
+                      <Box textAlign="right">
+                        <Text
+                          fontWeight="700"
+                          fontSize="sm"
+                          color={payment.type === 'expense' ? '#E11D48' : '#059669'}
+                        >
+                          {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
+                        </Text>
+                        {nextDate && payment.is_active && (
+                          <Text
+                            fontSize="10px"
+                            color={daysUntil <= 3 ? '#DC2626' : '#71717A'}
+                            fontWeight={daysUntil <= 3 ? '600' : '400'}
+                          >
+                            {daysUntil === 0 ? 'Due today' : daysUntil === 1 ? 'Due tomorrow' : `In ${daysUntil} days`}
+                          </Text>
+                        )}
+                      </Box>
+                    </Flex>
+                    <Flex gap={1} justify="flex-end" pt={2} borderTop="1px solid #F4F4F5">
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => handleToggleActive(payment)}
+                        color={payment.is_active ? 'orange.500' : 'green.500'}
+                        fontSize="xs"
+                        px={2}
+                      >
+                        {payment.is_active ? 'Pause' : 'Resume'}
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => openEditModal(payment)}
+                        fontSize="xs"
+                        px={2}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        colorPalette="red"
+                        onClick={() => handleDelete(payment.id)}
+                        fontSize="xs"
+                        px={2}
+                      >
+                        Delete
+                      </Button>
+                    </Flex>
+                  </Box>
+
+                  {/* Desktop Layout */}
+                  <Flex display={{ base: 'none', md: 'flex' }} justify="space-between" align="center" gap={3}>
                     <HStack gap={4}>
-                      {/* Category Color Dot */}
                       <Box
                         w="48px"
                         h="48px"
@@ -445,7 +554,6 @@ export default function RecurringPayments() {
                     </HStack>
 
                     <HStack gap={4}>
-                      {/* Amount & Next Date */}
                       <Box textAlign="right">
                         <Text
                           fontWeight="700"
@@ -468,7 +576,6 @@ export default function RecurringPayments() {
                         )}
                       </Box>
 
-                      {/* Action Buttons */}
                       <HStack gap={1}>
                         <Button
                           size="sm"
@@ -505,41 +612,43 @@ export default function RecurringPayments() {
         {/* Upcoming Payments Preview */}
         {upcomingPayments.length > 0 && (
           <Box
-            p={5}
-            borderRadius="16px"
+            p={{ base: 3, md: 5 }}
+            borderRadius={{ base: '12px', md: '16px' }}
             bg="white"
             boxShadow="0 1px 3px rgba(0,0,0,0.05)"
             border="1px solid #F3F4F6"
           >
-            <Heading size="md" mb={4} color="#18181B">Next 30 Days</Heading>
-            <VStack gap={2} align="stretch" maxH="300px" overflowY="auto">
+            <Heading size={{ base: 'sm', md: 'md' }} mb={{ base: 3, md: 4 }} color="#18181B">Next 30 Days</Heading>
+            <VStack gap={{ base: 1, md: 2 }} align="stretch" maxH="300px" overflowY="auto">
               {upcomingPayments.slice(0, 10).map((payment, index) => (
                 <Flex
                   key={`${payment.id}-${index}`}
                   align="center"
                   justify="space-between"
-                  p={3}
-                  borderRadius="10px"
+                  p={{ base: 2, md: 3 }}
+                  borderRadius={{ base: '8px', md: '10px' }}
                   bg={payment.daysUntil === 0 ? '#FEF2F2' : payment.daysUntil <= 3 ? '#FFFBEB' : '#F9FAFB'}
                 >
-                  <HStack gap={3}>
+                  <HStack gap={{ base: 2, md: 3 }}>
                     <Box
-                      w="8px"
-                      h="8px"
+                      w={{ base: '6px', md: '8px' }}
+                      h={{ base: '6px', md: '8px' }}
                       borderRadius="full"
                       bg={getCategoryColor(payment.categories?.name)}
+                      flexShrink={0}
                     />
                     <Box>
-                      <Text fontWeight="500" fontSize="sm">{payment.name}</Text>
-                      <Text fontSize="xs" color="gray.500">
+                      <Text fontWeight="500" fontSize={{ base: 'xs', md: 'sm' }}>{payment.name}</Text>
+                      <Text fontSize={{ base: '10px', md: 'xs' }} color="gray.500">
                         {formatDate(payment.nextDate)}
                       </Text>
                     </Box>
                   </HStack>
                   <Text
                     fontWeight="600"
-                    fontSize="sm"
+                    fontSize={{ base: 'xs', md: 'sm' }}
                     color={payment.type === 'expense' ? '#E11D48' : '#059669'}
+                    flexShrink={0}
                   >
                     {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
                   </Text>

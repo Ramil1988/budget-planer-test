@@ -768,42 +768,45 @@ export default function Reports() {
             <Heading size={{ base: 'sm', md: 'md' }} color="gray.800">Monthly Breakdown</Heading>
             <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.500">Detailed view of each month</Text>
           </Box>
-          <Box overflowX="auto">
-            <Table.Root size={{ base: 'sm', md: 'md' }} minW="400px">
+          <Box>
+            <Table.Root size="sm" w="100%">
               <Table.Header>
                 <Table.Row bg="gray.50">
-                  <Table.ColumnHeader py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} fontWeight="600" color="gray.600" fontSize={{ base: 'xs', md: 'sm' }}>Month</Table.ColumnHeader>
-                  <Table.ColumnHeader py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: 'xs', md: 'sm' }}>Income</Table.ColumnHeader>
-                  <Table.ColumnHeader py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: 'xs', md: 'sm' }}>Expenses</Table.ColumnHeader>
-                  <Table.ColumnHeader py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: 'xs', md: 'sm' }}>Balance</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 2, md: 5 }} fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }} w={{ base: '70px', md: 'auto' }}>Month</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }}>Income</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }}>Expenses</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }}>Balance</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {monthlyData.map((row) => (
+                {monthlyData.map((row, index) => (
                   <Table.Row key={row.month} _hover={{ bg: 'gray.50' }}>
-                    <Table.Cell py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }}>
-                      <Text fontWeight="500" color="gray.700" fontSize={{ base: 'xs', md: 'sm' }}>{row.month}</Text>
+                    <Table.Cell py={2} px={{ base: 2, md: 5 }}>
+                      <Text fontWeight="500" color="gray.700" fontSize={{ base: '11px', md: 'sm' }}>
+                        <Box as="span" display={{ base: 'none', md: 'inline' }}>{row.month}</Box>
+                        <Box as="span" display={{ base: 'inline', md: 'none' }}>{MONTH_ABBR[index]}</Box>
+                      </Text>
                     </Table.Cell>
-                    <Table.Cell py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} textAlign="right">
-                      <Text color={row.income > 0 ? 'green.600' : 'gray.400'} fontWeight="500" fontSize={{ base: 'xs', md: 'sm' }}>
+                    <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
+                      <Text color={row.income > 0 ? 'green.600' : 'gray.400'} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
                         {row.income > 0 ? formatCurrency(row.income) : '-'}
                       </Text>
                     </Table.Cell>
-                    <Table.Cell py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} textAlign="right">
-                      <Text color={row.expenses > 0 ? 'red.500' : 'gray.400'} fontWeight="500" fontSize={{ base: 'xs', md: 'sm' }}>
+                    <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
+                      <Text color={row.expenses > 0 ? 'red.500' : 'gray.400'} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
                         {row.expenses > 0 ? formatCurrency(row.expenses) : '-'}
                       </Text>
                     </Table.Cell>
-                    <Table.Cell py={{ base: 2, md: 3 }} px={{ base: 2, md: 5 }} textAlign="right">
+                    <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
                       <Box
                         display="inline-block"
-                        px={{ base: 2, md: 3 }}
-                        py={1}
+                        px={{ base: 1.5, md: 3 }}
+                        py={0.5}
                         borderRadius="full"
                         bg={row.balance >= 0 ? 'green.50' : 'red.50'}
                         color={row.balance >= 0 ? 'green.600' : 'red.600'}
                         fontWeight="600"
-                        fontSize={{ base: 'xs', md: 'sm' }}
+                        fontSize={{ base: '10px', md: 'sm' }}
                       >
                         {row.balance !== 0 ? (row.balance < 0 ? '-' : '+') + formatCurrency(Math.abs(row.balance)) : '-'}
                       </Box>
@@ -812,29 +815,29 @@ export default function Reports() {
                 ))}
                 {/* Total Row */}
                 <Table.Row bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)">
-                  <Table.Cell py={{ base: 3, md: 4 }} px={{ base: 2, md: 5 }}>
-                    <Text fontWeight="700" color="white" fontSize={{ base: 'xs', md: 'sm' }}>TOTAL</Text>
+                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 2, md: 5 }}>
+                    <Text fontWeight="700" color="white" fontSize={{ base: '11px', md: 'sm' }}>TOTAL</Text>
                   </Table.Cell>
-                  <Table.Cell py={{ base: 3, md: 4 }} px={{ base: 2, md: 5 }} textAlign="right">
-                    <Text fontWeight="700" color="green.300" fontSize={{ base: 'xs', md: 'sm' }}>
+                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 1, md: 5 }} textAlign="right">
+                    <Text fontWeight="700" color="green.300" fontSize={{ base: '11px', md: 'sm' }}>
                       {formatCurrency(totals.income)}
                     </Text>
                   </Table.Cell>
-                  <Table.Cell py={{ base: 3, md: 4 }} px={{ base: 2, md: 5 }} textAlign="right">
-                    <Text fontWeight="700" color="red.300" fontSize={{ base: 'xs', md: 'sm' }}>
+                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 1, md: 5 }} textAlign="right">
+                    <Text fontWeight="700" color="red.300" fontSize={{ base: '11px', md: 'sm' }}>
                       {formatCurrency(totals.expenses)}
                     </Text>
                   </Table.Cell>
-                  <Table.Cell py={{ base: 3, md: 4 }} px={{ base: 2, md: 5 }} textAlign="right">
+                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 1, md: 5 }} textAlign="right">
                     <Box
                       display="inline-block"
-                      px={{ base: 2, md: 4 }}
-                      py={1}
+                      px={{ base: 1.5, md: 4 }}
+                      py={0.5}
                       borderRadius="full"
                       bg={totals.balance >= 0 ? 'green.500' : 'red.500'}
                       color="white"
                       fontWeight="700"
-                      fontSize={{ base: 'xs', md: 'sm' }}
+                      fontSize={{ base: '10px', md: 'sm' }}
                     >
                       {totals.balance < 0 ? '-' : '+'}{formatCurrency(Math.abs(totals.balance))}
                     </Box>
