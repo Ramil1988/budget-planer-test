@@ -15,6 +15,29 @@ export const FREQUENCY_CONFIG = {
 };
 
 /**
+ * Parse a date string or Date object into a local-time Date at midnight
+ * This avoids timezone issues where "2026-01-02" parsed as UTC becomes Jan 1 in local time
+ * @param {Date|string} date - Date to parse
+ * @returns {Date} - Date object in local time at midnight
+ */
+function parseLocalDate(date) {
+  if (date instanceof Date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  // For string dates like "2026-01-02", parse components to avoid UTC interpretation
+  if (typeof date === 'string' && date.match(/^\d{4}-\d{2}-\d{2}/)) {
+    const [year, month, day] = date.split('T')[0].split('-').map(Number);
+    return new Date(year, month - 1, day, 0, 0, 0, 0);
+  }
+  // Fallback: parse and normalize
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
  * Calculate the next payment date from a given start date and frequency
  * @param {Date|string} startDate - The start date of the recurring payment
  * @param {string} frequency - One of: daily, weekly, biweekly, monthly, quarterly, yearly
@@ -23,18 +46,14 @@ export const FREQUENCY_CONFIG = {
  * @returns {Date|null} - Next payment date or null if ended
  */
 export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), endDate = null) {
-  const start = new Date(startDate);
-  const from = new Date(fromDate);
-  const end = endDate ? new Date(endDate) : null;
-
-  // Normalize to start of day
-  start.setHours(0, 0, 0, 0);
-  from.setHours(0, 0, 0, 0);
+  const start = parseLocalDate(startDate);
+  const from = parseLocalDate(fromDate);
+  const end = endDate ? parseLocalDate(endDate) : null;
 
   // If start date is in the future, that's the next payment
   if (start >= from) {
     if (end && start > end) return null;
-    return start;
+    return new Date(start);
   }
 
   const config = FREQUENCY_CONFIG[frequency];
@@ -44,8 +63,13 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
 
   if (config.days) {
     // Day-based frequencies (daily, weekly, biweekly)
-    const daysDiff = Math.floor((from - start) / (1000 * 60 * 60 * 24));
+    // Use time difference to calculate days more accurately
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysDiff = Math.floor((from.getTime() - start.getTime()) / msPerDay);
     const periodsElapsed = Math.floor(daysDiff / config.days);
+
+    // Calculate next date by adding days to start date
+    nextDate = new Date(start);
     nextDate.setDate(start.getDate() + (periodsElapsed + 1) * config.days);
   } else if (config.months) {
     // Month-based frequencies (monthly, quarterly, yearly)
@@ -81,15 +105,11 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
  */
 export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null) {
   const dates = [];
-  const start = new Date(startDate);
-  const rStart = new Date(rangeStart);
-  const rEnd = new Date(rangeEnd);
-  const end = endDate ? new Date(endDate) : null;
-
-  // Normalize times
-  start.setHours(0, 0, 0, 0);
-  rStart.setHours(0, 0, 0, 0);
-  rEnd.setHours(23, 59, 59, 999);
+  const start = parseLocalDate(startDate);
+  const rStart = parseLocalDate(rangeStart);
+  const rEnd = parseLocalDate(rangeEnd);
+  rEnd.setHours(23, 59, 59, 999); // End of day for range end
+  const end = endDate ? parseLocalDate(endDate) : null;
 
   // Get first payment date that could be in range
   let currentDate = getNextPaymentDate(startDate, frequency, rStart, endDate);
@@ -121,8 +141,7 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
  * @returns {Array} - Array of upcoming payment objects with dates
  */
 export function getUpcomingPayments(recurringPayments, daysAhead = 30) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = parseLocalDate(new Date());
 
   const endRange = new Date(today);
   endRange.setDate(endRange.getDate() + daysAhead);
@@ -219,7 +238,7 @@ export function formatFrequency(frequency) {
  * @returns {string} - Formatted date string
  */
 export function formatDate(date) {
-  const d = new Date(date);
+  const d = parseLocalDate(date);
   return d.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',

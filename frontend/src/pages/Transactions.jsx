@@ -60,18 +60,21 @@ export default function Transactions() {
           type,
           provider,
           category_id,
+          created_at,
           categories (name)
         `)
         .eq('user_id', user.id)
         .order('date', { ascending: false })
-        .order('id', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (txError) throw txError;
 
+      // Sort chronologically (oldest first) for balance calculation
       const sortedData = [...(data || [])].sort((a, b) => {
         const dateCompare = new Date(a.date) - new Date(b.date);
         if (dateCompare !== 0) return dateCompare;
-        return a.id - b.id;
+        // Secondary sort by created_at for same-day transactions
+        return new Date(a.created_at) - new Date(b.created_at);
       });
 
       // Calculate cumulative spending (expenses only, not affected by income)

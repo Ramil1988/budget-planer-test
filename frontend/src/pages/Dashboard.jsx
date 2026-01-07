@@ -10,11 +10,12 @@ import {
   Spinner,
   Button,
   Input,
+  SimpleGrid,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
-import { getUpcomingPayments, formatFrequency } from '../lib/recurringUtils';
+import { getUpcomingPayments, formatFrequency, getPaymentDatesInRange } from '../lib/recurringUtils';
 
 // Category color mapping for visual distinction
 const categoryColors = {
@@ -319,6 +320,250 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
   );
 };
 
+// Mini Calendar Component for Upcoming Payments
+const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurrency }) => {
+  const today = new Date();
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+
+  // Get first day of month and total days
+  const firstDayOfMonth = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+  // Calculate payment dates for this month
+  const monthStart = new Date(viewYear, viewMonth, 1);
+  const monthEnd = new Date(viewYear, viewMonth + 1, 0);
+
+  const paymentsByDate = {};
+  recurringPayments.forEach(payment => {
+    if (!payment.is_active) return;
+    const dates = getPaymentDatesInRange(
+      payment.start_date,
+      payment.frequency,
+      monthStart,
+      monthEnd,
+      payment.end_date
+    );
+    dates.forEach(date => {
+      const key = date.getDate();
+      if (!paymentsByDate[key]) {
+        paymentsByDate[key] = [];
+      }
+      paymentsByDate[key].push(payment);
+    });
+  });
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const goToPrevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear(viewYear - 1);
+    } else {
+      setViewMonth(viewMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear(viewYear + 1);
+    } else {
+      setViewMonth(viewMonth + 1);
+    }
+  };
+
+  const isToday = (day) => {
+    return day === today.getDate() &&
+           viewMonth === today.getMonth() &&
+           viewYear === today.getFullYear();
+  };
+
+  const isSelected = (day) => {
+    return selectedDate &&
+           day === selectedDate.getDate() &&
+           viewMonth === selectedDate.getMonth() &&
+           viewYear === selectedDate.getFullYear();
+  };
+
+  // Build calendar grid
+  const calendarDays = [];
+
+  // Previous month days
+  for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+    calendarDays.push({
+      day: daysInPrevMonth - i,
+      isCurrentMonth: false,
+      payments: []
+    });
+  }
+
+  // Current month days
+  for (let day = 1; day <= daysInMonth; day++) {
+    calendarDays.push({
+      day,
+      isCurrentMonth: true,
+      payments: paymentsByDate[day] || []
+    });
+  }
+
+  // Next month days (fill to complete 6 rows)
+  const remainingDays = 42 - calendarDays.length;
+  for (let i = 1; i <= remainingDays; i++) {
+    calendarDays.push({
+      day: i,
+      isCurrentMonth: false,
+      payments: []
+    });
+  }
+
+  // Short day names for mobile
+  const shortDayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  return (
+    <Box>
+      {/* Header */}
+      <Flex justify="space-between" align="center" mb={{ base: 2, md: 3 }}>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={goToPrevMonth}
+          color="#71717A"
+          _hover={{ bg: '#F4F4F5' }}
+          p={1}
+          minW={{ base: '28px', md: '32px' }}
+          h={{ base: '28px', md: '32px' }}
+        >
+          ←
+        </Button>
+        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="#18181B">
+          {monthNames[viewMonth]} {viewYear}
+        </Text>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={goToNextMonth}
+          color="#71717A"
+          _hover={{ bg: '#F4F4F5' }}
+          p={1}
+          minW={{ base: '28px', md: '32px' }}
+          h={{ base: '28px', md: '32px' }}
+        >
+          →
+        </Button>
+      </Flex>
+
+      {/* Day headers */}
+      <SimpleGrid columns={7} gap={{ base: 0, md: 1 }} mb={1}>
+        {dayNames.map((day, idx) => (
+          <Box key={day} textAlign="center" py={{ base: 1, md: 2 }}>
+            <Text fontSize={{ base: '10px', md: 'xs' }} fontWeight="600" color="#A1A1AA">
+              <Box as="span" display={{ base: 'inline', md: 'none' }}>{shortDayNames[idx]}</Box>
+              <Box as="span" display={{ base: 'none', md: 'inline' }}>{day}</Box>
+            </Text>
+          </Box>
+        ))}
+      </SimpleGrid>
+
+      {/* Calendar grid */}
+      <SimpleGrid columns={7} gap={{ base: 0, md: 1 }}>
+        {calendarDays.map((item, index) => {
+          const hasPayments = item.payments.length > 0;
+          const hasExpense = item.payments.some(p => p.type === 'expense');
+          const hasIncome = item.payments.some(p => p.type === 'income');
+
+          // Check if this day is in the past
+          const cellDate = new Date(viewYear, viewMonth, item.day);
+          cellDate.setHours(0, 0, 0, 0);
+          const todayStart = new Date(today);
+          todayStart.setHours(0, 0, 0, 0);
+          const isPast = item.isCurrentMonth && cellDate < todayStart;
+
+          return (
+            <Box
+              key={index}
+              textAlign="center"
+              py={{ base: 1.5, md: 2 }}
+              px={{ base: 0.5, md: 1 }}
+              position="relative"
+              cursor={hasPayments && item.isCurrentMonth ? 'pointer' : 'default'}
+              onClick={() => {
+                if (hasPayments && item.isCurrentMonth) {
+                  onDayClick(new Date(viewYear, viewMonth, item.day), item.payments);
+                }
+              }}
+              borderRadius={{ base: '6px', md: '8px' }}
+              bg={
+                isSelected(item.day) && item.isCurrentMonth
+                  ? '#DBEAFE'
+                  : hasPayments && item.isCurrentMonth && !isPast
+                    ? hasExpense && hasIncome
+                      ? '#FEF3C7' // Yellow for both
+                      : hasExpense
+                        ? '#FEE2E2' // Light red for expenses
+                        : '#D1FAE5' // Light green for income
+                    : 'transparent'
+              }
+              opacity={isPast ? 0.4 : 1}
+              _hover={hasPayments && item.isCurrentMonth ? { bg: isSelected(item.day) ? '#BFDBFE' : '#F4F4F5' } : {}}
+              transition="background 0.15s, opacity 0.15s"
+            >
+              <Text
+                fontSize={{ base: 'xs', md: 'sm' }}
+                fontWeight={
+                  (isToday(item.day) && item.isCurrentMonth) || (hasPayments && item.isCurrentMonth && !isPast)
+                    ? '700'
+                    : '500'
+                }
+                color={
+                  !item.isCurrentMonth
+                    ? '#D4D4D8'
+                    : isPast
+                      ? '#A1A1AA'
+                      : isToday(item.day)
+                        ? '#2563EB'
+                        : hasPayments
+                          ? '#18181B'
+                          : '#52525B'
+                }
+                mb={{ base: 0.5, md: 1 }}
+              >
+                {item.day}
+              </Text>
+              {/* Payment indicators */}
+              {item.isCurrentMonth && hasPayments && (
+                <Flex justify="center" gap={0.5} position="absolute" bottom={{ base: '2px', md: '4px' }} left="0" right="0">
+                  {hasExpense && (
+                    <Box w={{ base: '4px', md: '6px' }} h={{ base: '4px', md: '6px' }} borderRadius="full" bg="#E11D48" />
+                  )}
+                  {hasIncome && (
+                    <Box w={{ base: '4px', md: '6px' }} h={{ base: '4px', md: '6px' }} borderRadius="full" bg="#059669" />
+                  )}
+                </Flex>
+              )}
+            </Box>
+          );
+        })}
+      </SimpleGrid>
+
+      {/* Legend */}
+      <Flex justify="center" gap={{ base: 3, md: 4 }} mt={{ base: 2, md: 3 }} pt={2} borderTop="1px solid #F4F4F5">
+        <HStack gap={1}>
+          <Box w={{ base: '5px', md: '6px' }} h={{ base: '5px', md: '6px' }} borderRadius="full" bg="#E11D48" />
+          <Text fontSize={{ base: '9px', md: '10px' }} color="#71717A">Expense</Text>
+        </HStack>
+        <HStack gap={1}>
+          <Box w={{ base: '5px', md: '6px' }} h={{ base: '5px', md: '6px' }} borderRadius="full" bg="#059669" />
+          <Text fontSize={{ base: '9px', md: '10px' }} color="#71717A">Income</Text>
+        </HStack>
+      </Flex>
+    </Box>
+  );
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -345,6 +590,10 @@ export default function Dashboard() {
   const [selectedMonthDay, setSelectedMonthDay] = useState(null); // Selected day in monthly chart
   const [monthlyDailyTransactions, setMonthlyDailyTransactions] = useState([]); // Transactions by day for month
   const [upcomingPayments, setUpcomingPayments] = useState([]); // Upcoming recurring payments
+  const [allRecurringPayments, setAllRecurringPayments] = useState([]); // All recurring payments for calendar
+  const [paymentsViewMode, setPaymentsViewMode] = useState('list'); // 'list' or 'calendar'
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null); // Selected date in calendar
+  const [selectedCalendarPayments, setSelectedCalendarPayments] = useState([]); // Payments for selected date
 
   useEffect(() => {
     if (user) {
@@ -571,11 +820,14 @@ export default function Dashboard() {
       const recurringResult = await supabase
         .from('recurring_payments')
         .select('*, categories(name)')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
+        .eq('user_id', user.id);
 
       if (!recurringResult.error && recurringResult.data) {
-        const upcoming = getUpcomingPayments(recurringResult.data, 14);
+        // Store all recurring payments for calendar view
+        setAllRecurringPayments(recurringResult.data);
+        // Filter active ones for upcoming list
+        const activePayments = recurringResult.data.filter(p => p.is_active);
+        const upcoming = getUpcomingPayments(activePayments, 14);
         setUpcomingPayments(upcoming);
       }
 
@@ -829,7 +1081,7 @@ export default function Dashboard() {
           </Box>
 
           {/* Upcoming Recurring Payments Widget */}
-          {upcomingPayments.length > 0 && (
+          {(upcomingPayments.length > 0 || allRecurringPayments.length > 0) && (
             <Box
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
@@ -849,81 +1101,224 @@ export default function Dashboard() {
                     Upcoming Payments
                   </Heading>
                 </HStack>
-                <Button
-                  as={RouterLink}
-                  to="/recurring"
-                  variant="ghost"
-                  size="sm"
-                  color="#2563EB"
-                  fontWeight="600"
-                  _hover={{ bg: '#EFF6FF' }}
-                >
-                  Manage
-                </Button>
+                <HStack gap={2}>
+                  {/* View Toggle */}
+                  <HStack
+                    bg="#F4F4F5"
+                    borderRadius="10px"
+                    p="2px"
+                    gap={0}
+                  >
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => {
+                        setPaymentsViewMode('list');
+                        setSelectedCalendarDate(null);
+                        setSelectedCalendarPayments([]);
+                      }}
+                      bg={paymentsViewMode === 'list' ? 'white' : 'transparent'}
+                      color={paymentsViewMode === 'list' ? '#18181B' : '#71717A'}
+                      borderRadius="8px"
+                      px={2}
+                      h="28px"
+                      fontWeight="500"
+                      fontSize="xs"
+                      boxShadow={paymentsViewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
+                      _hover={{ bg: paymentsViewMode === 'list' ? 'white' : '#E4E4E7' }}
+                    >
+                      ☰
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setPaymentsViewMode('calendar')}
+                      bg={paymentsViewMode === 'calendar' ? 'white' : 'transparent'}
+                      color={paymentsViewMode === 'calendar' ? '#18181B' : '#71717A'}
+                      borderRadius="8px"
+                      px={2}
+                      h="28px"
+                      fontWeight="500"
+                      fontSize="xs"
+                      boxShadow={paymentsViewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
+                      _hover={{ bg: paymentsViewMode === 'calendar' ? 'white' : '#E4E4E7' }}
+                    >
+                      📅
+                    </Button>
+                  </HStack>
+                  <Button
+                    as={RouterLink}
+                    to="/recurring"
+                    variant="ghost"
+                    size="sm"
+                    color="#2563EB"
+                    fontWeight="600"
+                    _hover={{ bg: '#EFF6FF' }}
+                  >
+                    Manage
+                  </Button>
+                </HStack>
               </Flex>
 
-              <VStack align="stretch" gap={2}>
-                {upcomingPayments.slice(0, 5).map((payment, index) => (
-                  <Flex
-                    key={`${payment.id}-${index}`}
-                    align="center"
-                    justify="space-between"
-                    p={3}
-                    borderRadius="12px"
-                    bg={payment.daysUntil === 0 ? '#FEF2F2' : payment.daysUntil <= 3 ? '#FFFBEB' : '#F9FAFB'}
-                    border="1px solid"
-                    borderColor={payment.daysUntil === 0 ? '#FECACA' : payment.daysUntil <= 3 ? '#FDE68A' : 'transparent'}
-                  >
-                    <HStack gap={3}>
-                      <Box
-                        w="40px"
-                        h="40px"
-                        borderRadius="10px"
-                        bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
+              {paymentsViewMode === 'list' ? (
+                <>
+                  <VStack align="stretch" gap={2}>
+                    {upcomingPayments.slice(0, 5).map((payment, index) => (
+                      <Flex
+                        key={`${payment.id}-${index}`}
+                        align="center"
+                        justify="space-between"
+                        p={3}
+                        borderRadius="12px"
+                        bg={payment.daysUntil === 0 ? '#FEF2F2' : payment.daysUntil <= 3 ? '#FFFBEB' : '#F9FAFB'}
+                        border="1px solid"
+                        borderColor={payment.daysUntil === 0 ? '#FECACA' : payment.daysUntil <= 3 ? '#FDE68A' : 'transparent'}
                       >
-                        <Box
-                          w="10px"
-                          h="10px"
-                          borderRadius="full"
-                          bg={getCategoryColor(payment.categories?.name)}
-                        />
-                      </Box>
-                      <Box>
-                        <Text fontWeight="600" fontSize="sm" color="#18181B">
-                          {payment.name}
-                        </Text>
-                        <Text fontSize="xs" color="#71717A">
-                          {payment.categories?.name || 'Uncategorized'} • {formatFrequency(payment.frequency)}
-                        </Text>
-                      </Box>
-                    </HStack>
-                    <Box textAlign="right">
-                      <Text
-                        fontWeight="700"
-                        fontSize="sm"
-                        color={payment.type === 'expense' ? '#E11D48' : '#059669'}
-                      >
-                        {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
-                      </Text>
-                      <Text
-                        fontSize="xs"
-                        color={payment.daysUntil === 0 ? '#DC2626' : '#71717A'}
-                        fontWeight={payment.daysUntil <= 1 ? '600' : '400'}
-                      >
-                        {payment.daysUntil === 0 ? 'Today' : payment.daysUntil === 1 ? 'Tomorrow' : `In ${payment.daysUntil} days`}
-                      </Text>
-                    </Box>
-                  </Flex>
-                ))}
-              </VStack>
+                        <HStack gap={3}>
+                          <Box
+                            w="40px"
+                            h="40px"
+                            borderRadius="10px"
+                            bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                          >
+                            <Box
+                              w="10px"
+                              h="10px"
+                              borderRadius="full"
+                              bg={getCategoryColor(payment.categories?.name)}
+                            />
+                          </Box>
+                          <Box>
+                            <Text fontWeight="600" fontSize="sm" color="#18181B">
+                              {payment.name}
+                            </Text>
+                            <Text fontSize="xs" color="#71717A">
+                              {payment.categories?.name || 'Uncategorized'} • {formatFrequency(payment.frequency)}
+                            </Text>
+                          </Box>
+                        </HStack>
+                        <Box textAlign="right">
+                          <Text
+                            fontWeight="700"
+                            fontSize="sm"
+                            color={payment.type === 'expense' ? '#E11D48' : '#059669'}
+                          >
+                            {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
+                          </Text>
+                          <Text
+                            fontSize="xs"
+                            color={payment.daysUntil === 0 ? '#DC2626' : '#71717A'}
+                            fontWeight={payment.daysUntil <= 1 ? '600' : '400'}
+                          >
+                            {payment.nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • {payment.daysUntil === 0 ? 'Today' : payment.daysUntil === 1 ? 'Tomorrow' : `In ${payment.daysUntil} days`}
+                          </Text>
+                        </Box>
+                      </Flex>
+                    ))}
+                  </VStack>
 
-              {upcomingPayments.length > 5 && (
-                <Text fontSize="xs" color="#71717A" textAlign="center" mt={3}>
-                  +{upcomingPayments.length - 5} more upcoming payments
-                </Text>
+                  {upcomingPayments.length > 5 && (
+                    <Text fontSize="xs" color="#71717A" textAlign="center" mt={3}>
+                      +{upcomingPayments.length - 5} more upcoming payments
+                    </Text>
+                  )}
+                  {upcomingPayments.length === 0 && (
+                    <Text fontSize="sm" color="#71717A" textAlign="center" py={4}>
+                      No upcoming payments in the next 14 days
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Flex direction={{ base: 'column', lg: 'row' }} gap={{ base: 3, md: 4 }}>
+                  {/* Calendar - 70% width on desktop, full width on mobile */}
+                  <Box flex={{ base: 'auto', lg: '7' }} w={{ base: '100%', lg: 'auto' }}>
+                    <MiniCalendar
+                      recurringPayments={allRecurringPayments}
+                      onDayClick={(date, payments) => {
+                        setSelectedCalendarDate(date);
+                        setSelectedCalendarPayments(payments);
+                      }}
+                      selectedDate={selectedCalendarDate}
+                      formatCurrency={formatCurrency}
+                    />
+                  </Box>
+
+                  {/* Selected Day Details - 30% width on desktop, full width on mobile */}
+                  <Box
+                    flex={{ base: 'auto', lg: '3' }}
+                    w={{ base: '100%', lg: 'auto' }}
+                    borderTop={{ base: '1px solid #F4F4F5', lg: 'none' }}
+                    borderLeft={{ base: 'none', lg: '1px solid #F4F4F5' }}
+                    pt={{ base: 3, lg: 0 }}
+                    pl={{ base: 0, lg: 4 }}
+                  >
+                    {selectedCalendarDate && selectedCalendarPayments.length > 0 ? (
+                      <VStack align="stretch" gap={2}>
+                        <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="600" color="#18181B" mb={1}>
+                          {selectedCalendarDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </Text>
+                        {selectedCalendarPayments.map((payment, index) => (
+                          <Flex
+                            key={`${payment.id}-cal-${index}`}
+                            align="center"
+                            justify="space-between"
+                            p={{ base: 2, md: 2 }}
+                            borderRadius="8px"
+                            bg={payment.type === 'expense' ? '#FEF2F2' : '#ECFDF5'}
+                          >
+                            <HStack gap={2}>
+                              <Box
+                                w={{ base: '6px', md: '8px' }}
+                                h={{ base: '6px', md: '8px' }}
+                                borderRadius="full"
+                                bg={getCategoryColor(payment.categories?.name)}
+                              />
+                              <Text fontSize={{ base: '11px', md: 'xs' }} fontWeight="500" color="#18181B" noOfLines={1}>
+                                {payment.name}
+                              </Text>
+                            </HStack>
+                            <Text
+                              fontSize={{ base: '11px', md: 'xs' }}
+                              fontWeight="600"
+                              color={payment.type === 'expense' ? '#E11D48' : '#059669'}
+                            >
+                              {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
+                            </Text>
+                          </Flex>
+                        ))}
+                        <Box pt={2} borderTop="1px solid #F4F4F5" mt={1}>
+                          <Flex justify="space-between">
+                            <Text fontSize={{ base: '11px', md: 'xs' }} color="#71717A">Total for day</Text>
+                            <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="700" color="#18181B">
+                              {formatCurrency(selectedCalendarPayments.reduce((sum, p) => {
+                                const amount = Number(p.amount);
+                                return sum + (p.type === 'expense' ? -amount : amount);
+                              }, 0))}
+                            </Text>
+                          </Flex>
+                        </Box>
+                      </VStack>
+                    ) : (
+                      <Flex
+                        direction="column"
+                        align="center"
+                        justify="center"
+                        h={{ base: 'auto', lg: '100%' }}
+                        minH={{ base: '80px', lg: '150px' }}
+                        py={{ base: 2, lg: 0 }}
+                        color="#A1A1AA"
+                      >
+                        <Text fontSize={{ base: 'xl', md: '2xl' }} mb={2}>📅</Text>
+                        <Text fontSize={{ base: 'xs', md: 'sm' }} textAlign="center">
+                          Tap a day with payments to see details
+                        </Text>
+                      </Flex>
+                    )}
+                  </Box>
+                </Flex>
               )}
             </Box>
           )}
