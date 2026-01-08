@@ -1285,9 +1285,16 @@ export default function Dashboard() {
                                 borderRadius="full"
                                 bg={getCategoryColor(payment.categories?.name)}
                               />
-                              <Text fontSize={{ base: '11px', md: 'xs' }} fontWeight="500" color={colors.textPrimary} noOfLines={1}>
-                                {payment.name}
-                              </Text>
+                              <Box>
+                                <Text fontSize={{ base: '11px', md: 'xs' }} fontWeight="500" color={colors.textPrimary} noOfLines={1}>
+                                  {payment.name}
+                                </Text>
+                                {payment.categories?.name && (
+                                  <Text fontSize={{ base: '10px', md: '11px' }} color={colors.textMuted} noOfLines={1}>
+                                    {payment.categories.name}
+                                  </Text>
+                                )}
+                              </Box>
                             </HStack>
                             <Text
                               fontSize={{ base: '11px', md: 'xs' }}
