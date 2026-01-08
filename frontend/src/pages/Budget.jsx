@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
+import { getPaymentDatesInRange } from '../lib/recurringUtils';
 
 // Circular Progress Ring Component
 const ProgressRing = ({ percent, size = 120, strokeWidth = 8, color = '#3B82F6' }) => {
@@ -194,10 +195,13 @@ export default function Budget() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [categoryTransactions, setCategoryTransactions] = useState([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [recurringPayments, setRecurringPayments] = useState([]);
+  const [forecastData, setForecastData] = useState([]);
 
   useEffect(() => {
     if (user) {
       loadCategories();
+      loadRecurringPayments();
     }
   }, [user]);
 
@@ -206,6 +210,113 @@ export default function Budget() {
       loadBudget();
     }
   }, [user, selectedMonth, categories]);
+
+  // Calculate forecast when budget data or recurring payments change
+  useEffect(() => {
+    if (budgetData.length > 0 && recurringPayments.length >= 0) {
+      calculateForecast();
+    }
+  }, [budgetData, recurringPayments, selectedMonth]);
+
+  const calculateForecast = () => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const today = new Date();
+    const endOfMonth = new Date(year, month, 0); // Last day of selected month
+
+    // Check if we're in the selected month
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
+
+    // Start date for forecast: today if current month, or start of month if future
+    let forecastStart;
+    if (isCurrentMonth) {
+      forecastStart = new Date(today);
+      forecastStart.setDate(forecastStart.getDate() + 1); // Start from tomorrow
+    } else if (today < new Date(year, month - 1, 1)) {
+      // Future month - forecast entire month
+      forecastStart = new Date(year, month - 1, 1);
+    } else {
+      // Past month - no forecast needed
+      setForecastData([]);
+      return;
+    }
+
+    // Calculate upcoming recurring payments by category
+    const upcomingByCategory = {};
+
+    for (const payment of recurringPayments) {
+      if (!payment.category_id) continue;
+
+      const dates = getPaymentDatesInRange(
+        payment.start_date,
+        payment.frequency,
+        forecastStart,
+        endOfMonth,
+        payment.end_date
+      );
+
+      const totalAmount = dates.length * Number(payment.amount);
+      if (totalAmount > 0) {
+        if (!upcomingByCategory[payment.category_id]) {
+          upcomingByCategory[payment.category_id] = {
+            amount: 0,
+            payments: [],
+          };
+        }
+        upcomingByCategory[payment.category_id].amount += totalAmount;
+        upcomingByCategory[payment.category_id].payments.push({
+          name: payment.name,
+          amount: Number(payment.amount),
+          occurrences: dates.length,
+          total: totalAmount,
+        });
+      }
+    }
+
+    // Build forecast data by merging with budget data
+    // Assume all budget limits will be spent (discretionary spending fills the rest)
+    const forecast = budgetData.map(item => {
+      const upcoming = upcomingByCategory[item.id] || { amount: 0, payments: [] };
+      const spentPlusUpcoming = item.spent + upcoming.amount;
+
+      // Projected spending: the greater of (spent + upcoming) or the full budget limit
+      // This assumes discretionary spending will use up the remaining budget
+      const projectedSpent = item.limit > 0
+        ? Math.max(spentPlusUpcoming, item.limit)
+        : spentPlusUpcoming;
+
+      const projectedRemaining = item.limit - projectedSpent;
+      const projectedPercent = item.limit > 0 ? (projectedSpent / item.limit) * 100 : 0;
+      const willExceed = item.limit > 0 && spentPlusUpcoming > item.limit;
+      const overAmount = willExceed ? spentPlusUpcoming - item.limit : 0;
+
+      // Calculate how much discretionary spending is assumed
+      const discretionaryAmount = item.limit > 0 && spentPlusUpcoming < item.limit
+        ? item.limit - spentPlusUpcoming
+        : 0;
+
+      return {
+        ...item,
+        upcomingAmount: upcoming.amount,
+        upcomingPayments: upcoming.payments,
+        projectedSpent,
+        projectedRemaining,
+        projectedPercent,
+        willExceed,
+        overAmount,
+        discretionaryAmount,
+        spentPlusUpcoming, // Track actual spending + recurring for clarity
+      };
+    });
+
+    // Sort: categories that will exceed budget first, then by projected percent
+    forecast.sort((a, b) => {
+      if (a.willExceed && !b.willExceed) return -1;
+      if (!a.willExceed && b.willExceed) return 1;
+      return b.projectedPercent - a.projectedPercent;
+    });
+
+    setForecastData(forecast);
+  };
 
   const loadCategories = async () => {
     try {
@@ -227,6 +338,22 @@ export default function Budget() {
     } catch (err) {
       setError('Failed to load categories: ' + err.message);
       setLoading(false);
+    }
+  };
+
+  const loadRecurringPayments = async () => {
+    try {
+      const { data, error: recError } = await supabase
+        .from('recurring_payments')
+        .select('*, categories(name)')
+        .eq('user_id', user.id)
+        .eq('type', 'expense')
+        .eq('is_active', true);
+
+      if (recError) throw recError;
+      setRecurringPayments(data || []);
+    } catch (err) {
+      console.error('Failed to load recurring payments:', err);
     }
   };
 
@@ -740,6 +867,255 @@ export default function Budget() {
                     ))}
                   </Box>
                 </Box>
+
+                {/* Forecast Section */}
+                {forecastData.length > 0 && totalLimit > 0 && (
+                  <Box>
+                    <Text
+                      fontSize="sm"
+                      fontWeight="600"
+                      textTransform="uppercase"
+                      letterSpacing="0.05em"
+                      color={colors.textMuted}
+                      mb={4}
+                    >
+                      End of Month Forecast
+                    </Text>
+
+                    {/* Forecast Summary Card */}
+                    {(() => {
+                      const totalUpcoming = forecastData.reduce((sum, f) => sum + f.upcomingAmount, 0);
+                      const totalDiscretionary = forecastData.reduce((sum, f) => sum + f.discretionaryAmount, 0);
+                      const totalProjected = forecastData.reduce((sum, f) => sum + f.projectedSpent, 0);
+                      const totalOverBudget = forecastData.reduce((sum, f) => sum + f.overAmount, 0);
+                      const projectedRemaining = totalLimit - totalProjected;
+                      const willExceedTotal = totalOverBudget > 0;
+                      const categoriesWillExceed = forecastData.filter(f => f.willExceed).length;
+
+                      return (
+                        <Box
+                          p={{ base: 4, md: 6 }}
+                          bg={willExceedTotal ? 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)' : 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)'}
+                          borderRadius="20px"
+                          color="white"
+                          position="relative"
+                          overflow="hidden"
+                          mb={4}
+                        >
+                          <Box
+                            position="absolute"
+                            top="-30%"
+                            right="-10%"
+                            w="200px"
+                            h="200px"
+                            bg="rgba(255,255,255,0.05)"
+                            borderRadius="full"
+                            pointerEvents="none"
+                          />
+                          <Flex
+                            direction={{ base: 'column', md: 'row' }}
+                            justify="space-between"
+                            align={{ base: 'stretch', md: 'center' }}
+                            gap={4}
+                            position="relative"
+                            zIndex={1}
+                          >
+                            <VStack align={{ base: 'center', md: 'flex-start' }} gap={1}>
+                              <Text
+                                fontSize="xs"
+                                fontWeight="600"
+                                textTransform="uppercase"
+                                letterSpacing="0.1em"
+                                color="rgba(255,255,255,0.7)"
+                              >
+                                Projected Total Spending
+                              </Text>
+                              <Text fontSize={{ base: '2xl', md: '3xl' }} fontWeight="800">
+                                {formatCurrency(totalProjected)}
+                              </Text>
+                              <HStack gap={2} flexWrap="wrap" justify={{ base: 'center', md: 'flex-start' }}>
+                                <Text fontSize="xs" color="rgba(255,255,255,0.8)">
+                                  Spent: {formatCurrency(totalSpent)}
+                                </Text>
+                                {totalUpcoming > 0 && (
+                                  <Text fontSize="xs" color="rgba(255,255,255,0.8)">
+                                    + Recurring: {formatCurrency(totalUpcoming)}
+                                  </Text>
+                                )}
+                                {totalDiscretionary > 0 && (
+                                  <Text fontSize="xs" color="rgba(255,255,255,0.8)">
+                                    + Other: {formatCurrency(totalDiscretionary)}
+                                  </Text>
+                                )}
+                              </HStack>
+                            </VStack>
+
+                            <VStack align={{ base: 'center', md: 'flex-end' }} gap={1}>
+                              <Text
+                                fontSize="xs"
+                                fontWeight="600"
+                                textTransform="uppercase"
+                                letterSpacing="0.1em"
+                                color="rgba(255,255,255,0.7)"
+                              >
+                                {willExceedTotal ? 'Over Budget By' : 'On Budget'}
+                              </Text>
+                              <Text
+                                fontSize={{ base: 'xl', md: '2xl' }}
+                                fontWeight="700"
+                                color={willExceedTotal ? '#FCA5A5' : '#A7F3D0'}
+                              >
+                                {willExceedTotal ? formatCurrency(totalOverBudget) : 'On Track'}
+                              </Text>
+                              {categoriesWillExceed > 0 && (
+                                <Text
+                                  fontSize="xs"
+                                  px={3}
+                                  py={1}
+                                  borderRadius="full"
+                                  bg="rgba(255,255,255,0.2)"
+                                  fontWeight="600"
+                                >
+                                  {categoriesWillExceed} categor{categoriesWillExceed === 1 ? 'y' : 'ies'} over
+                                </Text>
+                              )}
+                            </VStack>
+                          </Flex>
+                        </Box>
+                      );
+                    })()}
+
+                    {/* Categories with upcoming payments */}
+                    <Box
+                      display="grid"
+                      gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
+                      gap={3}
+                    >
+                      {forecastData.filter(f => f.limit > 0).map((item, index) => (
+                        <Box
+                          key={item.id}
+                          p={4}
+                          bg={colors.cardBg}
+                          borderRadius="16px"
+                          border="2px solid"
+                          borderColor={item.willExceed ? 'red.400' : item.projectedPercent > 80 ? 'yellow.400' : colors.borderSubtle}
+                          boxShadow={item.willExceed ? '0 0 20px rgba(239, 68, 68, 0.15)' : 'none'}
+                          style={{
+                            animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
+                          }}
+                        >
+                          <Flex justify="space-between" align="flex-start" mb={3}>
+                            <Box flex="1">
+                              <HStack gap={2} mb={1}>
+                                <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
+                                  {item.name}
+                                </Text>
+                                {item.willExceed && (
+                                  <Text
+                                    fontSize="10px"
+                                    fontWeight="700"
+                                    color="white"
+                                    bg="red.500"
+                                    px={2}
+                                    py={0.5}
+                                    borderRadius="full"
+                                  >
+                                    OVER
+                                  </Text>
+                                )}
+                              </HStack>
+                              <Text fontSize="xs" color={colors.textMuted}>
+                                Budget: {formatCurrency(item.limit)}
+                              </Text>
+                            </Box>
+                            <Box textAlign="right">
+                              <Text fontSize="lg" fontWeight="700" color={item.willExceed ? 'red.500' : colors.textPrimary}>
+                                {formatCurrency(item.projectedSpent)}
+                              </Text>
+                              <Text fontSize="xs" color={colors.textMuted}>
+                                projected
+                              </Text>
+                            </Box>
+                          </Flex>
+
+                          {/* Stacked Progress Bar */}
+                          <Box w="100%" h="8px" bg="#E5E7EB" borderRadius="full" overflow="hidden" mb={3}>
+                            {/* Current spending */}
+                            <Box
+                              h="100%"
+                              w={`${Math.min((item.spent / item.limit) * 100, 100)}%`}
+                              bg={item.willExceed ? '#EF4444' : item.projectedPercent > 80 ? '#F59E0B' : '#10B981'}
+                              borderRadius="full"
+                              position="relative"
+                            >
+                              {/* Upcoming portion (striped pattern) */}
+                              {item.upcomingAmount > 0 && (
+                                <Box
+                                  position="absolute"
+                                  right="0"
+                                  top="0"
+                                  transform="translateX(100%)"
+                                  h="100%"
+                                  w={`${Math.min((item.upcomingAmount / item.limit) * 100, 100 - (item.spent / item.limit) * 100)}%`}
+                                  bg={item.willExceed ? 'rgba(239, 68, 68, 0.5)' : 'rgba(139, 92, 246, 0.5)'}
+                                  borderRadius="0 4px 4px 0"
+                                  backgroundImage="repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)"
+                                />
+                              )}
+                            </Box>
+                          </Box>
+
+                          {/* Breakdown */}
+                          <VStack gap={1} align="stretch">
+                            <Flex justify="space-between" fontSize="xs">
+                              <Text color={colors.textMuted}>Current spent</Text>
+                              <Text color={colors.textSecondary} fontWeight="500">{formatCurrency(item.spent)}</Text>
+                            </Flex>
+                            {item.upcomingAmount > 0 && (
+                              <Flex justify="space-between" fontSize="xs">
+                                <Text color="purple.500" fontWeight="500">+ Recurring</Text>
+                                <Text color="purple.500" fontWeight="500">{formatCurrency(item.upcomingAmount)}</Text>
+                              </Flex>
+                            )}
+                            {item.discretionaryAmount > 0 && (
+                              <Flex justify="space-between" fontSize="xs">
+                                <Text color="blue.500" fontWeight="500">+ Other spending</Text>
+                                <Text color="blue.500" fontWeight="500">{formatCurrency(item.discretionaryAmount)}</Text>
+                              </Flex>
+                            )}
+                            {item.willExceed && (
+                              <Flex justify="space-between" fontSize="xs" pt={1} borderTop="1px dashed" borderColor={colors.borderSubtle}>
+                                <Text color="red.500" fontWeight="600">Over by</Text>
+                                <Text color="red.500" fontWeight="600">{formatCurrency(item.overAmount)}</Text>
+                              </Flex>
+                            )}
+                          </VStack>
+
+                          {/* Upcoming payment details */}
+                          {item.upcomingPayments.length > 0 && (
+                            <Box mt={3} pt={3} borderTop="1px solid" borderColor={colors.borderSubtle}>
+                              <Text fontSize="xs" fontWeight="600" color={colors.textMuted} mb={2}>
+                                Upcoming Payments
+                              </Text>
+                              <VStack gap={1} align="stretch">
+                                {item.upcomingPayments.map((p, idx) => (
+                                  <Flex key={idx} justify="space-between" fontSize="xs">
+                                    <Text color={colors.textSecondary}>
+                                      {p.name} {p.occurrences > 1 && `(×${p.occurrences})`}
+                                    </Text>
+                                    <Text color="purple.500" fontWeight="500">
+                                      {formatCurrency(p.total)}
+                                    </Text>
+                                  </Flex>
+                                ))}
+                              </VStack>
+                            </Box>
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
               </VStack>
             )}
           </Tabs.Content>
