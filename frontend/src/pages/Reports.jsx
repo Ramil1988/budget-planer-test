@@ -627,7 +627,7 @@ export default function Reports() {
         {/* Header */}
         <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
           <Box>
-            <Heading size="xl">Financial Report</Heading>
+            <Heading size="xl" color={colors.textPrimary}>Financial Report</Heading>
             <Text color={colors.textSecondary} mt={1}>Your yearly financial overview</Text>
           </Box>
           <HStack gap={2}>
@@ -793,12 +793,12 @@ export default function Reports() {
                       </Text>
                     </Table.Cell>
                     <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
-                      <Text color={row.income > 0 ? 'green.600' : 'gray.400'} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
+                      <Text color={row.income > 0 ? 'green.600' : colors.textMuted} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
                         {row.income > 0 ? formatCurrency(row.income) : '-'}
                       </Text>
                     </Table.Cell>
                     <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
-                      <Text color={row.expenses > 0 ? 'red.500' : 'gray.400'} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
+                      <Text color={row.expenses > 0 ? 'red.500' : colors.textMuted} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
                         {row.expenses > 0 ? formatCurrency(row.expenses) : '-'}
                       </Text>
                     </Table.Cell>

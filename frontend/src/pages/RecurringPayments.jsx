@@ -282,7 +282,7 @@ export default function RecurringPayments() {
           gap={3}
         >
           <Box>
-            <Heading size={{ base: 'lg', md: 'xl' }}>Recurring Payments</Heading>
+            <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Recurring Payments</Heading>
             <Text color={colors.textSecondary} mt={1} fontSize={{ base: 'sm', md: 'md' }}>Manage your recurring bills and income</Text>
           </Box>
           <Button
@@ -372,7 +372,7 @@ export default function RecurringPayments() {
             size="sm"
             variant="ghost"
             onClick={() => setShowInactive(!showInactive)}
-            color={showInactive ? 'blue.600' : 'gray.500'}
+            color={showInactive ? 'blue.600' : colors.textMuted}
             fontSize={{ base: 'xs', md: 'sm' }}
           >
             {showInactive ? 'Hide' : 'Show'} Inactive

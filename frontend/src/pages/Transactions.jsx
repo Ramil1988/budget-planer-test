@@ -315,7 +315,7 @@ export default function Transactions() {
       <VStack gap={4} align="stretch" w="100%">
           {/* Header */}
           <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
-            <Heading size={{ base: 'lg', md: 'xl' }}>Transactions</Heading>
+            <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Transactions</Heading>
             <HStack gap={2}>
               <Button
                 onClick={downloadCSV}

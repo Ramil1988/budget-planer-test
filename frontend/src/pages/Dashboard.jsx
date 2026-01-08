@@ -877,7 +877,7 @@ export default function Dashboard() {
         <Flex w="100%" minH="60vh" align="center" justify="center">
           <VStack gap={4}>
             <Spinner size="xl" color="blue.500" thickness="3px" />
-            <Text color="gray.500" fontWeight="500">Loading your dashboard...</Text>
+            <Text color={colors.textMuted} fontWeight="500">Loading your dashboard...</Text>
           </VStack>
         </Flex>
       </PageContainer>

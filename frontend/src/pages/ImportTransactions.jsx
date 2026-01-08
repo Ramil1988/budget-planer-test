@@ -433,7 +433,7 @@ export default function ImportTransactions() {
     <PageContainer>
       <VStack gap={8} align="stretch" w="100%">
           <Box>
-            <Heading size="2xl">Import Transactions</Heading>
+            <Heading size="2xl" color={colors.textPrimary}>Import Transactions</Heading>
             <Text color={colors.textSecondary} mt={2}>
               Connect your Google Sheet for automatic syncing or import from CSV
             </Text>
@@ -453,7 +453,7 @@ export default function ImportTransactions() {
 
         {/* Google Sheet Configuration */}
         <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
-          <Heading size="lg" mb={4}>
+          <Heading size="lg" mb={4} color={colors.textPrimary}>
             Google Sheet Connection
           </Heading>
           <Text color={colors.textSecondary} mb={6}>
@@ -510,7 +510,7 @@ export default function ImportTransactions() {
         {/* Auto-Sync Settings - Only show when sheet is connected */}
         {hasConnectedSheet && (
           <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
-            <Heading size="lg" mb={4}>
+            <Heading size="lg" mb={4} color={colors.textPrimary}>
               Auto-Sync Settings
             </Heading>
             <Text color={colors.textSecondary} mb={6}>
@@ -607,7 +607,7 @@ export default function ImportTransactions() {
 
         {/* Manual Import Section */}
         <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
-          <Heading size="lg" mb={4}>
+          <Heading size="lg" mb={4} color={colors.textPrimary}>
             Manual Import
           </Heading>
           <Text color={colors.textSecondary} mb={6}>
@@ -642,7 +642,7 @@ export default function ImportTransactions() {
           <>
             {/* Statistics */}
             <Box p={6} bg={colors.infoBg} borderRadius="lg">
-              <Heading size="md" mb={4}>
+              <Heading size="md" mb={4} color={colors.textPrimary}>
                 Import Summary
               </Heading>
               <VStack align="start" gap={2}>

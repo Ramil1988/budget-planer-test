@@ -217,7 +217,7 @@ export default function CategoryManager() {
     <PageContainer>
       <VStack gap={8} align="stretch" w="100%">
           <Box>
-            <Heading size="2xl">Category Manager</Heading>
+            <Heading size="2xl" color={colors.textPrimary}>Category Manager</Heading>
             <Text color={colors.textSecondary} mt={2}>
               Manage your expense and income categories
             </Text>
@@ -284,7 +284,7 @@ export default function CategoryManager() {
               borderColor={colors.borderColor}
               bg={colors.cardBg}
             >
-              <Heading size="md" mb={4}>Expense Categories</Heading>
+              <Heading size="md" mb={4} color={colors.textPrimary}>Expense Categories</Heading>
 
               {/* Category List */}
               <Box mb={6}>
@@ -490,7 +490,7 @@ export default function CategoryManager() {
             borderColor="green.200"
             bg={colors.cardBg}
           >
-            <Heading size="md" mb={4}>Income Categories</Heading>
+            <Heading size="md" mb={4} color={colors.textPrimary}>Income Categories</Heading>
             <Text color={colors.textSecondary} mb={4}>
               Manage your income categories and add income transactions
             </Text>

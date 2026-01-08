@@ -177,7 +177,7 @@ export default function AddTransaction() {
       <Box w="100%" maxW="800px" mx="auto">
         <VStack gap={6} align="stretch" w="100%">
           <Box>
-            <Heading size="xl">Add Transaction</Heading>
+            <Heading size="xl" color={colors.textPrimary}>Add Transaction</Heading>
             <Text color={colors.textSecondary} mt={1}>
               Record a new income or expense
             </Text>

@@ -655,7 +655,7 @@ export default function Budget() {
       <PageContainer>
         <Flex w="100%" minH="60vh" align="center" justify="center">
           <VStack gap={4} textAlign="center" p={6}>
-            <Heading size="lg">No Budget Categories</Heading>
+            <Heading size="lg" color={colors.textPrimary}>No Budget Categories</Heading>
             <Text color={colors.textSecondary}>
               You need to create expense categories first before setting up a budget.
             </Text>
@@ -673,7 +673,7 @@ export default function Budget() {
       <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
         {/* Header */}
         <Flex justify="space-between" align={{ base: 'stretch', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} wrap="wrap" gap={{ base: 3, md: 4 }}>
-          <Heading size={{ base: 'lg', md: 'xl' }}>Monthly Budget</Heading>
+          <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Monthly Budget</Heading>
           <Input
             type="month"
             value={selectedMonth}

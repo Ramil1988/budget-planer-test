@@ -94,7 +94,7 @@ export default function Settings() {
     <PageContainer>
       <VStack gap={8} align="stretch" w="100%">
         <Box>
-          <Heading size="2xl">Settings</Heading>
+          <Heading size="2xl" color={colors.textPrimary}>Settings</Heading>
           <Text color={colors.textSecondary} mt={2}>
             Manage your account settings
           </Text>
@@ -102,7 +102,7 @@ export default function Settings() {
 
         {/* Notifications Section */}
         <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
-          <Heading size="lg" mb={4}>
+          <Heading size="lg" mb={4} color={colors.textPrimary}>
             Push Notifications
           </Heading>
           <VStack align="stretch" gap={4}>
@@ -162,7 +162,7 @@ export default function Settings() {
 
         {/* Account Info */}
         <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
-          <Heading size="lg" mb={4}>
+          <Heading size="lg" mb={4} color={colors.textPrimary}>
             Account Information
           </Heading>
           <VStack align="start" gap={2}>
