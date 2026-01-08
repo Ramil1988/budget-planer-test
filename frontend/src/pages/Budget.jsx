@@ -273,26 +273,34 @@ export default function Budget() {
     }
 
     // Build forecast data by merging with budget data
-    // Assume all budget limits will be spent (discretionary spending fills the rest)
+    // Logic:
+    // - Categories WITH recurring payments: projected = spent + recurring (exact forecast)
+    // - Categories WITHOUT recurring payments: projected = budget limit (assume full budget usage)
     const forecast = budgetData.map(item => {
       const upcoming = upcomingByCategory[item.id] || { amount: 0, payments: [] };
+      const hasRecurring = upcoming.amount > 0;
       const spentPlusUpcoming = item.spent + upcoming.amount;
 
-      // Projected spending: the greater of (spent + upcoming) or the full budget limit
-      // This assumes discretionary spending will use up the remaining budget
-      const projectedSpent = item.limit > 0
-        ? Math.max(spentPlusUpcoming, item.limit)
-        : spentPlusUpcoming;
+      // Only add discretionary spending assumption for categories WITHOUT recurring payments
+      // Categories with recurring payments have predictable spending, no need to assume extra
+      let projectedSpent;
+      let discretionaryAmount = 0;
+
+      if (hasRecurring) {
+        // Has recurring: exact forecast (spent + upcoming recurring)
+        projectedSpent = spentPlusUpcoming;
+      } else {
+        // No recurring: assume full budget will be spent
+        projectedSpent = item.limit > 0 ? Math.max(item.spent, item.limit) : item.spent;
+        discretionaryAmount = item.limit > 0 && item.spent < item.limit
+          ? item.limit - item.spent
+          : 0;
+      }
 
       const projectedRemaining = item.limit - projectedSpent;
       const projectedPercent = item.limit > 0 ? (projectedSpent / item.limit) * 100 : 0;
-      const willExceed = item.limit > 0 && spentPlusUpcoming > item.limit;
-      const overAmount = willExceed ? spentPlusUpcoming - item.limit : 0;
-
-      // Calculate how much discretionary spending is assumed
-      const discretionaryAmount = item.limit > 0 && spentPlusUpcoming < item.limit
-        ? item.limit - spentPlusUpcoming
-        : 0;
+      const willExceed = item.limit > 0 && projectedSpent > item.limit;
+      const overAmount = willExceed ? projectedSpent - item.limit : 0;
 
       return {
         ...item,
@@ -304,7 +312,7 @@ export default function Budget() {
         willExceed,
         overAmount,
         discretionaryAmount,
-        spentPlusUpcoming, // Track actual spending + recurring for clarity
+        hasRecurring,
       };
     });
 
@@ -939,12 +947,12 @@ export default function Budget() {
                                 </Text>
                                 {totalUpcoming > 0 && (
                                   <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                    + Recurring: {formatCurrency(totalUpcoming)}
+                                    + Upcoming: {formatCurrency(totalUpcoming)}
                                   </Text>
                                 )}
                                 {totalDiscretionary > 0 && (
                                   <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                    + Other: {formatCurrency(totalDiscretionary)}
+                                    + Expected: {formatCurrency(totalDiscretionary)}
                                   </Text>
                                 )}
                               </HStack>
@@ -1039,48 +1047,63 @@ export default function Budget() {
                           </Flex>
 
                           {/* Stacked Progress Bar */}
-                          <Box w="100%" h="8px" bg="#E5E7EB" borderRadius="full" overflow="hidden" mb={3}>
-                            {/* Current spending */}
-                            <Box
-                              h="100%"
-                              w={`${Math.min((item.spent / item.limit) * 100, 100)}%`}
-                              bg={item.willExceed ? '#EF4444' : item.projectedPercent > 80 ? '#F59E0B' : '#10B981'}
-                              borderRadius="full"
-                              position="relative"
-                            >
-                              {/* Upcoming portion (striped pattern) */}
-                              {item.upcomingAmount > 0 && (
-                                <Box
-                                  position="absolute"
-                                  right="0"
-                                  top="0"
-                                  transform="translateX(100%)"
-                                  h="100%"
-                                  w={`${Math.min((item.upcomingAmount / item.limit) * 100, 100 - (item.spent / item.limit) * 100)}%`}
-                                  bg={item.willExceed ? 'rgba(239, 68, 68, 0.5)' : 'rgba(139, 92, 246, 0.5)'}
-                                  borderRadius="0 4px 4px 0"
-                                  backgroundImage="repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)"
-                                />
-                              )}
-                            </Box>
+                          <Box w="100%" h="10px" bg="#E5E7EB" borderRadius="full" overflow="hidden" mb={3} display="flex">
+                            {/* Current spending - solid */}
+                            {item.spent > 0 && item.limit > 0 && (
+                              <Box
+                                h="100%"
+                                w={`${Math.min((item.spent / item.limit) * 100, 100)}%`}
+                                bg={item.willExceed ? '#EF4444' : item.projectedPercent > 80 ? '#F59E0B' : '#10B981'}
+                                flexShrink={0}
+                              />
+                            )}
+                            {/* Upcoming recurring - striped purple */}
+                            {item.upcomingAmount > 0 && item.limit > 0 && (
+                              <Box
+                                h="100%"
+                                w={`${Math.min((item.upcomingAmount / item.limit) * 100, 100 - (item.spent / item.limit) * 100)}%`}
+                                bg={item.willExceed ? '#EF4444' : '#8B5CF6'}
+                                backgroundImage="repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 4px)"
+                                flexShrink={0}
+                              />
+                            )}
+                            {/* Discretionary (assumed) - dotted blue */}
+                            {item.discretionaryAmount > 0 && item.limit > 0 && (
+                              <Box
+                                h="100%"
+                                w={`${Math.min((item.discretionaryAmount / item.limit) * 100, 100)}%`}
+                                bg="#93C5FD"
+                                backgroundImage="repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(255,255,255,0.5) 3px, rgba(255,255,255,0.5) 6px)"
+                                flexShrink={0}
+                              />
+                            )}
                           </Box>
 
                           {/* Breakdown */}
                           <VStack gap={1} align="stretch">
                             <Flex justify="space-between" fontSize="xs">
-                              <Text color={colors.textMuted}>Current spent</Text>
+                              <HStack gap={2}>
+                                <Box w="8px" h="8px" borderRadius="sm" bg={item.willExceed ? '#EF4444' : '#10B981'} />
+                                <Text color={colors.textMuted}>Spent</Text>
+                              </HStack>
                               <Text color={colors.textSecondary} fontWeight="500">{formatCurrency(item.spent)}</Text>
                             </Flex>
                             {item.upcomingAmount > 0 && (
                               <Flex justify="space-between" fontSize="xs">
-                                <Text color="purple.500" fontWeight="500">+ Recurring</Text>
+                                <HStack gap={2}>
+                                  <Box w="8px" h="8px" borderRadius="sm" bg={item.willExceed ? '#EF4444' : '#8B5CF6'} backgroundImage="repeating-linear-gradient(45deg, transparent, transparent 1px, rgba(255,255,255,0.5) 1px, rgba(255,255,255,0.5) 2px)" />
+                                  <Text color="purple.500" fontWeight="500">Upcoming</Text>
+                                </HStack>
                                 <Text color="purple.500" fontWeight="500">{formatCurrency(item.upcomingAmount)}</Text>
                               </Flex>
                             )}
                             {item.discretionaryAmount > 0 && (
                               <Flex justify="space-between" fontSize="xs">
-                                <Text color="blue.500" fontWeight="500">+ Other spending</Text>
-                                <Text color="blue.500" fontWeight="500">{formatCurrency(item.discretionaryAmount)}</Text>
+                                <HStack gap={2}>
+                                  <Box w="8px" h="8px" borderRadius="sm" bg="#93C5FD" />
+                                  <Text color="blue.400" fontWeight="500">Expected</Text>
+                                </HStack>
+                                <Text color="blue.400" fontWeight="500">{formatCurrency(item.discretionaryAmount)}</Text>
                               </Flex>
                             )}
                             {item.willExceed && (
