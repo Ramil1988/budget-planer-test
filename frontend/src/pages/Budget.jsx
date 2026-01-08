@@ -230,8 +230,7 @@ export default function Budget() {
     // Start date for forecast: today if current month, or start of month if future
     let forecastStart;
     if (isCurrentMonth) {
-      forecastStart = new Date(today);
-      forecastStart.setDate(forecastStart.getDate() + 1); // Start from tomorrow
+      forecastStart = new Date(today); // Include today's recurring payments
     } else if (today < new Date(year, month - 1, 1)) {
       // Future month - forecast entire month
       forecastStart = new Date(year, month - 1, 1);
