@@ -70,7 +70,12 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
 
     // Calculate next date by adding days to start date
     nextDate = new Date(start);
-    nextDate.setDate(start.getDate() + (periodsElapsed + 1) * config.days);
+    nextDate.setDate(start.getDate() + periodsElapsed * config.days);
+
+    // If this date is in the past, move to next period (keep today's payments)
+    if (nextDate < from) {
+      nextDate.setDate(nextDate.getDate() + config.days);
+    }
   } else if (config.months) {
     // Month-based frequencies (monthly, quarterly, yearly)
     const monthsDiff = (from.getFullYear() - start.getFullYear()) * 12 +
@@ -82,8 +87,8 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
     const targetMonths = (periodsElapsed + 1) * config.months;
     nextDate.setMonth(start.getMonth() + targetMonths);
 
-    // If this date is still in the past or today, add one more period
-    if (nextDate <= from) {
+    // If this date is still in the past, add one more period (keep today's payments)
+    if (nextDate < from) {
       nextDate.setMonth(nextDate.getMonth() + config.months);
     }
   }
