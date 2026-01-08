@@ -1,8 +1,13 @@
 import { Box, Flex, Text } from '@chakra-ui/react'
+import { useColorModeValue } from './ui/color-mode'
 
 function Footer() {
+  const bgColor = useColorModeValue('#18181B', '#09090B')
+  const borderColor = useColorModeValue('#27272A', '#18181B')
+  const mutedColor = useColorModeValue('#A1A1AA', '#71717A')
+
   return (
-    <Box as="footer" bg="gray.800" color="white" w="100%">
+    <Box as="footer" bg={bgColor} borderTop="1px solid" borderColor={borderColor} color="white" w="100%">
       <Flex
         maxW="1200px"
         mx="auto"
@@ -18,12 +23,12 @@ function Footer() {
           <Text fontSize="md" fontWeight="bold">
             BudgetWise
           </Text>
-          <Text color="gray.400" fontSize="sm" ml={2}>
+          <Text color={mutedColor} fontSize="sm" ml={2}>
             A simple, effective budget tracking tool.
           </Text>
         </Flex>
 
-        <Text color="gray.400" fontSize="sm">
+        <Text color={mutedColor} fontSize="sm">
           &copy; 2025 BudgetWise. All rights reserved.
         </Text>
       </Flex>

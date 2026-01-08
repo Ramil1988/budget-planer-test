@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 import {
   getNextPaymentDate,
   getUpcomingPayments,
@@ -57,6 +58,7 @@ const getCategoryColor = (categoryName) => {
 
 export default function RecurringPayments() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -281,7 +283,7 @@ export default function RecurringPayments() {
         >
           <Box>
             <Heading size={{ base: 'lg', md: 'xl' }}>Recurring Payments</Heading>
-            <Text color="gray.500" mt={1} fontSize={{ base: 'sm', md: 'md' }}>Manage your recurring bills and income</Text>
+            <Text color={colors.textSecondary} mt={1} fontSize={{ base: 'sm', md: 'md' }}>Manage your recurring bills and income</Text>
           </Box>
           <Button
             onClick={openCreateModal}
@@ -300,13 +302,13 @@ export default function RecurringPayments() {
 
         {/* Success/Error Messages */}
         {success && (
-          <Box p={3} bg="green.50" borderColor="green.500" borderWidth="1px" borderRadius="md">
-            <Text color="green.700" fontWeight="medium">{success}</Text>
+          <Box p={3} bg={colors.successBg} borderColor={colors.successBorder} borderWidth="1px" borderRadius="md">
+            <Text color={colors.success} fontWeight="medium">{success}</Text>
           </Box>
         )}
         {error && (
-          <Box p={3} bg="red.50" borderColor="red.500" borderWidth="1px" borderRadius="md">
-            <Text color="red.700" fontWeight="medium">{error}</Text>
+          <Box p={3} bg={colors.dangerBg} borderColor={colors.dangerBorder} borderWidth="1px" borderRadius="md">
+            <Text color={colors.danger} fontWeight="medium">{error}</Text>
           </Box>
         )}
 
@@ -382,12 +384,12 @@ export default function RecurringPayments() {
           <Box
             p={8}
             borderRadius="16px"
-            bg="white"
+            bg={colors.cardBg}
             boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid #F3F4F6"
+            border="1px solid" borderColor={colors.borderSubtle}
             textAlign="center"
           >
-            <Text fontSize="lg" color="gray.500" mb={4}>
+            <Text fontSize="lg" color={colors.textMuted} mb={4}>
               No {activeTab} recurring payments yet
             </Text>
             <Button onClick={openCreateModal} colorPalette="blue">
@@ -405,9 +407,9 @@ export default function RecurringPayments() {
                   key={payment.id}
                   p={{ base: 3, md: 4 }}
                   borderRadius={{ base: '12px', md: '16px' }}
-                  bg="white"
+                  bg={colors.cardBg}
                   boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-                  border="1px solid #F3F4F6"
+                  border="1px solid" borderColor={colors.borderSubtle}
                   opacity={payment.is_active ? 1 : 0.6}
                   _hover={{ boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   transition="all 0.2s"
@@ -420,7 +422,7 @@ export default function RecurringPayments() {
                           w="36px"
                           h="36px"
                           borderRadius="10px"
-                          bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
+                          bg={payment.type === 'expense' ? colors.expenseIconBg : colors.incomeIconBg}
                           display="flex"
                           alignItems="center"
                           justifyContent="center"
@@ -435,7 +437,7 @@ export default function RecurringPayments() {
                         </Box>
                         <Box>
                           <HStack gap={1} mb={0.5}>
-                            <Text fontWeight="600" fontSize="sm" color="#18181B">
+                            <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
                               {payment.name}
                             </Text>
                             {!payment.is_active && (
@@ -446,11 +448,11 @@ export default function RecurringPayments() {
                             <Badge colorPalette={payment.type === 'expense' ? 'red' : 'green'} variant="subtle" fontSize="10px">
                               {payment.categories?.name || 'Uncategorized'}
                             </Badge>
-                            <Text fontSize="10px" color="gray.500">
+                            <Text fontSize="10px" color={colors.textMuted}>
                               {formatFrequency(payment.frequency)}
                             </Text>
                             {payment.end_date && (
-                              <Text fontSize="10px" color="gray.400">
+                              <Text fontSize="10px" color={colors.textMuted}>
                                 until {formatDate(payment.end_date)}
                               </Text>
                             )}
@@ -476,7 +478,7 @@ export default function RecurringPayments() {
                         )}
                       </Box>
                     </Flex>
-                    <Flex gap={1} justify="flex-end" pt={2} borderTop="1px solid #F4F4F5">
+                    <Flex gap={1} justify="flex-end" pt={2} borderTop="1px solid" borderColor={colors.borderSubtle}>
                       <Button
                         size="xs"
                         variant="ghost"
@@ -516,7 +518,7 @@ export default function RecurringPayments() {
                         w="48px"
                         h="48px"
                         borderRadius="12px"
-                        bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
+                        bg={payment.type === 'expense' ? colors.expenseIconBg : colors.incomeIconBg}
                         display="flex"
                         alignItems="center"
                         justifyContent="center"
@@ -530,7 +532,7 @@ export default function RecurringPayments() {
                       </Box>
                       <Box>
                         <HStack gap={2} mb={1}>
-                          <Text fontWeight="600" fontSize="md" color="#18181B">
+                          <Text fontWeight="600" fontSize="md" color={colors.textPrimary}>
                             {payment.name}
                           </Text>
                           {!payment.is_active && (
@@ -541,11 +543,11 @@ export default function RecurringPayments() {
                           <Badge colorPalette={payment.type === 'expense' ? 'red' : 'green'} variant="subtle">
                             {payment.categories?.name || 'Uncategorized'}
                           </Badge>
-                          <Text fontSize="xs" color="gray.500">
+                          <Text fontSize="xs" color={colors.textMuted}>
                             {formatFrequency(payment.frequency)}
                           </Text>
                           {payment.end_date && (
-                            <Text fontSize="xs" color="gray.400">
+                            <Text fontSize="xs" color={colors.textMuted}>
                               until {formatDate(payment.end_date)}
                             </Text>
                           )}
@@ -572,7 +574,7 @@ export default function RecurringPayments() {
                           </Text>
                         )}
                         {!nextDate && payment.is_active && (
-                          <Text fontSize="xs" color="gray.400">Ended</Text>
+                          <Text fontSize="xs" color={colors.textMuted}>Ended</Text>
                         )}
                       </Box>
 
@@ -614,11 +616,11 @@ export default function RecurringPayments() {
           <Box
             p={{ base: 3, md: 5 }}
             borderRadius={{ base: '12px', md: '16px' }}
-            bg="white"
+            bg={colors.cardBg}
             boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid #F3F4F6"
+            border="1px solid" borderColor={colors.borderSubtle}
           >
-            <Heading size={{ base: 'sm', md: 'md' }} mb={{ base: 3, md: 4 }} color="#18181B">Next 30 Days</Heading>
+            <Heading size={{ base: 'sm', md: 'md' }} mb={{ base: 3, md: 4 }} color={colors.textPrimary}>Next 30 Days</Heading>
             <VStack gap={{ base: 1, md: 2 }} align="stretch" maxH="300px" overflowY="auto">
               {upcomingPayments.slice(0, 10).map((payment, index) => (
                 <Flex
@@ -627,7 +629,7 @@ export default function RecurringPayments() {
                   justify="space-between"
                   p={{ base: 2, md: 3 }}
                   borderRadius={{ base: '8px', md: '10px' }}
-                  bg={payment.daysUntil === 0 ? '#FEF2F2' : payment.daysUntil <= 3 ? '#FFFBEB' : '#F9FAFB'}
+                  bg={payment.daysUntil === 0 ? colors.itemDueTodayBg : payment.daysUntil <= 3 ? colors.itemDueSoonBg : colors.rowStripedBg}
                 >
                   <HStack gap={{ base: 2, md: 3 }}>
                     <Box
@@ -638,8 +640,8 @@ export default function RecurringPayments() {
                       flexShrink={0}
                     />
                     <Box>
-                      <Text fontWeight="500" fontSize={{ base: 'xs', md: 'sm' }}>{payment.name}</Text>
-                      <Text fontSize={{ base: '10px', md: 'xs' }} color="gray.500">
+                      <Text fontWeight="500" fontSize={{ base: 'xs', md: 'sm' }} color={colors.textPrimary}>{payment.name}</Text>
+                      <Text fontSize={{ base: '10px', md: 'xs' }} color={colors.textMuted}>
                         {formatDate(payment.nextDate)}
                       </Text>
                     </Box>
@@ -665,7 +667,7 @@ export default function RecurringPayments() {
           <Dialog.Backdrop bg="blackAlpha.600" />
           <Dialog.Positioner>
             <Dialog.Content
-              bg="white"
+              bg={colors.cardBg}
               borderRadius="20px"
               p={0}
               maxW="500px"
@@ -691,7 +693,7 @@ export default function RecurringPayments() {
                   <VStack gap={4} align="stretch">
                     {/* Type Toggle */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Type</Text>
+                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Type</Text>
                       <HStack gap={2}>
                         <Button
                           flex={1}
@@ -716,18 +718,21 @@ export default function RecurringPayments() {
 
                     {/* Name */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Name *</Text>
+                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Name *</Text>
                       <Input
                         placeholder="e.g., Netflix, Mortgage, Salary"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
+                        bg={colors.cardBg}
+                        borderColor={colors.borderColor}
+                        color={colors.textPrimary}
                       />
                     </Box>
 
                     {/* Amount */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Amount *</Text>
+                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Amount *</Text>
                       <Input
                         type="number"
                         step="0.01"
@@ -736,12 +741,15 @@ export default function RecurringPayments() {
                         value={formData.amount}
                         onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                         required
+                        bg={colors.cardBg}
+                        borderColor={colors.borderColor}
+                        color={colors.textPrimary}
                       />
                     </Box>
 
                     {/* Category */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Category</Text>
+                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Category</Text>
                       <select
                         value={formData.category_id}
                         onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
@@ -749,8 +757,9 @@ export default function RecurringPayments() {
                           padding: '10px 14px',
                           fontSize: '14px',
                           borderRadius: '8px',
-                          border: '1px solid #E4E4E7',
-                          backgroundColor: 'white',
+                          border: `1px solid ${colors.borderColor}`,
+                          backgroundColor: colors.cardBg,
+                          color: colors.textPrimary,
                           width: '100%',
                           cursor: 'pointer',
                         }}
@@ -766,7 +775,7 @@ export default function RecurringPayments() {
 
                     {/* Frequency */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Frequency *</Text>
+                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Frequency *</Text>
                       <select
                         value={formData.frequency}
                         onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
@@ -774,8 +783,9 @@ export default function RecurringPayments() {
                           padding: '10px 14px',
                           fontSize: '14px',
                           borderRadius: '8px',
-                          border: '1px solid #E4E4E7',
-                          backgroundColor: 'white',
+                          border: `1px solid ${colors.borderColor}`,
+                          backgroundColor: colors.cardBg,
+                          color: colors.textPrimary,
                           width: '100%',
                           cursor: 'pointer',
                         }}
@@ -792,32 +802,41 @@ export default function RecurringPayments() {
                     {/* Dates */}
                     <SimpleGrid columns={2} gap={4}>
                       <Box>
-                        <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Start Date *</Text>
+                        <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Start Date *</Text>
                         <Input
                           type="date"
                           value={formData.start_date}
                           onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                           required
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
                         />
                       </Box>
                       <Box>
-                        <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">End Date</Text>
+                        <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>End Date</Text>
                         <Input
                           type="date"
                           value={formData.end_date}
                           onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                           placeholder="Optional"
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
                         />
                       </Box>
                     </SimpleGrid>
 
                     {/* Notes */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color="gray.700">Notes</Text>
+                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Notes</Text>
                       <Input
                         placeholder="Optional notes..."
                         value={formData.notes}
                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        bg={colors.cardBg}
+                        borderColor={colors.borderColor}
+                        color={colors.textPrimary}
                       />
                     </Box>
 

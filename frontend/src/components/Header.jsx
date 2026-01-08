@@ -11,12 +11,27 @@ import {
   Heading,
 } from '@chakra-ui/react'
 import { useAuth } from '../contexts/AuthContext'
+import { ColorModeButton, useColorModeValue } from './ui/color-mode'
 
 function Header() {
   const { open, onToggle } = useDisclosure()
   const location = useLocation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+
+  // Dark mode colors
+  const headerBg = useColorModeValue('rgba(255, 255, 255, 0.9)', 'rgba(24, 24, 27, 0.95)')
+  const borderColor = useColorModeValue('#F4F4F5', '#27272A')
+  const logoTextColor = useColorModeValue('#18181B', '#FAFAFA')
+  const navColor = useColorModeValue('#52525B', '#A1A1AA')
+  const navActiveColor = useColorModeValue('#2563EB', '#60A5FA')
+  const navActiveBg = useColorModeValue('#EFF6FF', 'rgba(59, 130, 246, 0.15)')
+  const navHoverBg = useColorModeValue('#EFF6FF', 'rgba(59, 130, 246, 0.1)')
+  const mobileBg = useColorModeValue('white', '#18181B')
+  const signOutBg = useColorModeValue('white', '#27272A')
+  const signOutBorder = useColorModeValue('#E4E4E7', '#3F3F46')
+  const signOutHoverBg = useColorModeValue('#FAFAFA', '#3F3F46')
+  const hamburgerColor = useColorModeValue('#52525B', '#A1A1AA')
 
   const isActive = (path) => {
     return location.pathname === path
@@ -37,11 +52,11 @@ function Header() {
       borderRadius="8px"
       fontWeight="500"
       fontSize="14px"
-      color={isActive(to) ? '#2563EB' : '#52525B'}
-      bg={isActive(to) ? '#EFF6FF' : 'transparent'}
+      color={isActive(to) ? navActiveColor : navColor}
+      bg={isActive(to) ? navActiveBg : 'transparent'}
       _hover={{
-        color: '#2563EB',
-        bg: '#EFF6FF',
+        color: navActiveColor,
+        bg: navHoverBg,
       }}
       transition="all 0.15s"
     >
@@ -52,10 +67,10 @@ function Header() {
   return (
     <Box
       as="header"
-      bg="rgba(255, 255, 255, 0.9)"
+      bg={headerBg}
       backdropFilter="blur(12px)"
       borderBottom="1px solid"
-      borderColor="#F4F4F5"
+      borderColor={borderColor}
       position="sticky"
       top="0"
       zIndex="100"
@@ -93,7 +108,7 @@ function Header() {
             size="md"
             fontFamily="'Plus Jakarta Sans', sans-serif"
             fontWeight="700"
-            color="#18181B"
+            color={logoTextColor}
             letterSpacing="-0.02em"
           >
             BudgetWise
@@ -116,8 +131,9 @@ function Header() {
           )}
         </HStack>
 
-        {/* Desktop Auth Button */}
+        {/* Desktop Auth Button + Dark Mode Toggle */}
         <HStack gap={3} display={{ base: 'none', md: 'flex' }}>
+          <ColorModeButton />
           {!user && (
             <Button
               as={RouterLink}
@@ -141,12 +157,13 @@ function Header() {
             <Button
               onClick={handleSignOut}
               size="sm"
-              bg="white"
-              color="#52525B"
+              bg={signOutBg}
+              color={navColor}
               fontWeight="500"
               borderRadius="8px"
-              border="1px solid #E4E4E7"
-              _hover={{ bg: '#FAFAFA', borderColor: '#D4D4D8' }}
+              border="1px solid"
+              borderColor={signOutBorder}
+              _hover={{ bg: signOutHoverBg, borderColor: signOutBorder }}
               transition="all 0.15s"
             >
               Sign Out
@@ -154,54 +171,57 @@ function Header() {
           )}
         </HStack>
 
-        {/* Mobile Menu Button */}
-        <IconButton
-          display={{ base: 'flex', md: 'none' }}
-          onClick={onToggle}
-          variant="ghost"
-          aria-label="Toggle navigation"
-          size="sm"
-          borderRadius="8px"
-          _hover={{ bg: '#F4F4F5' }}
-        >
-          <Box
-            as="span"
-            display="flex"
-            flexDirection="column"
-            gap="4px"
-            w="18px"
+        {/* Mobile: Dark Mode + Menu Button */}
+        <HStack gap={1} display={{ base: 'flex', md: 'none' }}>
+          <ColorModeButton />
+          <IconButton
+            onClick={onToggle}
+            variant="ghost"
+            aria-label="Toggle navigation"
+            size="sm"
+            borderRadius="8px"
+            _hover={{ bg: navHoverBg }}
           >
             <Box
-              h="2px"
-              bg="#52525B"
-              borderRadius="full"
-              transform={open ? 'rotate(45deg) translateY(6px)' : 'none'}
-              transition="all 0.2s"
-            />
-            <Box
-              h="2px"
-              bg="#52525B"
-              borderRadius="full"
-              opacity={open ? 0 : 1}
-              transition="all 0.2s"
-            />
-            <Box
-              h="2px"
-              bg="#52525B"
-              borderRadius="full"
-              transform={open ? 'rotate(-45deg) translateY(-6px)' : 'none'}
-              transition="all 0.2s"
-            />
-          </Box>
-        </IconButton>
+              as="span"
+              display="flex"
+              flexDirection="column"
+              gap="4px"
+              w="18px"
+            >
+              <Box
+                h="2px"
+                bg={hamburgerColor}
+                borderRadius="full"
+                transform={open ? 'rotate(45deg) translateY(6px)' : 'none'}
+                transition="all 0.2s"
+              />
+              <Box
+                h="2px"
+                bg={hamburgerColor}
+                borderRadius="full"
+                opacity={open ? 0 : 1}
+                transition="all 0.2s"
+              />
+              <Box
+                h="2px"
+                bg={hamburgerColor}
+                borderRadius="full"
+                transform={open ? 'rotate(-45deg) translateY(-6px)' : 'none'}
+                transition="all 0.2s"
+              />
+            </Box>
+          </IconButton>
+        </HStack>
       </Flex>
 
       {/* Mobile Navigation */}
       {open && (
         <Box
           display={{ base: 'block', md: 'none' }}
-          bg="white"
-          borderTop="1px solid #F4F4F5"
+          bg={mobileBg}
+          borderTop="1px solid"
+          borderColor={borderColor}
           shadow="lg"
         >
           <Stack maxW="1200px" mx="auto" px={8} py={4} gap={1}>
@@ -225,31 +245,31 @@ function Header() {
             )}
             {user && (
               <>
-                <MobileNavLink to="/dashboard" active={isActive('/dashboard')} onClick={onToggle}>
+                <MobileNavLink to="/dashboard" active={isActive('/dashboard')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Dashboard
                 </MobileNavLink>
-                <MobileNavLink to="/budget" active={isActive('/budget')} onClick={onToggle}>
+                <MobileNavLink to="/budget" active={isActive('/budget')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Budget
                 </MobileNavLink>
-                <MobileNavLink to="/recurring" active={isActive('/recurring')} onClick={onToggle}>
+                <MobileNavLink to="/recurring" active={isActive('/recurring')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Recurring
                 </MobileNavLink>
-                <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle}>
+                <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Report
                 </MobileNavLink>
-                <MobileNavLink to="/transactions" active={isActive('/transactions')} onClick={onToggle}>
+                <MobileNavLink to="/transactions" active={isActive('/transactions')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Transactions
                 </MobileNavLink>
-                <MobileNavLink to="/import" active={isActive('/import')} onClick={onToggle}>
+                <MobileNavLink to="/import" active={isActive('/import')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Import
                 </MobileNavLink>
-                <MobileNavLink to="/categories" active={isActive('/categories')} onClick={onToggle}>
+                <MobileNavLink to="/categories" active={isActive('/categories')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Categories
                 </MobileNavLink>
-                <MobileNavLink to="/settings" active={isActive('/settings')} onClick={onToggle}>
+                <MobileNavLink to="/settings" active={isActive('/settings')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Settings
                 </MobileNavLink>
-                <Box pt={3} borderTop="1px solid #F4F4F5" mt={2}>
+                <Box pt={3} borderTop="1px solid" borderColor={borderColor} mt={2}>
                   <Button
                     onClick={() => {
                       handleSignOut()
@@ -257,11 +277,11 @@ function Header() {
                     }}
                     w="100%"
                     size="md"
-                    bg="#FAFAFA"
-                    color="#52525B"
+                    bg={signOutHoverBg}
+                    color={navColor}
                     fontWeight="500"
                     borderRadius="10px"
-                    _hover={{ bg: '#F4F4F5' }}
+                    _hover={{ bg: navHoverBg }}
                   >
                     Sign Out
                   </Button>
@@ -275,7 +295,7 @@ function Header() {
   )
 }
 
-const MobileNavLink = ({ to, children, active, onClick }) => (
+const MobileNavLink = ({ to, children, active, onClick, colors }) => (
   <Box
     as={RouterLink}
     to={to}
@@ -286,11 +306,11 @@ const MobileNavLink = ({ to, children, active, onClick }) => (
     borderRadius="10px"
     fontWeight="500"
     fontSize="14px"
-    color={active ? '#2563EB' : '#52525B'}
-    bg={active ? '#EFF6FF' : 'transparent'}
+    color={active ? colors.navActiveColor : colors.navColor}
+    bg={active ? colors.navActiveBg : 'transparent'}
     _hover={{
-      bg: '#EFF6FF',
-      color: '#2563EB',
+      bg: colors.navHoverBg,
+      color: colors.navActiveColor,
     }}
     transition="all 0.15s"
   >

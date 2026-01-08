@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { getUpcomingPayments, formatFrequency, getPaymentDatesInRange } from '../lib/recurringUtils';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 // Category color mapping for visual distinction
 const categoryColors = {
@@ -46,6 +47,7 @@ const getCategoryColor = (name) => categoryColors[name] || categoryColors.defaul
 
 // Donut Chart Component with hover effects
 const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, onHoverCategory }) => {
+  const colors = useDarkModeColors();
   const strokeWidth = 35;
   const hoverExpand = 8; // Extra space for hover effect
   const padding = hoverExpand; // Padding to prevent clipping on hover
@@ -124,19 +126,19 @@ const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, 
             <Text fontSize="10px" color={hoveredSegment.color} fontWeight="600" mb={0.5} noOfLines={1} maxW="90px">
               {hoveredSegment.name}
             </Text>
-            <Text fontSize="lg" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
+            <Text fontSize="lg" fontWeight="800" color={colors.textPrimary} letterSpacing="-0.02em">
               {formatCurrency ? formatCurrency(hoveredSegment.spent) : `$${hoveredSegment.spent.toFixed(0)}`}
             </Text>
-            <Text fontSize="10px" color="#71717A" fontWeight="600">
+            <Text fontSize="10px" color={colors.textMuted} fontWeight="600">
               {hoveredSegment.percent.toFixed(0)}%
             </Text>
           </>
         ) : (
           <>
-            <Text fontSize="xs" color="#71717A" fontWeight="500" mb={0.5}>
+            <Text fontSize="xs" color={colors.textMuted} fontWeight="500" mb={0.5}>
               Total Spent
             </Text>
-            <Text fontSize="xl" fontWeight="800" color="#18181B" letterSpacing="-0.02em">
+            <Text fontSize="xl" fontWeight="800" color={colors.textPrimary} letterSpacing="-0.02em">
               {formatCurrency ? formatCurrency(total) : `$${total.toFixed(0)}`}
             </Text>
           </>
@@ -148,6 +150,7 @@ const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, 
 
 // Weekly Spending Bar Chart Component
 const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selectedDayIndex, onDayClick }) => {
+  const colors = useDarkModeColors();
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const barHeight = 100;
 
@@ -182,7 +185,7 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
               <Text
                 fontSize="xs"
                 fontWeight="600"
-                color={hasSpending ? '#18181B' : '#A1A1AA'}
+                color={hasSpending ? colors.textPrimary : colors.textMuted}
                 h="16px"
               >
                 {hasSpending ? `$${amount.toFixed(0)}` : ''}
@@ -191,7 +194,7 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
                 w="100%"
                 maxW="40px"
                 h={`${barHeight - 20}px`}
-                bg="#F4F4F5"
+                bg={colors.rowStripedBg}
                 borderRadius="8px"
                 overflow="hidden"
                 position="relative"
@@ -217,7 +220,7 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
               <Text
                 fontSize="xs"
                 fontWeight={isToday || isSelected ? '700' : '500'}
-                color={isToday ? '#2563EB' : isSelected ? '#18181B' : '#71717A'}
+                color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textMuted}
               >
                 {day}
               </Text>
@@ -225,7 +228,7 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
               <Text
                 fontSize="10px"
                 fontWeight="500"
-                color="#A1A1AA"
+                color={colors.textMuted}
                 mt={-1}
               >
                 {dateNum}
@@ -240,6 +243,7 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
 
 // Monthly Spending Bar Chart Component
 const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, formatCurrency }) => {
+  const colors = useDarkModeColors();
   const barHeight = 80;
   const maxAmount = Math.max(...dailyData, 1);
   const [year, month] = selectedMonth.split('-').map(Number);
@@ -282,7 +286,7 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
                   w="100%"
                   maxW="20px"
                   h={`${barHeight}px`}
-                  bg="#F4F4F5"
+                  bg={colors.rowStripedBg}
                   borderRadius="4px"
                   overflow="hidden"
                   position="relative"
@@ -307,7 +311,7 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
                 <Text
                   fontSize="9px"
                   fontWeight={isToday || isSelected ? '700' : '500'}
-                  color={isToday ? '#2563EB' : isSelected ? '#18181B' : '#A1A1AA'}
+                  color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textMuted}
                 >
                   {dayNum}
                 </Text>
@@ -322,6 +326,7 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
 
 // Mini Calendar Component for Upcoming Payments
 const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurrency }) => {
+  const colors = useDarkModeColors();
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -431,7 +436,7 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
           size="xs"
           variant="ghost"
           onClick={goToPrevMonth}
-          color="#71717A"
+          color={colors.textMuted}
           _hover={{ bg: '#F4F4F5' }}
           p={1}
           minW={{ base: '28px', md: '32px' }}
@@ -439,14 +444,14 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
         >
           ←
         </Button>
-        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="#18181B">
+        <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color={colors.textPrimary}>
           {monthNames[viewMonth]} {viewYear}
         </Text>
         <Button
           size="xs"
           variant="ghost"
           onClick={goToNextMonth}
-          color="#71717A"
+          color={colors.textMuted}
           _hover={{ bg: '#F4F4F5' }}
           p={1}
           minW={{ base: '28px', md: '32px' }}
@@ -460,7 +465,7 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
       <SimpleGrid columns={7} gap={{ base: 0, md: 1 }} mb={1}>
         {dayNames.map((day, idx) => (
           <Box key={day} textAlign="center" py={{ base: 1, md: 2 }}>
-            <Text fontSize={{ base: '10px', md: 'xs' }} fontWeight="600" color="#A1A1AA">
+            <Text fontSize={{ base: '10px', md: 'xs' }} fontWeight="600" color={colors.textMuted}>
               <Box as="span" display={{ base: 'inline', md: 'none' }}>{shortDayNames[idx]}</Box>
               <Box as="span" display={{ base: 'none', md: 'inline' }}>{day}</Box>
             </Text>
@@ -520,14 +525,14 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
                 }
                 color={
                   !item.isCurrentMonth
-                    ? '#D4D4D8'
+                    ? colors.textMuted
                     : isPast
-                      ? '#A1A1AA'
+                      ? colors.textMuted
                       : isToday(item.day)
-                        ? '#2563EB'
+                        ? colors.primary
                         : hasPayments
-                          ? '#18181B'
-                          : '#52525B'
+                          ? '#18181B' // Always dark text on colored backgrounds
+                          : colors.textSecondary
                 }
                 mb={{ base: 0.5, md: 1 }}
               >
@@ -553,11 +558,11 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
       <Flex justify="center" gap={{ base: 3, md: 4 }} mt={{ base: 2, md: 3 }} pt={2} borderTop="1px solid #F4F4F5">
         <HStack gap={1}>
           <Box w={{ base: '5px', md: '6px' }} h={{ base: '5px', md: '6px' }} borderRadius="full" bg="#E11D48" />
-          <Text fontSize={{ base: '9px', md: '10px' }} color="#71717A">Expense</Text>
+          <Text fontSize={{ base: '9px', md: '10px' }} color={colors.textMuted}>Expense</Text>
         </HStack>
         <HStack gap={1}>
           <Box w={{ base: '5px', md: '6px' }} h={{ base: '5px', md: '6px' }} borderRadius="full" bg="#059669" />
-          <Text fontSize={{ base: '9px', md: '10px' }} color="#71717A">Income</Text>
+          <Text fontSize={{ base: '9px', md: '10px' }} color={colors.textMuted}>Income</Text>
         </HStack>
       </Flex>
     </Box>
@@ -566,6 +571,7 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -892,12 +898,12 @@ export default function Dashboard() {
             <Box>
               <Heading
                 size={{ base: 'lg', md: 'xl' }}
-                color="#18181B"
+                color={colors.textPrimary}
                 letterSpacing="-0.02em"
               >
                 Dashboard
               </Heading>
-              <Text color="#71717A" fontSize="sm" mt={1}>
+              <Text color={colors.textMuted} fontSize="sm" mt={1}>
                 Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
               </Text>
             </Box>
@@ -908,22 +914,24 @@ export default function Dashboard() {
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 size="md"
                 w={{ base: '140px', md: '160px' }}
-                bg="white"
-                borderColor="#E4E4E7"
+                bg={colors.inputBg}
+                color={colors.textPrimary}
+                borderColor={colors.borderColor}
                 borderRadius="12px"
-                _hover={{ borderColor: '#2563EB' }}
-                _focus={{ borderColor: '#2563EB', boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)' }}
+                _hover={{ borderColor: colors.primary }}
+                _focus={{ borderColor: colors.primary, boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)' }}
               />
               <Button
                 as={RouterLink}
                 to="/add-transaction"
-                bg="linear-gradient(135deg, #18181B 0%, #2563EB 100%)"
+                bg="#2563EB"
                 color="white"
                 size="md"
                 borderRadius="12px"
                 fontWeight="600"
                 px={5}
                 _hover={{
+                  bg: '#1D4ED8',
                   transform: 'translateY(-1px)',
                   boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
                 }}
@@ -949,22 +957,23 @@ export default function Dashboard() {
           <Box
             p={{ base: 5, md: 6 }}
             borderRadius="16px"
-            bg="white"
-            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-            border="1px solid #F4F4F5"
+            bg={colors.cardBg}
+            boxShadow={colors.cardShadow}
+            border="1px solid"
+            borderColor={colors.borderSubtle}
           >
             <Flex justify="space-between" align="center" mb={5}>
-              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+              <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                 {getMonthName(selectedMonth)}
               </Heading>
               {isCurrentMonth() && daysLeft > 0 && (
                 <Box
-                  bg="#F4F4F5"
+                  bg={colors.rowStripedBg}
                   px={3}
                   py={1}
                   borderRadius="full"
                 >
-                  <Text fontSize="xs" fontWeight="600" color="#71717A">
+                  <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
                     {daysLeft} days left
                   </Text>
                 </Box>
@@ -1085,9 +1094,9 @@ export default function Dashboard() {
             <Box
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
-              bg="white"
+              bg={colors.cardBg}
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid #F4F4F5"
+              border="1px solid" borderColor={colors.borderSubtle}
             >
               <Flex justify="space-between" align="center" mb={4}>
                 <HStack gap={2}>
@@ -1097,14 +1106,14 @@ export default function Dashboard() {
                     borderRadius="full"
                     bg="#F59E0B"
                   />
-                  <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                  <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                     Upcoming Payments
                   </Heading>
                 </HStack>
                 <HStack gap={2}>
                   {/* View Toggle */}
                   <HStack
-                    bg="#F4F4F5"
+                    bg={colors.rowStripedBg}
                     borderRadius="10px"
                     p="2px"
                     gap={0}
@@ -1117,15 +1126,15 @@ export default function Dashboard() {
                         setSelectedCalendarDate(null);
                         setSelectedCalendarPayments([]);
                       }}
-                      bg={paymentsViewMode === 'list' ? 'white' : 'transparent'}
-                      color={paymentsViewMode === 'list' ? '#18181B' : '#71717A'}
+                      bg={paymentsViewMode === 'list' ? colors.toggleActiveBg : colors.toggleInactiveBg}
+                      color={paymentsViewMode === 'list' ? colors.toggleActiveText : colors.toggleInactiveText}
                       borderRadius="8px"
                       px={2}
                       h="28px"
                       fontWeight="500"
                       fontSize="xs"
                       boxShadow={paymentsViewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
-                      _hover={{ bg: paymentsViewMode === 'list' ? 'white' : '#E4E4E7' }}
+                      _hover={{ bg: paymentsViewMode === 'list' ? colors.toggleActiveBg : colors.toggleHoverBg }}
                     >
                       ☰
                     </Button>
@@ -1133,15 +1142,15 @@ export default function Dashboard() {
                       size="xs"
                       variant="ghost"
                       onClick={() => setPaymentsViewMode('calendar')}
-                      bg={paymentsViewMode === 'calendar' ? 'white' : 'transparent'}
-                      color={paymentsViewMode === 'calendar' ? '#18181B' : '#71717A'}
+                      bg={paymentsViewMode === 'calendar' ? colors.toggleActiveBg : colors.toggleInactiveBg}
+                      color={paymentsViewMode === 'calendar' ? colors.toggleActiveText : colors.toggleInactiveText}
                       borderRadius="8px"
                       px={2}
                       h="28px"
                       fontWeight="500"
                       fontSize="xs"
                       boxShadow={paymentsViewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
-                      _hover={{ bg: paymentsViewMode === 'calendar' ? 'white' : '#E4E4E7' }}
+                      _hover={{ bg: paymentsViewMode === 'calendar' ? colors.toggleActiveBg : colors.toggleHoverBg }}
                     >
                       📅
                     </Button>
@@ -1153,7 +1162,7 @@ export default function Dashboard() {
                     size="sm"
                     color="#2563EB"
                     fontWeight="600"
-                    _hover={{ bg: '#EFF6FF' }}
+                    _hover={{ bg: colors.primaryBg }}
                   >
                     Manage
                   </Button>
@@ -1170,16 +1179,16 @@ export default function Dashboard() {
                         justify="space-between"
                         p={3}
                         borderRadius="12px"
-                        bg={payment.daysUntil === 0 ? '#FEF2F2' : payment.daysUntil <= 3 ? '#FFFBEB' : '#F9FAFB'}
+                        bg={payment.daysUntil === 0 ? colors.itemDueTodayBg : payment.daysUntil <= 3 ? colors.itemDueSoonBg : colors.rowNormalBg}
                         border="1px solid"
-                        borderColor={payment.daysUntil === 0 ? '#FECACA' : payment.daysUntil <= 3 ? '#FDE68A' : 'transparent'}
+                        borderColor={payment.daysUntil === 0 ? colors.itemDueTodayBorder : payment.daysUntil <= 3 ? colors.itemDueSoonBorder : 'transparent'}
                       >
                         <HStack gap={3}>
                           <Box
                             w="40px"
                             h="40px"
                             borderRadius="10px"
-                            bg={payment.type === 'expense' ? '#FEE2E2' : '#D1FAE5'}
+                            bg={payment.type === 'expense' ? colors.expenseIconBg : colors.incomeIconBg}
                             display="flex"
                             alignItems="center"
                             justifyContent="center"
@@ -1192,10 +1201,10 @@ export default function Dashboard() {
                             />
                           </Box>
                           <Box>
-                            <Text fontWeight="600" fontSize="sm" color="#18181B">
+                            <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
                               {payment.name}
                             </Text>
-                            <Text fontSize="xs" color="#71717A">
+                            <Text fontSize="xs" color={colors.textMuted}>
                               {payment.categories?.name || 'Uncategorized'} • {formatFrequency(payment.frequency)}
                             </Text>
                           </Box>
@@ -1210,7 +1219,7 @@ export default function Dashboard() {
                           </Text>
                           <Text
                             fontSize="xs"
-                            color={payment.daysUntil === 0 ? '#DC2626' : '#71717A'}
+                            color={payment.daysUntil === 0 ? colors.danger : colors.textMuted}
                             fontWeight={payment.daysUntil <= 1 ? '600' : '400'}
                           >
                             {payment.nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • {payment.daysUntil === 0 ? 'Today' : payment.daysUntil === 1 ? 'Tomorrow' : `In ${payment.daysUntil} days`}
@@ -1221,12 +1230,12 @@ export default function Dashboard() {
                   </VStack>
 
                   {upcomingPayments.length > 5 && (
-                    <Text fontSize="xs" color="#71717A" textAlign="center" mt={3}>
+                    <Text fontSize="xs" color={colors.textMuted} textAlign="center" mt={3}>
                       +{upcomingPayments.length - 5} more upcoming payments
                     </Text>
                   )}
                   {upcomingPayments.length === 0 && (
-                    <Text fontSize="sm" color="#71717A" textAlign="center" py={4}>
+                    <Text fontSize="sm" color={colors.textMuted} textAlign="center" py={4}>
                       No upcoming payments in the next 14 days
                     </Text>
                   )}
@@ -1250,14 +1259,14 @@ export default function Dashboard() {
                   <Box
                     flex={{ base: 'auto', lg: '3' }}
                     w={{ base: '100%', lg: 'auto' }}
-                    borderTop={{ base: '1px solid #F4F4F5', lg: 'none' }}
-                    borderLeft={{ base: 'none', lg: '1px solid #F4F4F5' }}
+                    borderTop={{ base: `1px solid ${colors.borderSubtle}`, lg: 'none' }}
+                    borderLeft={{ base: 'none', lg: `1px solid ${colors.borderSubtle}` }}
                     pt={{ base: 3, lg: 0 }}
                     pl={{ base: 0, lg: 4 }}
                   >
                     {selectedCalendarDate && selectedCalendarPayments.length > 0 ? (
                       <VStack align="stretch" gap={2}>
-                        <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="600" color="#18181B" mb={1}>
+                        <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="600" color={colors.textPrimary} mb={1}>
                           {selectedCalendarDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                         </Text>
                         {selectedCalendarPayments.map((payment, index) => (
@@ -1267,7 +1276,7 @@ export default function Dashboard() {
                             justify="space-between"
                             p={{ base: 2, md: 2 }}
                             borderRadius="8px"
-                            bg={payment.type === 'expense' ? '#FEF2F2' : '#ECFDF5'}
+                            bg={payment.type === 'expense' ? colors.expenseIconBg : colors.incomeIconBg}
                           >
                             <HStack gap={2}>
                               <Box
@@ -1276,7 +1285,7 @@ export default function Dashboard() {
                                 borderRadius="full"
                                 bg={getCategoryColor(payment.categories?.name)}
                               />
-                              <Text fontSize={{ base: '11px', md: 'xs' }} fontWeight="500" color="#18181B" noOfLines={1}>
+                              <Text fontSize={{ base: '11px', md: 'xs' }} fontWeight="500" color={colors.textPrimary} noOfLines={1}>
                                 {payment.name}
                               </Text>
                             </HStack>
@@ -1289,10 +1298,10 @@ export default function Dashboard() {
                             </Text>
                           </Flex>
                         ))}
-                        <Box pt={2} borderTop="1px solid #F4F4F5" mt={1}>
+                        <Box pt={2} borderTop={`1px solid ${colors.borderSubtle}`} mt={1}>
                           <Flex justify="space-between">
-                            <Text fontSize={{ base: '11px', md: 'xs' }} color="#71717A">Total for day</Text>
-                            <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="700" color="#18181B">
+                            <Text fontSize={{ base: '11px', md: 'xs' }} color={colors.textMuted}>Total for day</Text>
+                            <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="700" color={colors.textPrimary}>
                               {formatCurrency(selectedCalendarPayments.reduce((sum, p) => {
                                 const amount = Number(p.amount);
                                 return sum + (p.type === 'expense' ? -amount : amount);
@@ -1309,7 +1318,7 @@ export default function Dashboard() {
                         h={{ base: 'auto', lg: '100%' }}
                         minH={{ base: '80px', lg: '150px' }}
                         py={{ base: 2, lg: 0 }}
-                        color="#A1A1AA"
+                        color={colors.textMuted}
                       >
                         <Text fontSize={{ base: 'xl', md: '2xl' }} mb={2}>📅</Text>
                         <Text fontSize={{ base: 'xs', md: 'sm' }} textAlign="center">
@@ -1330,12 +1339,12 @@ export default function Dashboard() {
               flex="1"
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
-              bg="white"
+              bg={colors.cardBg}
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid #F4F4F5"
+              border="1px solid" borderColor={colors.borderSubtle}
             >
               <Flex justify="space-between" align="center" mb={5}>
-                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                   Spending Breakdown
                 </Heading>
                 <Button
@@ -1401,7 +1410,7 @@ export default function Dashboard() {
                             py={1.5}
                             px={2}
                             borderRadius="8px"
-                            bg={isHovered ? '#F4F4F5' : 'transparent'}
+                            bg={isHovered ? colors.rowHoverBg : 'transparent'}
                             opacity={isOtherHovered ? 0.4 : 1}
                             transition="all 0.15s"
                             cursor="pointer"
@@ -1416,15 +1425,15 @@ export default function Dashboard() {
                                 bg={getCategoryColor(cat.name)}
                                 flexShrink={0}
                               />
-                              <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color="#18181B" noOfLines={1}>
+                              <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color={colors.textPrimary} noOfLines={1}>
                                 {cat.name}
                               </Text>
                             </HStack>
                             <HStack gap={2}>
-                              <Text fontSize="sm" fontWeight="600" color="#18181B">
+                              <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
                                 {formatCurrency(cat.spent)}
                               </Text>
-                              <Text fontSize="xs" color="#71717A">
+                              <Text fontSize="xs" color={colors.textMuted}>
                                 {monthlySummary.expenses > 0
                                   ? `${((cat.spent / monthlySummary.expenses) * 100).toFixed(0)}%`
                                   : '0%'
@@ -1439,7 +1448,7 @@ export default function Dashboard() {
                 </Flex>
               ) : (
                 <Flex justify="center" align="center" py={12}>
-                  <Text color="#71717A">No spending this month</Text>
+                  <Text color={colors.textMuted}>No spending this month</Text>
                 </Flex>
               )}
             </Box>
@@ -1449,9 +1458,9 @@ export default function Dashboard() {
               flex="1"
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
-              bg="white"
+              bg={colors.cardBg}
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid #F4F4F5"
+              border="1px solid" borderColor={colors.borderSubtle}
             >
               <Flex justify="space-between" align="center" mb={5}>
                 <HStack gap={2}>
@@ -1464,12 +1473,12 @@ export default function Dashboard() {
                     minW="28px"
                     h="28px"
                     borderRadius="8px"
-                    color="#71717A"
+                    color={colors.textMuted}
                     _hover={{ bg: '#F4F4F5', color: '#18181B' }}
                   >
                     ←
                   </Button>
-                  <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em" minW="100px" textAlign="center">
+                  <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em" minW="100px" textAlign="center">
                     {getWeekLabel()}
                   </Heading>
                   {/* Next Week Button */}
@@ -1481,7 +1490,7 @@ export default function Dashboard() {
                     minW="28px"
                     h="28px"
                     borderRadius="8px"
-                    color="#71717A"
+                    color={colors.textMuted}
                     _hover={{ bg: '#F4F4F5', color: '#18181B' }}
                     disabled={weekOffset >= 0}
                     opacity={weekOffset >= 0 ? 0.3 : 1}
@@ -1490,8 +1499,8 @@ export default function Dashboard() {
                     →
                   </Button>
                 </HStack>
-                <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
-                  <Text fontSize="xs" fontWeight="600" color="#71717A">
+                <Box bg={colors.rowStripedBg} px={3} py={1} borderRadius="full">
+                  <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
                     {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
                   </Text>
                 </Box>
@@ -1507,11 +1516,11 @@ export default function Dashboard() {
               />
 
               {/* Transaction Details Section */}
-              <Box mt={4} p={3} borderRadius="10px" bg="#F4F4F5">
+              <Box mt={4} p={3} borderRadius="10px" bg={colors.rowStripedBg}>
                 {selectedDayIndex !== null && dailyTransactions[selectedDayIndex]?.length > 0 ? (
                   <VStack align="stretch" gap={2}>
                     <Flex justify="space-between" align="center" mb={1}>
-                      <Text fontSize="sm" fontWeight="600" color="#18181B">
+                      <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
                         {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIndex]}, {weekDates[selectedDayIndex]}
                       </Text>
                       <Text fontSize="sm" fontWeight="700" color="#7C3AED">
@@ -1526,7 +1535,7 @@ export default function Dashboard() {
                           align="center"
                           py={1.5}
                           borderBottomWidth={idx < dailyTransactions[selectedDayIndex].length - 1 ? '1px' : '0'}
-                          borderColor="#E4E4E7"
+                          borderColor={colors.borderColor}
                         >
                           <HStack gap={2} flex="1" minW="0">
                             <Box
@@ -1537,10 +1546,10 @@ export default function Dashboard() {
                               flexShrink={0}
                             />
                             <VStack align="start" gap={0} flex="1" minW="0">
-                              <Text fontSize="xs" color="#18181B" fontWeight="600" noOfLines={1}>
+                              <Text fontSize="xs" color={colors.textPrimary} fontWeight="600" noOfLines={1}>
                                 {tx.categories?.name || 'Uncategorized'}
                               </Text>
-                              <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
+                              <Text fontSize="10px" color={colors.textMuted} noOfLines={1}>
                                 {tx.description || 'No description'}
                               </Text>
                             </VStack>
@@ -1554,10 +1563,10 @@ export default function Dashboard() {
                   </VStack>
                 ) : (
                   <Flex justify="space-between" align="center">
-                    <Text fontSize="sm" color="#71717A">
+                    <Text fontSize="sm" color={colors.textMuted}>
                       {selectedDayIndex !== null ? 'No transactions' : 'Click a bar to see details'}
                     </Text>
-                    <Text fontSize="sm" fontWeight="700" color="#18181B">
+                    <Text fontSize="sm" fontWeight="700" color={colors.textPrimary}>
                       {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
                     </Text>
                   </Flex>
@@ -1574,12 +1583,12 @@ export default function Dashboard() {
               flex="1"
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
-              bg="white"
+              bg={colors.cardBg}
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid #F4F4F5"
+              border="1px solid" borderColor={colors.borderSubtle}
             >
               <Flex justify="space-between" align="center" mb={5}>
-                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                   Budget Overview
                 </Heading>
                 {budgetProgress.total > 0 && (
@@ -1604,16 +1613,16 @@ export default function Dashboard() {
                 <VStack align="stretch" gap={4}>
                   <Box>
                     <Flex justify="space-between" mb={3}>
-                      <Text fontSize="sm" color="#71717A">
-                        Spent <Text as="span" fontWeight="700" color="#18181B">{formatCurrency(budgetProgress.used)}</Text>
+                      <Text fontSize="sm" color={colors.textMuted}>
+                        Spent <Text as="span" fontWeight="700" color={colors.textPrimary}>{formatCurrency(budgetProgress.used)}</Text>
                       </Text>
-                      <Text fontSize="sm" color="#71717A">
-                        of <Text as="span" fontWeight="700" color="#18181B">{formatCurrency(budgetProgress.total)}</Text>
+                      <Text fontSize="sm" color={colors.textMuted}>
+                        of <Text as="span" fontWeight="700" color={colors.textPrimary}>{formatCurrency(budgetProgress.total)}</Text>
                       </Text>
                     </Flex>
 
                     {/* Custom Progress Bar */}
-                    <Box h="10px" bg="#F4F4F5" borderRadius="full" overflow="hidden">
+                    <Box h="10px" bg={colors.rowStripedBg} borderRadius="full" overflow="hidden">
                       <Box
                         h="100%"
                         w={`${Math.min(budgetProgress.percent, 100)}%`}
@@ -1653,7 +1662,7 @@ export default function Dashboard() {
                     w="48px"
                     h="48px"
                     borderRadius="12px"
-                    bg="#F4F4F5"
+                    bg={colors.rowStripedBg}
                     display="flex"
                     alignItems="center"
                     justifyContent="center"
@@ -1661,7 +1670,7 @@ export default function Dashboard() {
                   >
                     <Text fontSize="xl">📊</Text>
                   </Box>
-                  <Text color="#71717A" mb={3} textAlign="center">No budget set for this month</Text>
+                  <Text color={colors.textMuted} mb={3} textAlign="center">No budget set for this month</Text>
                   <Button
                     as={RouterLink}
                     to="/budget"
@@ -1682,12 +1691,12 @@ export default function Dashboard() {
               flex="1"
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
-              bg="white"
+              bg={colors.cardBg}
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid #F4F4F5"
+              border="1px solid" borderColor={colors.borderSubtle}
             >
               <Flex justify="space-between" align="center" mb={4}>
-                <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+                <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                   Top Spending
                 </Heading>
                 <Button
@@ -1711,9 +1720,9 @@ export default function Dashboard() {
                       align="center"
                       py={3}
                       borderBottomWidth="1px"
-                      borderColor="#F4F4F5"
+                      borderColor={colors.borderSubtle}
                       _last={{ borderBottomWidth: 0 }}
-                      _hover={{ bg: '#FAFAFA', mx: -3, px: 3, borderRadius: '8px' }}
+                      _hover={{ bg: colors.rowHoverBg, mx: -3, px: 3, borderRadius: '8px' }}
                       transition="all 0.15s"
                       cursor="pointer"
                     >
@@ -1722,8 +1731,8 @@ export default function Dashboard() {
                         w="28px"
                         h="28px"
                         borderRadius="full"
-                        bg={index < 3 ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : '#F4F4F5'}
-                        color={index < 3 ? 'white' : '#A1A1AA'}
+                        bg={index < 3 ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : colors.borderSubtle}
+                        color={index < 3 ? 'white' : colors.textMuted}
                         align="center"
                         justify="center"
                         fontSize="xs"
@@ -1746,7 +1755,7 @@ export default function Dashboard() {
                         <Text
                           fontWeight="500"
                           fontSize="sm"
-                          color="#18181B"
+                          color={colors.textPrimary}
                           noOfLines={1}
                         >
                           {cat.name}
@@ -1768,7 +1777,7 @@ export default function Dashboard() {
                 </VStack>
               ) : (
                 <Flex justify="center" align="center" py={8}>
-                  <Text color="#71717A">No spending this month</Text>
+                  <Text color={colors.textMuted}>No spending this month</Text>
                 </Flex>
               )}
             </Box>
@@ -1778,16 +1787,16 @@ export default function Dashboard() {
           <Box
             p={{ base: 5, md: 6 }}
             borderRadius="16px"
-            bg="white"
+            bg={colors.cardBg}
             boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-            border="1px solid #F4F4F5"
+            border="1px solid" borderColor={colors.borderSubtle}
           >
             <Flex justify="space-between" align="center" mb={4}>
-              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+              <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                 Daily Spending
               </Heading>
-              <Box bg="#F4F4F5" px={3} py={1} borderRadius="full">
-                <Text fontSize="xs" fontWeight="600" color="#71717A">
+              <Box bg={colors.rowStripedBg} px={3} py={1} borderRadius="full">
+                <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
                   {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0))} total
                 </Text>
               </Box>
@@ -1803,16 +1812,16 @@ export default function Dashboard() {
               />
             ) : (
               <Flex justify="center" align="center" h="100px">
-                <Text color="#71717A">No spending data</Text>
+                <Text color={colors.textMuted}>No spending data</Text>
               </Flex>
             )}
 
             {/* Transaction Details Section */}
-            <Box mt={3} p={3} borderRadius="10px" bg="#F4F4F5">
+            <Box mt={3} p={3} borderRadius="10px" bg={colors.rowStripedBg}>
               {selectedMonthDay !== null && monthlyDailyTransactions[selectedMonthDay]?.length > 0 ? (
                 <VStack align="stretch" gap={2}>
                   <Flex justify="space-between" align="center" mb={1}>
-                    <Text fontSize="sm" fontWeight="600" color="#18181B">
+                    <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
                       {new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1] - 1, selectedMonthDay + 1)
                         .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </Text>
@@ -1828,7 +1837,7 @@ export default function Dashboard() {
                         align="center"
                         py={1.5}
                         borderBottomWidth={idx < monthlyDailyTransactions[selectedMonthDay].length - 1 ? '1px' : '0'}
-                        borderColor="#E4E4E7"
+                        borderColor={colors.borderColor}
                       >
                         <HStack gap={2} flex="1" minW="0">
                           <Box
@@ -1839,10 +1848,10 @@ export default function Dashboard() {
                             flexShrink={0}
                           />
                           <VStack align="start" gap={0} flex="1" minW="0">
-                            <Text fontSize="xs" color="#18181B" fontWeight="600" noOfLines={1}>
+                            <Text fontSize="xs" color={colors.textPrimary} fontWeight="600" noOfLines={1}>
                               {tx.categories?.name || 'Uncategorized'}
                             </Text>
-                            <Text fontSize="10px" color="#A1A1AA" noOfLines={1}>
+                            <Text fontSize="10px" color={colors.textMuted} noOfLines={1}>
                               {tx.description || 'No description'}
                             </Text>
                           </VStack>
@@ -1856,10 +1865,10 @@ export default function Dashboard() {
                 </VStack>
               ) : (
                 <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="#71717A">
+                  <Text fontSize="sm" color={colors.textMuted}>
                     {selectedMonthDay !== null ? 'No transactions' : 'Click a bar to see details'}
                   </Text>
-                  <Text fontSize="sm" fontWeight="600" color="#18181B">
+                  <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
                     Avg: {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0) / monthlyDailySpending.length || 0)}/day
                   </Text>
                 </Flex>
@@ -1871,12 +1880,12 @@ export default function Dashboard() {
           <Box
             p={{ base: 5, md: 6 }}
             borderRadius="16px"
-            bg="white"
+            bg={colors.cardBg}
             boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-            border="1px solid #F4F4F5"
+            border="1px solid" borderColor={colors.borderSubtle}
           >
             <Flex justify="space-between" align="center" mb={5}>
-              <Heading size={{ base: 'sm', md: 'md' }} color="#18181B" letterSpacing="-0.01em">
+              <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
                 Spending by Category
               </Heading>
               <Button
@@ -1898,10 +1907,10 @@ export default function Dashboard() {
                   <Box
                     key={cat.id}
                     p={4}
-                    bg="#FAFAFA"
+                    bg={colors.rowStripedBg}
                     borderRadius="12px"
-                    border="1px solid #F4F4F5"
-                    _hover={{ borderColor: '#E4E4E7' }}
+                    border="1px solid" borderColor={colors.borderSubtle}
+                    _hover={{ borderColor: colors.borderStrong }}
                     transition="all 0.15s"
                   >
                     <Flex justify="space-between" align="center" mb={2}>
@@ -1912,19 +1921,19 @@ export default function Dashboard() {
                           borderRadius="full"
                           bg={getCategoryColor(cat.name)}
                         />
-                        <Text fontWeight="600" fontSize="sm" color="#18181B">{cat.name}</Text>
+                        <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>{cat.name}</Text>
                       </HStack>
                       {cat.limit > 0 && (
                         <Box
                           px={2}
                           py={0.5}
                           borderRadius="full"
-                          bg={cat.percent > 100 ? '#FEF2F2' : cat.percent > 80 ? '#FFFBEB' : '#ECFDF5'}
+                          bg={cat.percent > 100 ? colors.dangerBg : cat.percent > 80 ? colors.warningBg : colors.successBg}
                         >
                           <Text
                             fontSize="xs"
                             fontWeight="700"
-                            color={cat.percent > 100 ? '#DC2626' : cat.percent > 80 ? '#D97706' : '#059669'}
+                            color={cat.percent > 100 ? colors.danger : cat.percent > 80 ? colors.warning : colors.success}
                           >
                             {cat.percent.toFixed(0)}%
                           </Text>
@@ -1933,15 +1942,15 @@ export default function Dashboard() {
                     </Flex>
 
                     <Flex justify="space-between" align="center" mb={2}>
-                      <Text fontSize="sm" color="#71717A">
-                        <Text as="span" fontWeight="600" color="#18181B">{formatCurrency(cat.spent)}</Text>
+                      <Text fontSize="sm" color={colors.textMuted}>
+                        <Text as="span" fontWeight="600" color={colors.textPrimary}>{formatCurrency(cat.spent)}</Text>
                         {cat.limit > 0 ? ` of ${formatCurrency(cat.limit)}` : ' (no limit)'}
                       </Text>
                       {cat.limit > 0 && (
                         <Text
                           fontSize="xs"
                           fontWeight="600"
-                          color={cat.remaining >= 0 ? '#059669' : '#DC2626'}
+                          color={cat.remaining >= 0 ? colors.success : colors.danger}
                         >
                           {cat.remaining >= 0 ? `${formatCurrency(cat.remaining)} left` : `${formatCurrency(Math.abs(cat.remaining))} over`}
                         </Text>
@@ -1949,7 +1958,7 @@ export default function Dashboard() {
                     </Flex>
 
                     {cat.limit > 0 && (
-                      <Box h="6px" bg="#E4E4E7" borderRadius="full" overflow="hidden">
+                      <Box h="6px" bg={colors.borderColor} borderRadius="full" overflow="hidden">
                         <Box
                           h="100%"
                           w={`${Math.min(cat.percent, 100)}%`}
@@ -1970,7 +1979,7 @@ export default function Dashboard() {
               </VStack>
             ) : (
               <Flex justify="center" align="center" py={8}>
-                <Text color="#71717A">No spending this month</Text>
+                <Text color={colors.textMuted}>No spending this month</Text>
               </Flex>
             )}
           </Box>
@@ -1980,8 +1989,8 @@ export default function Dashboard() {
             <Button
               as={RouterLink}
               to="/import"
-              bg="white"
-              color="#18181B"
+              bg={colors.cardBg}
+              color={colors.textPrimary}
               size="md"
               borderRadius="12px"
               fontWeight="600"
@@ -1994,8 +2003,8 @@ export default function Dashboard() {
             <Button
               as={RouterLink}
               to="/budget"
-              bg="white"
-              color="#18181B"
+              bg={colors.cardBg}
+              color={colors.textPrimary}
               size="md"
               borderRadius="12px"
               fontWeight="600"
@@ -2008,8 +2017,8 @@ export default function Dashboard() {
             <Button
               as={RouterLink}
               to="/transactions"
-              bg="white"
-              color="#18181B"
+              bg={colors.cardBg}
+              color={colors.textPrimary}
               size="md"
               borderRadius="12px"
               fontWeight="600"
@@ -2022,8 +2031,8 @@ export default function Dashboard() {
             <Button
               as={RouterLink}
               to="/categories"
-              bg="white"
-              color="#18181B"
+              bg={colors.cardBg}
+              color={colors.textPrimary}
               size="md"
               borderRadius="12px"
               fontWeight="600"

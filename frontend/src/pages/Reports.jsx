@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -22,7 +23,7 @@ const MONTHS = [
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Bar Chart Component for Income vs Expenses
-const MonthlyBarChart = ({ data, formatCurrency }) => {
+const MonthlyBarChart = ({ data, formatCurrency, colors }) => {
   const maxValue = Math.max(
     ...data.map(d => Math.max(d.income, d.expenses)),
     1
@@ -71,7 +72,7 @@ const MonthlyBarChart = ({ data, formatCurrency }) => {
                 />
               </Flex>
               {/* Month label */}
-              <Text fontSize="xs" color="gray.500" fontWeight="500">
+              <Text fontSize="xs" color={colors.textMuted} fontWeight="500">
                 {MONTH_ABBR[index]}
               </Text>
             </Flex>
@@ -83,7 +84,7 @@ const MonthlyBarChart = ({ data, formatCurrency }) => {
 };
 
 // Trend Line Chart Component with hover effects
-const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) => {
+const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth, colors }) => {
   const values = data.map(d => d.balance);
   const maxVal = Math.max(...values.map(Math.abs), 1);
   const width = 800;
@@ -266,7 +267,7 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
           position="absolute"
           top={{ base: '5px', md: '10px' }}
           right={{ base: '10px', md: '20px' }}
-          bg="white"
+          bg={colors.cardBg}
           p={{ base: 3, md: 4 }}
           borderRadius="12px"
           boxShadow="0 4px 16px rgba(0,0,0,0.15)"
@@ -274,24 +275,24 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
           minW={{ base: '150px', md: '180px' }}
           zIndex={10}
         >
-          <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color="gray.800" mb={2}>
+          <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color={colors.textPrimary} mb={2}>
             {data[hoveredMonth]?.month}
           </Text>
           <Flex justify="space-between" mb={2} gap={4}>
-            <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500">Income:</Text>
+            <Text fontSize={{ base: 'sm', md: 'md' }} color={colors.textSecondary}>Income:</Text>
             <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="green.600">
               {formatCurrency(hoveredPoint.income)}
             </Text>
           </Flex>
           <Flex justify="space-between" mb={2} gap={4}>
-            <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500">Expenses:</Text>
+            <Text fontSize={{ base: 'sm', md: 'md' }} color={colors.textSecondary}>Expenses:</Text>
             <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="red.500">
               {formatCurrency(hoveredPoint.expenses)}
             </Text>
           </Flex>
-          <Box h="1px" bg="gray.200" my={2} />
+          <Box h="1px" bg={colors.borderColor} my={2} />
           <Flex justify="space-between" gap={4}>
-            <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.500">Balance:</Text>
+            <Text fontSize={{ base: 'sm', md: 'md' }} color={colors.textSecondary}>Balance:</Text>
             <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color={hoveredPoint.balance >= 0 ? 'green.600' : 'red.500'}>
               {hoveredPoint.balance >= 0 ? '+' : ''}{formatCurrency(hoveredPoint.balance)}
             </Text>
@@ -303,7 +304,7 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth }) =>
 };
 
 // Category Donut Chart with hover effects (matching Dashboard style)
-const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory }) => {
+const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory, themeColors }) => {
   const size = 180;
   const strokeWidth = 35;
   const radius = (size - strokeWidth) / 2;
@@ -390,20 +391,20 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
         >
           {hoveredCat ? (
             <>
-              <Text fontSize="xs" color="gray.500" fontWeight="500" noOfLines={1} maxW="80px">
+              <Text fontSize="xs" color={themeColors.textMuted} fontWeight="500" noOfLines={1} maxW="80px">
                 {hoveredCat.name}
               </Text>
-              <Text fontSize="lg" fontWeight="800" color="gray.800">
+              <Text fontSize="lg" fontWeight="800" color={themeColors.textPrimary}>
                 {formatCurrency(hoveredCat.amount)}
               </Text>
-              <Text fontSize="xs" color="gray.500">
+              <Text fontSize="xs" color={themeColors.textMuted}>
                 {total > 0 ? ((hoveredCat.amount / total) * 100).toFixed(0) : 0}%
               </Text>
             </>
           ) : (
             <>
-              <Text fontSize="xs" color="gray.500">Total Spent</Text>
-              <Text fontSize="xl" fontWeight="800" color="gray.800">
+              <Text fontSize="xs" color={themeColors.textMuted}>Total Spent</Text>
+              <Text fontSize="xl" fontWeight="800" color={themeColors.textPrimary}>
                 {formatCurrency(total)}
               </Text>
             </>
@@ -424,7 +425,7 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
               py={1}
               px={2}
               borderRadius="6px"
-              bg={isHovered ? '#F4F4F5' : 'transparent'}
+              bg={isHovered ? themeColors.rowStripedBg : 'transparent'}
               opacity={isOtherHovered ? 0.4 : 1}
               transition="all 0.15s"
               cursor="pointer"
@@ -433,11 +434,11 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
             >
               <HStack gap={2}>
                 <Box w="10px" h="10px" borderRadius="full" bg={getCategoryColor(cat.name, index)} flexShrink={0} />
-                <Text color="gray.700" noOfLines={1} fontWeight={isHovered ? '600' : '500'}>{cat.name}</Text>
+                <Text color={themeColors.textSecondary} noOfLines={1} fontWeight={isHovered ? '600' : '500'}>{cat.name}</Text>
               </HStack>
               <HStack gap={2}>
-                <Text fontWeight="600" color="gray.800">{formatCurrency(cat.amount)}</Text>
-                <Text fontSize="xs" color="gray.500">
+                <Text fontWeight="600" color={themeColors.textPrimary}>{formatCurrency(cat.amount)}</Text>
+                <Text fontSize="xs" color={themeColors.textMuted}>
                   {total > 0 ? ((cat.amount / total) * 100).toFixed(0) : 0}%
                 </Text>
               </HStack>
@@ -485,6 +486,7 @@ const SummaryCard = ({ title, value, subtitle, color, bgGradient, icon }) => (
 
 export default function Reports() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [monthlyData, setMonthlyData] = useState([]);
@@ -626,7 +628,7 @@ export default function Reports() {
         <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
           <Box>
             <Heading size="xl">Financial Report</Heading>
-            <Text color="gray.500" mt={1}>Your yearly financial overview</Text>
+            <Text color={colors.textSecondary} mt={1}>Your yearly financial overview</Text>
           </Box>
           <HStack gap={2}>
             <select
@@ -637,8 +639,9 @@ export default function Reports() {
                 fontSize: '16px',
                 fontWeight: '600',
                 borderRadius: '12px',
-                border: '2px solid #E2E8F0',
-                backgroundColor: 'white',
+                border: `2px solid ${colors.borderColor}`,
+                backgroundColor: colors.cardBg,
+                color: colors.textPrimary,
                 cursor: 'pointer',
               }}
             >
@@ -686,42 +689,42 @@ export default function Reports() {
           <Box
             flex="2"
             p={6}
-            bg="white"
+            bg={colors.cardBg}
             borderRadius="20px"
             boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid #F3F4F6"
+            border="1px solid" borderColor={colors.borderSubtle}
           >
             <Flex justify="space-between" align="center" mb={4}>
               <Box>
-                <Heading size="md" color="gray.800">Income vs Expenses</Heading>
-                <Text fontSize="sm" color="gray.500">Monthly comparison</Text>
+                <Heading size="md" color={colors.textPrimary}>Income vs Expenses</Heading>
+                <Text fontSize="sm" color={colors.textSecondary}>Monthly comparison</Text>
               </Box>
               <HStack gap={4}>
                 <HStack gap={1}>
                   <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #34D399 0%, #059669 100%)" />
-                  <Text fontSize="xs" color="gray.500">Income</Text>
+                  <Text fontSize="xs" color={colors.textMuted}>Income</Text>
                 </HStack>
                 <HStack gap={1}>
                   <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)" />
-                  <Text fontSize="xs" color="gray.500">Expenses</Text>
+                  <Text fontSize="xs" color={colors.textMuted}>Expenses</Text>
                 </HStack>
               </HStack>
             </Flex>
-            <MonthlyBarChart data={monthlyData} formatCurrency={formatCurrency} />
+            <MonthlyBarChart data={monthlyData} formatCurrency={formatCurrency} colors={colors} />
           </Box>
 
           {/* Category Breakdown */}
           <Box
             flex="1"
             p={6}
-            bg="white"
+            bg={colors.cardBg}
             borderRadius="20px"
             boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid #F3F4F6"
+            border="1px solid" borderColor={colors.borderSubtle}
             minW={{ base: '100%', lg: '280px' }}
           >
-            <Heading size="md" color="gray.800" mb={1}>Top Categories</Heading>
-            <Text fontSize="sm" color="gray.500" mb={4}>Expense breakdown</Text>
+            <Heading size="md" color={colors.textPrimary} mb={1}>Top Categories</Heading>
+            <Text fontSize="sm" color={colors.textSecondary} mb={4}>Expense breakdown</Text>
             {categoryData.length > 0 ? (
               <CategoryDonutChart
                 categories={categoryData}
@@ -729,10 +732,11 @@ export default function Reports() {
                 formatCurrency={formatCurrency}
                 hoveredCategory={hoveredCategory}
                 onHoverCategory={setHoveredCategory}
+                themeColors={colors}
               />
             ) : (
               <Flex justify="center" align="center" h="200px">
-                <Text color="gray.400">No expense data</Text>
+                <Text color={colors.textMuted}>No expense data</Text>
               </Flex>
             )}
           </Box>
@@ -741,18 +745,19 @@ export default function Reports() {
         {/* Balance Trend */}
         <Box
           p={6}
-          bg="white"
+          bg={colors.cardBg}
           borderRadius="20px"
           boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-          border="1px solid #F3F4F6"
+          border="1px solid" borderColor={colors.borderSubtle}
         >
-          <Heading size="md" color="gray.800" mb={1}>Balance Trend</Heading>
-          <Text fontSize="sm" color="gray.500" mb={4}>Monthly net balance throughout the year</Text>
+          <Heading size="md" color={colors.textPrimary} mb={1}>Balance Trend</Heading>
+          <Text fontSize="sm" color={colors.textSecondary} mb={4}>Monthly net balance throughout the year</Text>
           <TrendLineChart
               data={monthlyData}
               formatCurrency={formatCurrency}
               hoveredMonth={hoveredMonth}
               onHoverMonth={setHoveredMonth}
+              colors={colors}
             />
         </Box>
 
@@ -760,29 +765,29 @@ export default function Reports() {
         <Box
           borderRadius={{ base: '12px', md: '20px' }}
           overflow="hidden"
-          bg="white"
+          bg={colors.cardBg}
           boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-          border="1px solid #F3F4F6"
+          border="1px solid" borderColor={colors.borderSubtle}
         >
-          <Box p={{ base: 3, md: 5 }} borderBottomWidth="1px" borderColor="gray.100">
-            <Heading size={{ base: 'sm', md: 'md' }} color="gray.800">Monthly Breakdown</Heading>
-            <Text fontSize={{ base: 'xs', md: 'sm' }} color="gray.500">Detailed view of each month</Text>
+          <Box p={{ base: 3, md: 5 }} borderBottomWidth="1px" borderColor={colors.borderSubtle}>
+            <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary}>Monthly Breakdown</Heading>
+            <Text fontSize={{ base: 'xs', md: 'sm' }} color={colors.textSecondary}>Detailed view of each month</Text>
           </Box>
           <Box>
             <Table.Root size="sm" w="100%">
               <Table.Header>
-                <Table.Row bg="gray.50">
-                  <Table.ColumnHeader py={2} px={{ base: 2, md: 5 }} fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }} w={{ base: '70px', md: 'auto' }}>Month</Table.ColumnHeader>
-                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }}>Income</Table.ColumnHeader>
-                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }}>Expenses</Table.ColumnHeader>
-                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color="gray.600" fontSize={{ base: '11px', md: 'sm' }}>Balance</Table.ColumnHeader>
+                <Table.Row bg={colors.rowStripedBg}>
+                  <Table.ColumnHeader py={2} px={{ base: 2, md: 5 }} fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }} w={{ base: '70px', md: 'auto' }}>Month</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>Income</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>Expenses</Table.ColumnHeader>
+                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>Balance</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {monthlyData.map((row, index) => (
-                  <Table.Row key={row.month} _hover={{ bg: 'gray.50' }}>
+                  <Table.Row key={row.month} _hover={{ bg: colors.rowStripedBg }}>
                     <Table.Cell py={2} px={{ base: 2, md: 5 }}>
-                      <Text fontWeight="500" color="gray.700" fontSize={{ base: '11px', md: 'sm' }}>
+                      <Text fontWeight="500" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>
                         <Box as="span" display={{ base: 'none', md: 'inline' }}>{row.month}</Box>
                         <Box as="span" display={{ base: 'inline', md: 'none' }}>{MONTH_ABBR[index]}</Box>
                       </Text>

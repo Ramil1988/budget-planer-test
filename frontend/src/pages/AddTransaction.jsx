@@ -15,10 +15,12 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { notifyNewTransaction, checkBudgetAndNotify } from '../lib/notifications';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 export default function AddTransaction() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const colors = useDarkModeColors();
 
   // Form state
   const [type, setType] = useState('expense');
@@ -171,27 +173,27 @@ export default function AddTransaction() {
   }
 
   return (
-    <Box w="100%" h="100%" bg="gray.50" p={6}>
+    <Box w="100%" h="100%" bg={colors.pageBg} p={6}>
       <Box w="100%" maxW="800px" mx="auto">
         <VStack gap={6} align="stretch" w="100%">
           <Box>
             <Heading size="xl">Add Transaction</Heading>
-            <Text color="gray.600" mt={1}>
+            <Text color={colors.textSecondary} mt={1}>
               Record a new income or expense
             </Text>
           </Box>
 
         {/* Success Message */}
         {success && (
-          <Box p={4} bg="green.50" borderRadius="md" borderColor="green.200" borderWidth="1px">
-            <Text color="green.700">{success}</Text>
+          <Box p={4} bg={colors.successBg} borderRadius="md" borderColor={colors.successBorder} borderWidth="1px">
+            <Text color={colors.success}>{success}</Text>
           </Box>
         )}
 
         {/* Error Message */}
         {error && (
-          <Box p={4} bg="red.50" borderRadius="md" borderColor="red.200" borderWidth="1px">
-            <Text color="red.700">{error}</Text>
+          <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
+            <Text color={colors.danger}>{error}</Text>
           </Box>
         )}
 
@@ -202,13 +204,13 @@ export default function AddTransaction() {
           p={6}
           borderRadius="lg"
           borderWidth="1px"
-          borderColor="gray.200"
-          bg="white"
+          borderColor={colors.borderColor}
+          bg={colors.cardBg}
         >
           <VStack gap={5} align="stretch">
             {/* Type Toggle */}
             <Box>
-              <Text fontWeight="medium" mb={2}>Transaction Type</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Transaction Type</Text>
               <HStack gap={2}>
                 <Button
                   flex={1}
@@ -239,7 +241,7 @@ export default function AddTransaction() {
 
             {/* Amount */}
             <Box>
-              <Text fontWeight="medium" mb={2}>Amount</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Amount</Text>
               <Input
                 type="number"
                 step="0.01"
@@ -249,12 +251,15 @@ export default function AddTransaction() {
                 onChange={(e) => setAmount(e.target.value)}
                 size="lg"
                 fontSize="xl"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Box>
 
             {/* Category */}
             <Box>
-              <Text fontWeight="medium" mb={2}>Category</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Category</Text>
               {filteredCategories.length > 0 ? (
                 <select
                   value={categoryId}
@@ -264,8 +269,9 @@ export default function AddTransaction() {
                     padding: '12px',
                     fontSize: '16px',
                     borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    backgroundColor: 'white',
+                    border: `1px solid ${colors.borderColor}`,
+                    backgroundColor: colors.cardBg,
+                    color: colors.textPrimary,
                   }}
                 >
                   <option value="">Select a category</option>
@@ -276,8 +282,8 @@ export default function AddTransaction() {
                   ))}
                 </select>
               ) : (
-                <Box p={4} bg="yellow.50" borderRadius="md" borderColor="yellow.200" borderWidth="1px">
-                  <Text color="yellow.700">
+                <Box p={4} bg={colors.warningBg} borderRadius="md" borderColor={colors.warningBorder} borderWidth="1px">
+                  <Text color={colors.warning}>
                     No {type} categories found. Please add {type} categories in the Categories page first.
                   </Text>
                 </Box>
@@ -286,23 +292,29 @@ export default function AddTransaction() {
 
             {/* Description */}
             <Box>
-              <Text fontWeight="medium" mb={2}>Description (optional)</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Description (optional)</Text>
               <Input
                 placeholder={type === 'income' ? 'e.g., Monthly salary' : 'e.g., Grocery shopping'}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Box>
 
             {/* Date */}
             <Box>
-              <Text fontWeight="medium" mb={2}>Date</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Date</Text>
               <Input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Box>
 

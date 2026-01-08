@@ -16,9 +16,11 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 export default function CategoryManager() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [patterns, setPatterns] = useState({});
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -216,7 +218,7 @@ export default function CategoryManager() {
       <VStack gap={8} align="stretch" w="100%">
           <Box>
             <Heading size="2xl">Category Manager</Heading>
-            <Text color="gray.600" mt={2}>
+            <Text color={colors.textSecondary} mt={2}>
               Manage your expense and income categories
             </Text>
           </Box>
@@ -225,12 +227,12 @@ export default function CategoryManager() {
         {saveMessage && (
           <Box
             p={3}
-            bg="green.50"
-            borderColor="green.500"
+            bg={colors.successBg}
+            borderColor={colors.successBorder}
             borderWidth="1px"
             borderRadius="md"
           >
-            <Text color="green.700" fontWeight="medium">
+            <Text color={colors.success} fontWeight="medium">
               {saveMessage}
             </Text>
           </Box>
@@ -240,12 +242,12 @@ export default function CategoryManager() {
         {error && (
           <Box
             p={3}
-            bg="red.50"
-            borderColor="red.500"
+            bg={colors.dangerBg}
+            borderColor={colors.dangerBorder}
             borderWidth="1px"
             borderRadius="md"
           >
-            <Text color="red.700" fontWeight="medium">
+            <Text color={colors.danger} fontWeight="medium">
               {error}
             </Text>
           </Box>
@@ -279,8 +281,8 @@ export default function CategoryManager() {
               p={6}
               borderRadius="lg"
               borderWidth="1px"
-              borderColor="gray.200"
-              bg="white"
+              borderColor={colors.borderColor}
+              bg={colors.cardBg}
             >
               <Heading size="md" mb={4}>Expense Categories</Heading>
 
@@ -300,21 +302,23 @@ export default function CategoryManager() {
                     </Badge>
                   ))}
                   {expenseCategories.length === 0 && (
-                    <Text color="gray.500">No expense categories yet</Text>
+                    <Text color={colors.textMuted}>No expense categories yet</Text>
                   )}
                 </HStack>
               </Box>
 
               {/* Add New Category */}
-              <Box p={4} bg="gray.50" borderRadius="md">
-                <Text fontWeight="medium" mb={2}>Add New Expense Category</Text>
+              <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
+                <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Add New Expense Category</Text>
                 <HStack gap={2}>
                   <Input
                     placeholder="Category name"
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
-                    bg="white"
+                    bg={colors.cardBg}
+                    borderColor={colors.borderColor}
+                    color={colors.textPrimary}
                     flex={1}
                   />
                   <Button colorScheme="red" onClick={handleAddCategory}>
@@ -330,19 +334,19 @@ export default function CategoryManager() {
               borderRadius="16px"
               borderWidth="2px"
               borderColor="blue.200"
-              bg="white"
+              bg={colors.cardBg}
               boxShadow="0 2px 8px rgba(0,0,0,0.05)"
             >
-              <Heading size="lg" mb={2} color="gray.800">
+              <Heading size="lg" mb={2} color={colors.textPrimary}>
                 Merchant Mappings
               </Heading>
-              <Text color="gray.600" mb={6} fontSize="md">
+              <Text color={colors.textSecondary} mb={6} fontSize="md">
                 Map merchant names to categories for automatic categorization when importing
               </Text>
               <VStack gap={5} align="stretch">
                 {/* Merchant Name Input */}
                 <Box>
-                  <Text fontWeight="600" mb={2} color="gray.700" fontSize="sm">
+                  <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
                     Merchant Name
                   </Text>
                   <Input
@@ -363,10 +367,11 @@ export default function CategoryManager() {
                     }}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
                     size="lg"
-                    bg="gray.50"
-                    borderColor="gray.300"
+                    bg={colors.rowStripedBg}
+                    borderColor={colors.borderColor}
+                    color={colors.textPrimary}
                     _hover={{ borderColor: 'blue.400' }}
-                    _focus={{ borderColor: 'blue.500', bg: 'white', boxShadow: '0 0 0 1px #3B82F6' }}
+                    _focus={{ borderColor: 'blue.500', bg: colors.cardBg, boxShadow: '0 0 0 1px #3B82F6' }}
                     fontSize="md"
                     h="56px"
                     borderRadius="12px"
@@ -377,14 +382,14 @@ export default function CategoryManager() {
                       <option key={pattern} value={pattern} />
                     ))}
                   </datalist>
-                  <Text fontSize="xs" color="gray.500" mt={1}>
+                  <Text fontSize="xs" color={colors.textMuted} mt={1}>
                     Enter the exact merchant name as it appears in your bank statements
                   </Text>
                 </Box>
 
                 {/* Category Select */}
                 <Box>
-                  <Text fontWeight="600" mb={2} color="gray.700" fontSize="sm">
+                  <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
                     Assign to Category
                   </Text>
                   <select
@@ -394,8 +399,9 @@ export default function CategoryManager() {
                       padding: '16px 14px',
                       fontSize: '16px',
                       borderRadius: '12px',
-                      border: '1px solid #CBD5E0',
-                      backgroundColor: '#F7FAFC',
+                      border: `1px solid ${colors.borderColor}`,
+                      backgroundColor: colors.rowStripedBg,
+                      color: colors.textPrimary,
                       height: '56px',
                       width: '100%',
                       cursor: 'pointer',
@@ -432,13 +438,13 @@ export default function CategoryManager() {
                 {selectedCategory && patterns[selectedCategory]?.length > 0 && (
                   <Box
                     p={4}
-                    bg="white"
+                    bg={colors.cardBg}
                     borderRadius="md"
                     borderWidth="1px"
-                    borderColor="gray.200"
+                    borderColor={colors.borderColor}
                   >
                     <HStack justify="space-between" mb={2}>
-                      <Text fontWeight="bold" fontSize="sm" color="gray.700">
+                      <Text fontWeight="bold" fontSize="sm" color={colors.textSecondary}>
                         Existing merchant mappings for "{selectedCategory}":
                       </Text>
                       <Badge colorScheme="blue">{patterns[selectedCategory].length}</Badge>
@@ -450,11 +456,11 @@ export default function CategoryManager() {
                             key={merchantName}
                             justify="space-between"
                             p={2}
-                            bg="gray.50"
+                            bg={colors.rowStripedBg}
                             borderRadius="md"
                             fontSize="sm"
                           >
-                            <Text>{merchantName}</Text>
+                            <Text color={colors.textPrimary}>{merchantName}</Text>
                             <IconButton
                               size="xs"
                               colorScheme="red"
@@ -482,10 +488,10 @@ export default function CategoryManager() {
             borderRadius="lg"
             borderWidth="1px"
             borderColor="green.200"
-            bg="green.50"
+            bg={colors.cardBg}
           >
             <Heading size="md" mb={4}>Income Categories</Heading>
-            <Text color="gray.700" mb={4}>
+            <Text color={colors.textSecondary} mb={4}>
               Manage your income categories and add income transactions
             </Text>
 
@@ -505,21 +511,23 @@ export default function CategoryManager() {
                   </Badge>
                 ))}
                 {incomeCategories.length === 0 && (
-                  <Text color="gray.500">No income categories yet</Text>
+                  <Text color={colors.textMuted}>No income categories yet</Text>
                 )}
               </HStack>
             </Box>
 
             {/* Add New Category */}
-            <Box p={4} bg="white" borderRadius="md" mb={6}>
-              <Text fontWeight="medium" mb={2}>Add New Income Category</Text>
+            <Box p={4} bg={colors.rowStripedBg} borderRadius="md" mb={6}>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Add New Income Category</Text>
               <HStack gap={2}>
                 <Input
                   placeholder="e.g., Salary, Freelance, Dividends"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
-                  bg="white"
+                  bg={colors.cardBg}
+                  borderColor={colors.borderColor}
+                  color={colors.textPrimary}
                   flex={1}
                 />
                 <Button colorScheme="green" onClick={handleAddCategory}>
@@ -529,11 +537,11 @@ export default function CategoryManager() {
             </Box>
 
             {/* Quick Action to Add Income */}
-            <Box p={4} bg="white" borderRadius="md" borderWidth="1px" borderColor="green.300">
+            <Box p={4} bg={colors.cardBg} borderRadius="md" borderWidth="1px" borderColor="green.300">
               <HStack justify="space-between" align="center">
                 <Box>
-                  <Text fontWeight="bold">Ready to add income?</Text>
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontWeight="bold" color={colors.textPrimary}>Ready to add income?</Text>
+                  <Text fontSize="sm" color={colors.textSecondary}>
                     Record your salary, freelance earnings, or other income
                   </Text>
                 </Box>

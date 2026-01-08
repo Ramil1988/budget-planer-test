@@ -12,10 +12,12 @@ import {
   Stack,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 export default function Signup() {
   const navigate = useNavigate();
   const { signUp } = useAuth();
+  const colors = useDarkModeColors();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -65,11 +67,12 @@ export default function Signup() {
   };
 
   return (
-    <Container maxW="md" py={12}>
-      <VStack gap={8}>
-        <Box textAlign="center">
-          <Heading size="2xl">Create Account</Heading>
-          <Text color="gray.600" mt={2}>
+    <Box bg={colors.pageBg} minH="calc(100vh - 140px)">
+      <Container maxW="md" py={12}>
+        <VStack gap={8}>
+          <Box textAlign="center">
+            <Heading size="2xl" color={colors.textPrimary}>Create Account</Heading>
+          <Text color={colors.textSecondary} mt={2}>
             Start tracking your budget with BudgetWise
           </Text>
         </Box>
@@ -81,19 +84,20 @@ export default function Signup() {
           p={8}
           borderRadius="lg"
           borderWidth="1px"
-          borderColor="gray.200"
+          borderColor={colors.borderColor}
+          bg={colors.cardBg}
         >
           <VStack gap={4}>
             {error && (
               <Box
                 p={3}
-                bg="red.50"
-                borderColor="red.500"
+                bg={colors.dangerBg}
+                borderColor={colors.dangerBorder}
                 borderWidth="1px"
                 borderRadius="md"
                 w="100%"
               >
-                <Text color="red.700" fontWeight="medium">
+                <Text color={colors.danger} fontWeight="medium">
                   {error}
                 </Text>
               </Box>
@@ -102,20 +106,20 @@ export default function Signup() {
             {success && (
               <Box
                 p={3}
-                bg="green.50"
-                borderColor="green.500"
+                bg={colors.successBg}
+                borderColor={colors.successBorder}
                 borderWidth="1px"
                 borderRadius="md"
                 w="100%"
               >
-                <Text color="green.700" fontWeight="medium">
+                <Text color={colors.success} fontWeight="medium">
                   Account created! Please check your email to verify your account.
                 </Text>
               </Box>
             )}
 
             <Stack gap={2} w="100%">
-              <Text fontWeight="medium">Full Name</Text>
+              <Text fontWeight="medium" color={colors.textPrimary}>Full Name</Text>
               <Input
                 type="text"
                 placeholder="John Doe"
@@ -123,11 +127,14 @@ export default function Signup() {
                 onChange={(e) => setFullName(e.target.value)}
                 required
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Stack>
 
             <Stack gap={2} w="100%">
-              <Text fontWeight="medium">Email</Text>
+              <Text fontWeight="medium" color={colors.textPrimary}>Email</Text>
               <Input
                 type="email"
                 placeholder="you@example.com"
@@ -135,11 +142,14 @@ export default function Signup() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Stack>
 
             <Stack gap={2} w="100%">
-              <Text fontWeight="medium">Password</Text>
+              <Text fontWeight="medium" color={colors.textPrimary}>Password</Text>
               <Input
                 type="password"
                 placeholder="••••••••"
@@ -147,14 +157,17 @@ export default function Signup() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
-              <Text fontSize="xs" color="gray.500">
+              <Text fontSize="xs" color={colors.textMuted}>
                 Must be at least 6 characters
               </Text>
             </Stack>
 
             <Stack gap={2} w="100%">
-              <Text fontWeight="medium">Confirm Password</Text>
+              <Text fontWeight="medium" color={colors.textPrimary}>Confirm Password</Text>
               <Input
                 type="password"
                 placeholder="••••••••"
@@ -162,6 +175,9 @@ export default function Signup() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Stack>
 
@@ -177,7 +193,7 @@ export default function Signup() {
               {loading ? 'Creating account...' : 'Sign Up'}
             </Button>
 
-            <Text textAlign="center" color="gray.600">
+            <Text textAlign="center" color={colors.textSecondary}>
               Already have an account?{' '}
               <Link as={RouterLink} to="/login" color="blue.600" fontWeight="medium">
                 Sign in
@@ -186,6 +202,7 @@ export default function Signup() {
           </VStack>
         </Box>
       </VStack>
-    </Container>
+      </Container>
+    </Box>
   );
 }

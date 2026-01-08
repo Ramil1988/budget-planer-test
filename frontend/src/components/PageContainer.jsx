@@ -1,4 +1,5 @@
 import { Box } from '@chakra-ui/react';
+import { useColorModeValue } from './ui/color-mode';
 
 /**
  * PageContainer - Consistent layout wrapper for all app pages
@@ -9,9 +10,11 @@ import { Box } from '@chakra-ui/react';
  *   <YourPageContent />
  * </PageContainer>
  */
-export default function PageContainer({ children, bg = '#FAFAF9', maxW = '1200px', ...props }) {
+export default function PageContainer({ children, maxW = '1200px', ...props }) {
+  const bgColor = useColorModeValue('#FAFAF9', '#09090B');
+
   return (
-    <Box w="100%" minH="calc(100vh - 130px)" bg={bg}>
+    <Box w="100%" minH="calc(100vh - 130px)" bg={bgColor}>
       <Box
         maxW={maxW}
         mx="auto"

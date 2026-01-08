@@ -12,6 +12,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import PageContainer from '../components/PageContainer';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 import {
   isNotificationSupported,
   getNotificationPermission,
@@ -21,6 +22,7 @@ import {
 
 export default function Settings() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState('checking');
   const [requestingPermission, setRequestingPermission] = useState(false);
@@ -93,13 +95,13 @@ export default function Settings() {
       <VStack gap={8} align="stretch" w="100%">
         <Box>
           <Heading size="2xl">Settings</Heading>
-          <Text color="gray.600" mt={2}>
+          <Text color={colors.textSecondary} mt={2}>
             Manage your account settings
           </Text>
         </Box>
 
         {/* Notifications Section */}
-        <Box p={6} borderWidth="1px" borderRadius="lg" bg="white">
+        <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
           <Heading size="lg" mb={4}>
             Push Notifications
           </Heading>
@@ -110,16 +112,16 @@ export default function Settings() {
             </HStack>
 
             {notificationStatus === 'unsupported' && (
-              <Box p={4} bg="yellow.50" borderRadius="md" borderColor="yellow.200" borderWidth="1px">
-                <Text color="yellow.700" fontSize="sm">
+              <Box p={4} bg={colors.warningBg} borderRadius="md" borderColor={colors.warningBorder} borderWidth="1px">
+                <Text color={colors.warning} fontSize="sm">
                   Push notifications are not supported in this browser. For the best experience, add this app to your home screen on iOS 16.4+ or use Chrome on Android.
                 </Text>
               </Box>
             )}
 
             {notificationStatus === 'denied' && (
-              <Box p={4} bg="red.50" borderRadius="md" borderColor="red.200" borderWidth="1px">
-                <Text color="red.700" fontSize="sm">
+              <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
+                <Text color={colors.danger} fontSize="sm">
                   Notifications are blocked. To enable them, go to your browser settings and allow notifications for this site.
                 </Text>
               </Box>
@@ -138,7 +140,7 @@ export default function Settings() {
 
             {notificationStatus === 'granted' && (
               <VStack align="stretch" gap={3}>
-                <Text color="gray.600" fontSize="sm">
+                <Text color={colors.textSecondary} fontSize="sm">
                   You will receive notifications for:
                 </Text>
                 <VStack align="start" gap={1} pl={4}>
@@ -159,23 +161,23 @@ export default function Settings() {
         </Box>
 
         {/* Account Info */}
-        <Box p={6} borderWidth="1px" borderRadius="lg" bg="white">
+        <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
           <Heading size="lg" mb={4}>
             Account Information
           </Heading>
           <VStack align="start" gap={2}>
-            <Text>
+            <Text color={colors.textPrimary}>
               <strong>Email:</strong> {user?.email}
             </Text>
-            <Text>
+            <Text color={colors.textPrimary}>
               <strong>User ID:</strong> {user?.id}
             </Text>
           </VStack>
         </Box>
 
         {/* Info box pointing to Import */}
-        <Box p={4} bg="blue.50" borderRadius="md" borderColor="blue.200" borderWidth="1px">
-          <Text color="blue.700">
+        <Box p={4} bg={colors.infoBg} borderRadius="md" borderColor={colors.infoBorder} borderWidth="1px">
+          <Text color={colors.info}>
             <strong>Looking for Google Sheet sync?</strong> Go to the <strong>Import</strong> tab to connect your Google Sheet and configure auto-sync settings.
           </Text>
         </Box>

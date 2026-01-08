@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 // Circular Progress Ring Component
 const ProgressRing = ({ percent, size = 120, strokeWidth = 8, color = '#3B82F6' }) => {
@@ -93,7 +94,7 @@ const ProgressBar = ({ percent, height = '8px', showOverflow = true }) => {
 };
 
 // Category Budget Card Component
-const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
+const BudgetCard = ({ item, formatCurrency, index, onClick, colors }) => {
   const isOver = item.percentOfLimit > 100;
   const isWarning = item.percentOfLimit > 80 && item.percentOfLimit <= 100;
   const hasLimit = item.limit > 0;
@@ -101,11 +102,11 @@ const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
   return (
     <Box
       p={5}
-      bg="white"
+      bg={colors.cardBg}
       borderRadius="16px"
       boxShadow="0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)"
       border="1px solid"
-      borderColor={isOver ? 'red.200' : 'gray.100'}
+      borderColor={isOver ? 'red.200' : colors.borderSubtle}
       transition="all 0.3s ease"
       _hover={{
         transform: 'translateY(-2px)',
@@ -122,12 +123,12 @@ const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
           <Text
             fontWeight="600"
             fontSize="md"
-            color="gray.800"
+            color={colors.textPrimary}
             mb={1}
           >
             {item.name}
           </Text>
-          <Text fontSize="2xl" fontWeight="700" color="gray.900">
+          <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
             {formatCurrency(item.spent)}
           </Text>
         </Box>
@@ -143,7 +144,7 @@ const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
             >
               {isOver ? 'Over Budget' : isWarning ? 'Warning' : 'On Track'}
             </Text>
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color={colors.textMuted}>
               of {formatCurrency(item.limit)}
             </Text>
           </Box>
@@ -154,7 +155,7 @@ const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
         <>
           <ProgressBar percent={item.percentOfLimit} />
           <Flex justify="space-between" mt={3}>
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color={colors.textMuted}>
               {item.percentOfLimit.toFixed(0)}% used
             </Text>
             <Text
@@ -167,7 +168,7 @@ const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
           </Flex>
         </>
       ) : (
-        <Text fontSize="sm" color="gray.400" mt={2}>
+        <Text fontSize="sm" color={colors.textMuted} mt={2}>
           No limit set
         </Text>
       )}
@@ -177,6 +178,7 @@ const BudgetCard = ({ item, formatCurrency, index, onClick }) => {
 
 export default function Budget() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -519,10 +521,10 @@ export default function Budget() {
         <Flex w="100%" minH="60vh" align="center" justify="center">
           <VStack gap={4} textAlign="center" p={6}>
             <Heading size="lg">No Budget Categories</Heading>
-            <Text color="gray.600">
+            <Text color={colors.textSecondary}>
               You need to create expense categories first before setting up a budget.
             </Text>
-            <Text color="gray.500" fontSize="sm">
+            <Text color={colors.textMuted} fontSize="sm">
               Go to Categories and add some expense categories to get started.
             </Text>
           </VStack>
@@ -543,24 +545,26 @@ export default function Budget() {
             onChange={(e) => setSelectedMonth(e.target.value)}
             size="md"
             w={{ base: '100%', sm: '200px' }}
-            bg="white"
+            bg={colors.cardBg}
+            borderColor={colors.borderColor}
+            color={colors.textPrimary}
           />
         </Flex>
 
         {/* Month Display */}
-        <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600">
+        <Text fontSize={{ base: 'md', md: 'lg' }} color={colors.textSecondary}>
           {getMonthName(selectedMonth)}
         </Text>
 
         {/* Messages */}
         {error && (
-          <Box p={4} bg="red.50" borderRadius="md" borderColor="red.200" borderWidth="1px">
-            <Text color="red.700">{error}</Text>
+          <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
+            <Text color={colors.danger}>{error}</Text>
           </Box>
         )}
         {success && (
-          <Box p={4} bg="green.50" borderRadius="md" borderColor="green.200" borderWidth="1px">
-            <Text color="green.700">{success}</Text>
+          <Box p={4} bg={colors.successBg} borderRadius="md" borderColor={colors.successBorder} borderWidth="1px">
+            <Text color={colors.success}>{success}</Text>
           </Box>
         )}
 
@@ -714,7 +718,7 @@ export default function Budget() {
                     fontWeight="600"
                     textTransform="uppercase"
                     letterSpacing="0.05em"
-                    color="gray.500"
+                    color={colors.textMuted}
                     mb={4}
                   >
                     By Category
@@ -731,6 +735,7 @@ export default function Budget() {
                         formatCurrency={formatCurrency}
                         index={index}
                         onClick={() => loadCategoryTransactions(item.id, item.name)}
+                        colors={colors}
                       />
                     ))}
                   </Box>
@@ -799,7 +804,7 @@ export default function Budget() {
                   fontWeight="600"
                   textTransform="uppercase"
                   letterSpacing="0.05em"
-                  color="gray.500"
+                  color={colors.textMuted}
                   mb={4}
                 >
                   Set Category Limits
@@ -815,19 +820,19 @@ export default function Budget() {
                       <Box
                         key={cat.id}
                         p={4}
-                        bg="white"
+                        bg={colors.cardBg}
                         borderRadius="12px"
                         border="1px solid"
-                        borderColor="gray.200"
+                        borderColor={colors.borderColor}
                         transition="all 0.2s ease"
                         _hover={{ borderColor: 'blue.300', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}
                         style={{ animation: `fadeSlideIn 0.3s ease-out ${index * 0.03}s both` }}
                       >
-                        <Text fontWeight="600" fontSize="sm" color="gray.700" mb={3}>
+                        <Text fontWeight="600" fontSize="sm" color={colors.textSecondary} mb={3}>
                           {cat.name}
                         </Text>
                         <HStack>
-                          <Text color="gray.400" fontSize="lg" fontWeight="500">$</Text>
+                          <Text color={colors.textMuted} fontSize="lg" fontWeight="500">$</Text>
                           <Input
                             type="number"
                             min="0"
@@ -837,12 +842,13 @@ export default function Budget() {
                             placeholder="0.00"
                             size="md"
                             border="none"
-                            bg="gray.50"
+                            bg={colors.rowStripedBg}
                             borderRadius="8px"
                             fontWeight="600"
                             fontSize="lg"
+                            color={colors.textPrimary}
                             _focus={{ bg: 'blue.50', boxShadow: 'none' }}
-                            _placeholder={{ color: 'gray.300' }}
+                            _placeholder={{ color: colors.textMuted }}
                           />
                         </HStack>
                       </Box>
@@ -885,7 +891,7 @@ export default function Budget() {
               maxH="80vh"
               borderRadius="20px"
               overflow="hidden"
-              bg="white"
+              bg={colors.cardBg}
             >
               <Dialog.Header
                 bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)"
@@ -918,7 +924,7 @@ export default function Budget() {
                   </Flex>
                 ) : categoryTransactions.length === 0 ? (
                   <Flex justify="center" align="center" py={10}>
-                    <Text color="gray.500">No transactions found</Text>
+                    <Text color={colors.textMuted}>No transactions found</Text>
                   </Flex>
                 ) : (
                   <VStack gap={0} align="stretch">
@@ -928,16 +934,16 @@ export default function Budget() {
                         px={5}
                         py={4}
                         borderBottomWidth={idx < categoryTransactions.length - 1 ? '1px' : '0'}
-                        borderColor="gray.100"
-                        _hover={{ bg: 'gray.50' }}
+                        borderColor={colors.borderSubtle}
+                        _hover={{ bg: colors.rowStripedBg }}
                         transition="background 0.15s"
                       >
                         <Flex justify="space-between" align="flex-start">
                           <Box flex="1" pr={3}>
-                            <Text fontWeight="600" color="gray.800" fontSize="sm">
+                            <Text fontWeight="600" color={colors.textPrimary} fontSize="sm">
                               {tx.description || 'No description'}
                             </Text>
-                            <Text fontSize="xs" color="gray.500" mt={0.5}>
+                            <Text fontSize="xs" color={colors.textMuted} mt={0.5}>
                               {new Date(tx.date + 'T00:00:00').toLocaleDateString('en-US', {
                                 weekday: 'short',
                                 month: 'short',
@@ -957,16 +963,16 @@ export default function Budget() {
 
               <Dialog.Footer
                 p={4}
-                bg="gray.50"
+                bg={colors.rowStripedBg}
                 borderTopWidth="1px"
-                borderColor="gray.100"
+                borderColor={colors.borderSubtle}
               >
                 <Flex justify="space-between" align="center" w="100%">
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontSize="sm" color={colors.textSecondary}>
                     {categoryTransactions.length} transaction{categoryTransactions.length !== 1 ? 's' : ''}
                   </Text>
                   <HStack gap={2}>
-                    <Text fontSize="sm" color="gray.600">Total:</Text>
+                    <Text fontSize="sm" color={colors.textSecondary}>Total:</Text>
                     <Text fontSize="lg" fontWeight="700" color="red.500">
                       {formatCurrency(categoryTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0))}
                     </Text>

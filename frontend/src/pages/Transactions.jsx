@@ -18,9 +18,11 @@ import { LuFilter, LuX } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 export default function Transactions() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -320,7 +322,7 @@ export default function Transactions() {
                 variant="outline"
                 size={{ base: 'sm', md: 'md' }}
                 disabled={filteredTransactions.length === 0}
-                _hover={{ bg: 'gray.50' }}
+                _hover={{ bg: colors.rowStripedBg }}
               >
                 Download CSV
               </Button>
@@ -337,8 +339,8 @@ export default function Transactions() {
 
           {/* Error Message */}
           {error && (
-            <Box p={3} bg="red.50" borderRadius="md" borderColor="red.200" borderWidth="1px" w="100%">
-              <Text color="red.700" fontSize="sm">{error}</Text>
+            <Box p={3} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px" w="100%">
+              <Text color={colors.danger} fontSize="sm">{error}</Text>
             </Box>
           )}
 
@@ -349,7 +351,9 @@ export default function Transactions() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               size={{ base: 'sm', md: 'md' }}
-              bg="white"
+              bg={colors.cardBg}
+              borderColor={colors.borderColor}
+              color={colors.textPrimary}
               maxW={{ base: '100%', md: '400px' }}
               flex="1"
               minW={{ base: '100%', sm: '200px' }}
@@ -362,8 +366,9 @@ export default function Transactions() {
                   padding: '8px 12px',
                   fontSize: '14px',
                   borderRadius: '6px',
-                  border: '1px solid #E2E8F0',
-                  backgroundColor: 'white',
+                  border: `1px solid ${colors.borderColor}`,
+                  backgroundColor: colors.cardBg,
+                  color: colors.textPrimary,
                   minWidth: '130px',
                 }}
               >
@@ -392,7 +397,7 @@ export default function Transactions() {
                 Reset
               </Button>
             )}
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color={colors.textMuted}>
               {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
             </Text>
           </Flex>
@@ -401,35 +406,39 @@ export default function Transactions() {
           <Collapsible.Root open={showCustomFilters}>
             <Collapsible.Content>
               <Box
-                bg="white"
+                bg={colors.cardBg}
                 borderRadius="xl"
                 borderWidth="1px"
-                borderColor="gray.200"
+                borderColor={colors.borderColor}
                 p={{ base: 4, md: 6 }}
                 w="100%"
               >
                 <VStack gap={5} align="stretch">
                   {/* Date Range */}
                   <Box>
-                    <Text fontWeight="600" color="gray.700" mb={3}>Date range</Text>
+                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Date range</Text>
                     <Flex gap={4} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
                       <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color="gray.500" mb={1}>Start date</Text>
+                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>Start date</Text>
                         <Input
                           type="date"
                           value={startDate}
                           onChange={(e) => setStartDate(e.target.value)}
-                          bg="white"
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
                           size="md"
                         />
                       </Box>
                       <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color="gray.500" mb={1}>End date</Text>
+                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>End date</Text>
                         <Input
                           type="date"
                           value={endDate}
                           onChange={(e) => setEndDate(e.target.value)}
-                          bg="white"
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
                           size="md"
                         />
                       </Box>
@@ -438,29 +447,33 @@ export default function Transactions() {
 
                   {/* Amount Range */}
                   <Box>
-                    <Text fontWeight="600" color="gray.700" mb={3}>Amount range</Text>
+                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Amount range</Text>
                     <Flex gap={4} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
                       <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color="gray.500" mb={1}>Minimum amount</Text>
+                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>Minimum amount</Text>
                         <Input
                           type="number"
                           placeholder="$0.00"
                           value={minAmount}
                           onChange={(e) => setMinAmount(e.target.value)}
-                          bg="white"
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
                           size="md"
                           min="0"
                           step="0.01"
                         />
                       </Box>
                       <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color="gray.500" mb={1}>Maximum amount</Text>
+                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>Maximum amount</Text>
                         <Input
                           type="number"
                           placeholder="$999,999.00"
                           value={maxAmount}
                           onChange={(e) => setMaxAmount(e.target.value)}
-                          bg="white"
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
                           size="md"
                           min="0"
                           step="0.01"
@@ -492,23 +505,23 @@ export default function Transactions() {
           {/* Mobile Card View */}
           <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch" w="100%">
             {filteredTransactions.length === 0 ? (
-              <Box p={6} bg="white" borderRadius="lg" borderWidth="1px" textAlign="center">
-                <Text color="gray.500">No transactions found</Text>
+              <Box p={6} bg={colors.cardBg} borderRadius="lg" borderWidth="1px" borderColor={colors.borderColor} textAlign="center">
+                <Text color={colors.textMuted}>No transactions found</Text>
               </Box>
             ) : (
               filteredTransactions.map((transaction) => (
                 <Box
                   key={transaction.id}
                   p={4}
-                  bg="white"
+                  bg={colors.cardBg}
                   borderRadius="lg"
                   borderWidth="1px"
-                  borderColor="gray.200"
+                  borderColor={colors.borderColor}
                 >
                   <Flex justify="space-between" align="flex-start" mb={2}>
                     <Box flex="1">
-                      <Text fontWeight="semibold" fontSize="sm">{transaction.category}</Text>
-                      <Text fontSize="xs" color="gray.500" noOfLines={2}>
+                      <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>{transaction.category}</Text>
+                      <Text fontSize="xs" color={colors.textSecondary} noOfLines={2}>
                         {transaction.description}
                       </Text>
                     </Box>
@@ -522,9 +535,9 @@ export default function Transactions() {
                     </Text>
                   </Flex>
                   <Flex justify="space-between" align="center">
-                    <Text fontSize="xs" color="gray.500">{formatDate(transaction.date)}</Text>
+                    <Text fontSize="xs" color={colors.textMuted}>{formatDate(transaction.date)}</Text>
                     <HStack gap={2}>
-                      <Text fontSize="xs" color={transaction.balance < 0 ? 'red.500' : 'gray.500'}>
+                      <Text fontSize="xs" color={transaction.balance < 0 ? 'red.500' : colors.textMuted}>
                         Bal: {formatBalance(transaction.balance)}
                       </Text>
                       <Button
@@ -548,18 +561,19 @@ export default function Transactions() {
           <Box
             display={{ base: 'none', md: 'block' }}
             borderWidth="1px"
+            borderColor={colors.borderColor}
             borderRadius="lg"
             overflow="hidden"
-            bg="white"
+            bg={colors.cardBg}
             w="100%"
           >
             <Table.Root size="md" w="100%" style={{ tableLayout: 'fixed' }}>
               <Table.Header>
-                <Table.Row bg="gray.50">
-                  <Table.ColumnHeader py={4} px={6} w="12%">Date</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={6} w="auto">Description</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%">Amount</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%">Balance</Table.ColumnHeader>
+                <Table.Row bg={colors.rowStripedBg}>
+                  <Table.ColumnHeader py={4} px={6} w="12%" color={colors.textSecondary}>Date</Table.ColumnHeader>
+                  <Table.ColumnHeader py={4} px={6} w="auto" color={colors.textSecondary}>Description</Table.ColumnHeader>
+                  <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Amount</Table.ColumnHeader>
+                  <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Balance</Table.ColumnHeader>
                   <Table.ColumnHeader py={4} px={3} w="5%"></Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
@@ -567,18 +581,18 @@ export default function Transactions() {
                 {filteredTransactions.length === 0 ? (
                   <Table.Row>
                     <Table.Cell colSpan={5} textAlign="center" py={12}>
-                      <Text color="gray.500">No transactions found</Text>
+                      <Text color={colors.textMuted}>No transactions found</Text>
                     </Table.Cell>
                   </Table.Row>
                 ) : (
                   filteredTransactions.map((transaction) => (
-                    <Table.Row key={transaction.id} _hover={{ bg: 'gray.50' }}>
+                    <Table.Row key={transaction.id} bg={colors.cardBg} _hover={{ bg: colors.rowHoverBg }}>
                       <Table.Cell py={4} px={6}>
-                        <Text color="gray.600">{formatDate(transaction.date)}</Text>
+                        <Text color={colors.textSecondary}>{formatDate(transaction.date)}</Text>
                       </Table.Cell>
                       <Table.Cell py={4} px={6}>
-                        <Text fontWeight="medium">{transaction.category}</Text>
-                        <Text fontSize="sm" color="gray.500" noOfLines={1}>
+                        <Text fontWeight="medium" color={colors.textPrimary}>{transaction.category}</Text>
+                        <Text fontSize="sm" color={colors.textSecondary} noOfLines={1}>
                           {transaction.description}
                           {transaction.bank && transaction.bank !== transaction.description && (
                             <Text as="span" color="blue.500" ml={2}>• {transaction.bank}</Text>
@@ -594,7 +608,7 @@ export default function Transactions() {
                         </Text>
                       </Table.Cell>
                       <Table.Cell textAlign="right" py={4} px={6}>
-                        <Text color={transaction.balance < 0 ? 'red.600' : 'gray.700'}>
+                        <Text color={transaction.balance < 0 ? 'red.600' : colors.textSecondary}>
                           {formatBalance(transaction.balance)}
                         </Text>
                       </Table.Cell>
@@ -621,7 +635,7 @@ export default function Transactions() {
           {filteredTransactions.length > 0 && (
             <Flex justify="flex-end" px={4} w="100%">
               <HStack gap={2}>
-                <Text color="gray.600">Period total:</Text>
+                <Text color={colors.textSecondary}>Period total:</Text>
                 <Text
                   fontWeight="bold"
                   fontSize="lg"

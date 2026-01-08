@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dark Mode Support (2026-01-08):**
+  - Full dark mode implementation across all pages and components
+  - New `useDarkModeColors` hook providing semantic color tokens:
+    - Page/card backgrounds, text colors, borders
+    - Status colors (success, danger, warning, info) with adaptive dark variants
+    - Interactive colors (primary, hover states)
+  - ColorModeButton toggle in header (sun/moon icons)
+  - Theme persistence via localStorage
+  - Updated all 15+ pages with consistent dark mode styling:
+    - Home, Dashboard, Reports, Transactions, RecurringPayments
+    - Budget, CategoryManager, Settings, ImportTransactions
+    - AddTransaction, Login, Signup, Header, Footer, PageContainer
+  - Error/success/warning message boxes now adapt to dark mode
+
 - **Supabase PostgreSQL Database Schema (2025-12-29):**
   - Comprehensive 6-table schema:
     - `profiles` - User profiles linked to Supabase Auth (id, email, full_name)
@@ -90,10 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Budget visualization charts (Recharts or Nivo)
   - Real-time data updates (Supabase Realtime)
   - Export functionality (CSV, PDF)
-  - Dark mode support with Chakra UI
   - Receipt scanner with OCR integration
   - Multi-currency support
-  - Recurring transactions
 
 ---
 

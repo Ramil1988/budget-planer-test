@@ -19,9 +19,11 @@ import PageContainer from '../components/PageContainer';
 import { fetchTransactionsFromGoogleSheets, parseCSVFile, validateTransactions, extractSheetId } from '../lib/importUtils';
 import { supabase } from '../lib/supabaseClient';
 import { showNotification, checkBudgetAndNotify, getNotificationPermission } from '../lib/notifications';
+import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 export default function ImportTransactions() {
   const { user } = useAuth();
+  const colors = useDarkModeColors();
   const {
     isEnabled: autoSyncEnabled,
     isSyncing,
@@ -432,35 +434,35 @@ export default function ImportTransactions() {
       <VStack gap={8} align="stretch" w="100%">
           <Box>
             <Heading size="2xl">Import Transactions</Heading>
-            <Text color="gray.600" mt={2}>
+            <Text color={colors.textSecondary} mt={2}>
               Connect your Google Sheet for automatic syncing or import from CSV
             </Text>
           </Box>
 
         {/* Messages */}
         {error && (
-          <Box p={4} bg="red.50" borderRadius="md" borderColor="red.200" borderWidth="1px">
-            <Text color="red.700">{error}</Text>
+          <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
+            <Text color={colors.danger}>{error}</Text>
           </Box>
         )}
         {success && (
-          <Box p={4} bg="green.50" borderRadius="md" borderColor="green.200" borderWidth="1px">
-            <Text color="green.700">{success}</Text>
+          <Box p={4} bg={colors.successBg} borderRadius="md" borderColor={colors.successBorder} borderWidth="1px">
+            <Text color={colors.success}>{success}</Text>
           </Box>
         )}
 
         {/* Google Sheet Configuration */}
-        <Box p={6} borderWidth="1px" borderRadius="lg" bg="white">
+        <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
           <Heading size="lg" mb={4}>
             Google Sheet Connection
           </Heading>
-          <Text color="gray.600" mb={6}>
+          <Text color={colors.textSecondary} mb={6}>
             Connect your Google Sheet to sync transactions. The sheet must be publicly accessible (Share → Anyone with the link can view).
           </Text>
 
           <VStack gap={4} align="stretch">
             <Box>
-              <Text fontWeight="medium" mb={2}>Google Sheets URL</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Google Sheets URL</Text>
               <Input
                 placeholder="https://docs.google.com/spreadsheets/d/..."
                 value={sheetUrl}
@@ -469,18 +471,24 @@ export default function ImportTransactions() {
                   if (hasConnectedSheet) setHasConnectedSheet(false);
                 }}
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
             </Box>
 
             <Box>
-              <Text fontWeight="medium" mb={2}>Sheet Name (Tab)</Text>
+              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Sheet Name (Tab)</Text>
               <Input
                 placeholder="Expenses"
                 value={sheetName}
                 onChange={(e) => setSheetName(e.target.value)}
                 size="lg"
+                bg={colors.cardBg}
+                borderColor={colors.borderColor}
+                color={colors.textPrimary}
               />
-              <Text fontSize="sm" color="gray.500" mt={1}>
+              <Text fontSize="sm" color={colors.textMuted} mt={1}>
                 The name of the tab containing your transactions (default: Expenses)
               </Text>
             </Box>
@@ -501,11 +509,11 @@ export default function ImportTransactions() {
 
         {/* Auto-Sync Settings - Only show when sheet is connected */}
         {hasConnectedSheet && (
-          <Box p={6} borderWidth="1px" borderRadius="lg" bg="white">
+          <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
             <Heading size="lg" mb={4}>
               Auto-Sync Settings
             </Heading>
-            <Text color="gray.600" mb={6}>
+            <Text color={colors.textSecondary} mb={6}>
               Automatically sync new transactions from your Google Sheet at regular intervals.
             </Text>
 
@@ -513,8 +521,8 @@ export default function ImportTransactions() {
               {/* Enable/Disable Toggle */}
               <HStack justify="space-between">
                 <Box>
-                  <Text fontWeight="medium">Enable Auto-Sync</Text>
-                  <Text fontSize="sm" color="gray.500">
+                  <Text fontWeight="medium" color={colors.textPrimary}>Enable Auto-Sync</Text>
+                  <Text fontSize="sm" color={colors.textMuted}>
                     Automatically import new transactions
                   </Text>
                 </Box>
@@ -531,7 +539,7 @@ export default function ImportTransactions() {
 
               {/* Sync Interval */}
               <Box>
-                <Text fontWeight="medium" mb={2}>Sync Interval</Text>
+                <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Sync Interval</Text>
                 <select
                   value={syncInterval}
                   onChange={(e) => updateSyncInterval(Number(e.target.value))}
@@ -540,8 +548,9 @@ export default function ImportTransactions() {
                     padding: '12px',
                     fontSize: '16px',
                     borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    backgroundColor: autoSyncEnabled ? 'white' : '#f7f7f7',
+                    border: `1px solid ${colors.borderColor}`,
+                    backgroundColor: autoSyncEnabled ? colors.cardBg : colors.rowStripedBg,
+                    color: colors.textPrimary,
                     width: '200px',
                   }}
                 >
@@ -554,11 +563,11 @@ export default function ImportTransactions() {
               </Box>
 
               {/* Sync Status */}
-              <Box p={4} bg="gray.50" borderRadius="md">
+              <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
                 <HStack justify="space-between" align="center">
                   <VStack align="start" gap={1}>
                     <HStack>
-                      <Text fontWeight="medium">Status:</Text>
+                      <Text fontWeight="medium" color={colors.textPrimary}>Status:</Text>
                       {isSyncing ? (
                         <Badge colorScheme="blue">Syncing...</Badge>
                       ) : autoSyncEnabled ? (
@@ -568,7 +577,7 @@ export default function ImportTransactions() {
                       )}
                     </HStack>
                     {lastSyncTime && (
-                      <Text fontSize="sm" color="gray.600">
+                      <Text fontSize="sm" color={colors.textSecondary}>
                         Last sync: {lastSyncTime.toLocaleDateString()} {lastSyncTime.toLocaleTimeString()}
                       </Text>
                     )}
@@ -597,11 +606,11 @@ export default function ImportTransactions() {
         )}
 
         {/* Manual Import Section */}
-        <Box p={6} borderWidth="1px" borderRadius="lg" bg="white">
+        <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
           <Heading size="lg" mb={4}>
             Manual Import
           </Heading>
-          <Text color="gray.600" mb={6}>
+          <Text color={colors.textSecondary} mb={6}>
             Preview and import transactions manually from your connected sheet or upload a CSV file.
           </Text>
 
@@ -632,7 +641,7 @@ export default function ImportTransactions() {
         {transactions.length > 0 && (
           <>
             {/* Statistics */}
-            <Box p={6} bg="blue.50" borderRadius="lg">
+            <Box p={6} bg={colors.infoBg} borderRadius="lg">
               <Heading size="md" mb={4}>
                 Import Summary
               </Heading>
@@ -676,7 +685,7 @@ export default function ImportTransactions() {
                           px={2}
                           py={1}
                           borderRadius="md"
-                          bg="blue.100"
+                          bg={colors.primaryBg}
                           fontSize="sm"
                         >
                           {transaction.category}
@@ -689,7 +698,7 @@ export default function ImportTransactions() {
               </Table.Root>
               {transactions.length > 20 && (
                 <HStack justify="center" mt={2} gap={4}>
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontSize="sm" color={colors.textSecondary}>
                     {showAll
                       ? `Showing all ${transactions.length} transactions`
                       : `Showing first 20 of ${transactions.length} transactions`}

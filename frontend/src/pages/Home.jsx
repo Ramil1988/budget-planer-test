@@ -14,8 +14,13 @@ import {
   Stack,
   Badge,
 } from '@chakra-ui/react'
+import { useDarkModeColors } from '../lib/useDarkModeColors'
+import { useColorMode } from '../components/ui/color-mode'
 
 function Home() {
+  const colors = useDarkModeColors()
+  const { colorMode } = useColorMode()
+  const isDark = colorMode === 'dark'
   const [showScrollTop, setShowScrollTop] = useState(false)
 
   useEffect(() => {
@@ -43,7 +48,7 @@ function Home() {
   ]
 
   return (
-    <Box as="main">
+    <Box as="main" bg={colors.pageBg} color={colors.textPrimary}>
       {/* Hero Section */}
       <Container maxW="1200px" px={8} py={{ base: 16, md: 24 }}>
         <Flex
@@ -53,37 +58,38 @@ function Home() {
           justify="space-between"
         >
           {/* Left side - Text content */}
-          <Box flex={1} maxW={{ base: '100%', lg: '500px' }}>
+          <Box flex={1} maxW={{ base: '100%', lg: isDark ? '100%' : '500px' }} textAlign={{ base: 'center', lg: isDark ? 'center' : 'left' }}>
             <Heading
               as="h1"
               fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
               fontWeight="normal"
               mb={6}
               lineHeight="1.2"
+              color={colors.textPrimary}
             >
-              Smart{' '}
-              <Text as="span" color="blue.600" fontWeight="bold">
+              <Text as="span" color={colors.textSecondary}>Smart</Text>{' '}
+              <Text as="span" color="blue.500" fontWeight="bold">
                 Budget Tracking
               </Text>{' '}
-              with Auto-Categorization
+              <Text as="span" color={colors.textSecondary}>with Auto-Categorization</Text>
             </Heading>
-            <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600" mb={8} lineHeight="1.8">
+            <Text fontSize={{ base: 'md', md: 'lg' }} color={colors.textSecondary} mb={8} lineHeight="1.8">
               Import your bank transactions and let our smart categorization do the work.
               Track spending across categories, set monthly budgets, and manage your finances
               - all with automatic balance calculations.
             </Text>
-            <Stack direction={{ base: 'column', sm: 'row' }} gap={4}>
+            <Stack direction={{ base: 'column', sm: 'row' }} gap={4} justify={{ base: 'center', lg: isDark ? 'center' : 'flex-start' }}>
               <Button
                 as={RouterLink}
                 to="/signup"
-                bg="black"
+                bg="blue.600"
                 color="white"
                 size="lg"
                 px={8}
                 py={6}
                 fontSize="md"
                 _hover={{
-                  bg: 'gray.800',
+                  bg: 'blue.700',
                 }}
               >
                 Get Started Free
@@ -102,34 +108,37 @@ function Home() {
             </Stack>
           </Box>
 
-          {/* Right side - Image (hidden on mobile) */}
-          <Box flex={1} maxW={{ base: '100%', lg: '600px' }} display={{ base: 'none', md: 'block' }}>
-            <Box
-              as="img"
-              src="/images/hero-dashboard.png"
-              alt="Budget dashboard preview"
-              w="100%"
-              h="auto"
-              style={{ mixBlendMode: 'multiply' }}
-            />
-          </Box>
+          {/* Right side - Image (hidden on mobile and in dark mode) */}
+          {!isDark && (
+            <Box flex={1} maxW={{ base: '100%', lg: '600px' }} display={{ base: 'none', md: 'block' }}>
+              <Box
+                as="img"
+                src="/images/hero-dashboard.png"
+                alt="Budget dashboard preview"
+                w="100%"
+                h="auto"
+                borderRadius="lg"
+              />
+            </Box>
+          )}
         </Flex>
       </Container>
 
       {/* Quick Features Section */}
-      <Box bg="gray.50" py={{ base: 12, md: 16 }} id="features">
+      <Box bg={colors.cardBg} py={{ base: 12, md: 16 }} id="features">
         <Container maxW="1200px" px={8}>
           <Heading
             as="h2"
             fontSize={{ base: '2xl', md: '3xl' }}
             textAlign="center"
             mb={4}
+            color={colors.textPrimary}
           >
             Why Choose BudgetWise?
           </Heading>
           <Text
             fontSize="lg"
-            color="gray.600"
+            color={colors.textSecondary}
             textAlign="center"
             mb={10}
             maxW="600px"
@@ -140,103 +149,115 @@ function Home() {
 
           <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={6}>
             <VStack
-              bg="white"
+              bg={colors.pageBg}
               p={6}
               borderRadius="lg"
               align="flex-start"
               gap={3}
               shadow="sm"
+              border="1px solid"
+              borderColor={colors.borderSubtle}
             >
               <Box fontSize="2xl">🏷️</Box>
-              <Heading as="h3" fontSize="lg" fontWeight="semibold">
+              <Heading as="h3" fontSize="lg" fontWeight="semibold" color={colors.textPrimary}>
                 Smart Auto-Categorization
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color={colors.textSecondary} fontSize="sm">
                 Merchant patterns automatically categorize your transactions into budget categories.
               </Text>
             </VStack>
 
             <VStack
-              bg="white"
+              bg={colors.pageBg}
               p={6}
               borderRadius="lg"
               align="flex-start"
               gap={3}
               shadow="sm"
+              border="1px solid"
+              borderColor={colors.borderSubtle}
             >
               <Box fontSize="2xl">📥</Box>
-              <Heading as="h3" fontSize="lg" fontWeight="semibold">
+              <Heading as="h3" fontSize="lg" fontWeight="semibold" color={colors.textPrimary}>
                 Easy Transaction Import
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color={colors.textSecondary} fontSize="sm">
                 Import from Google Sheets or CSV files with automatic merchant matching.
               </Text>
             </VStack>
 
             <VStack
-              bg="white"
+              bg={colors.pageBg}
               p={6}
               borderRadius="lg"
               align="flex-start"
               gap={3}
               shadow="sm"
+              border="1px solid"
+              borderColor={colors.borderSubtle}
             >
               <Box fontSize="2xl">📊</Box>
-              <Heading as="h3" fontSize="lg" fontWeight="semibold">
+              <Heading as="h3" fontSize="lg" fontWeight="semibold" color={colors.textPrimary}>
                 Monthly Budget Planning
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color={colors.textSecondary} fontSize="sm">
                 Set spending limits per category and track your budget in real-time.
               </Text>
             </VStack>
 
             <VStack
-              bg="white"
+              bg={colors.pageBg}
               p={6}
               borderRadius="lg"
               align="flex-start"
               gap={3}
               shadow="sm"
+              border="1px solid"
+              borderColor={colors.borderSubtle}
             >
               <Box fontSize="2xl">🧮</Box>
-              <Heading as="h3" fontSize="lg" fontWeight="semibold">
+              <Heading as="h3" fontSize="lg" fontWeight="semibold" color={colors.textPrimary}>
                 Automatic Balance Tracking
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color={colors.textSecondary} fontSize="sm">
                 Running balance calculated automatically for every transaction.
               </Text>
             </VStack>
 
             <VStack
-              bg="white"
+              bg={colors.pageBg}
               p={6}
               borderRadius="lg"
               align="flex-start"
               gap={3}
               shadow="sm"
+              border="1px solid"
+              borderColor={colors.borderSubtle}
             >
               <Box fontSize="2xl">📅</Box>
-              <Heading as="h3" fontSize="lg" fontWeight="semibold">
+              <Heading as="h3" fontSize="lg" fontWeight="semibold" color={colors.textPrimary}>
                 Month-by-Month View
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color={colors.textSecondary} fontSize="sm">
                 Navigate between months to see historical spending and budget performance.
               </Text>
             </VStack>
 
             <VStack
-              bg="white"
+              bg={colors.pageBg}
               p={6}
               borderRadius="lg"
               align="flex-start"
               gap={3}
               shadow="sm"
+              border="1px solid"
+              borderColor={colors.borderSubtle}
             >
               <Box fontSize="2xl">🔒</Box>
-              <Heading as="h3" fontSize="lg" fontWeight="semibold">
+              <Heading as="h3" fontSize="lg" fontWeight="semibold" color={colors.textPrimary}>
                 Secure & Private
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color={colors.textSecondary} fontSize="sm">
                 Row-level security ensures you only see your own data. Enterprise-grade encryption.
               </Text>
             </VStack>
@@ -251,125 +272,131 @@ function Home() {
           <Flex
             align="center"
             gap={12}
-            direction={{ base: 'column', md: 'row' }}
-            textAlign={{ base: 'center', md: 'left' }}
+            direction={{ base: 'column', md: isDark ? 'column' : 'row' }}
+            textAlign={{ base: 'center', md: isDark ? 'center' : 'left' }}
           >
-            <VStack flex={1} align={{ base: 'center', md: 'flex-start' }} gap={4}>
-              <Heading as="h2" size="lg">
+            <VStack flex={1} align={{ base: 'center', md: isDark ? 'center' : 'flex-start' }} gap={4}>
+              <Heading as="h2" size="lg" color={colors.textPrimary}>
                 🏷️ Smart Auto-Categorization
               </Heading>
-              <Text color="gray.600">
+              <Text color={colors.textSecondary}>
                 Our system automatically matches your transaction descriptions to the right category. No more manual sorting.
               </Text>
               <Stack gap={2}>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>"COSTCO GAS W1345" → Fuel</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>"COSTCO GAS W1345" → Fuel</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>"MCDONALD'S #404" → Weekend</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>"MCDONALD'S #404" → Weekend</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>"ROGERS WIRELESS" → Mobile/Internet</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>"ROGERS WIRELESS" → Mobile/Internet</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Add your own merchant patterns</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Add your own merchant patterns</Text>
                 </Flex>
               </Stack>
             </VStack>
-            <Box flex={1}>
-              <Box as="img" src="/images/visual.jpg" alt="Auto-categorization preview" w="100%" borderRadius="lg" style={{ mixBlendMode: 'multiply' }} />
-            </Box>
+            {!isDark && (
+              <Box flex={1}>
+                <Box as="img" src="/images/visual.jpg" alt="Auto-categorization preview" w="100%" borderRadius="lg" />
+              </Box>
+            )}
           </Flex>
 
           {/* Transaction Import */}
           <Flex
             align="center"
             gap={12}
-            direction={{ base: 'column', md: 'row-reverse' }}
-            textAlign={{ base: 'center', md: 'left' }}
+            direction={{ base: 'column', md: isDark ? 'column' : 'row-reverse' }}
+            textAlign={{ base: 'center', md: isDark ? 'center' : 'left' }}
           >
-            <VStack flex={1} align={{ base: 'center', md: 'flex-start' }} gap={4}>
-              <Heading as="h2" size="lg">
+            <VStack flex={1} align={{ base: 'center', md: isDark ? 'center' : 'flex-start' }} gap={4}>
+              <Heading as="h2" size="lg" color={colors.textPrimary}>
                 📥 Easy Transaction Import
               </Heading>
-              <Text color="gray.600">
+              <Text color={colors.textSecondary}>
                 Import transactions from Google Sheets or CSV files. Auto-sync keeps your data up to date.
               </Text>
               <Stack gap={2}>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Connect Google Sheets directly</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Connect Google Sheets directly</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>CSV file upload support</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>CSV file upload support</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Auto-sync at configurable intervals</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Auto-sync at configurable intervals</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Automatic duplicate detection</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Automatic duplicate detection</Text>
                 </Flex>
               </Stack>
             </VStack>
-            <Box flex={1}>
-              <Box as="img" src="/images/OCR.jpg" alt="Transaction import feature" w="100%" borderRadius="lg" style={{ mixBlendMode: 'multiply' }} />
-            </Box>
+            {!isDark && (
+              <Box flex={1}>
+                <Box as="img" src="/images/OCR.jpg" alt="Transaction import feature" w="100%" borderRadius="lg" />
+              </Box>
+            )}
           </Flex>
 
           {/* Monthly Budget Planning */}
           <Flex
             align="center"
             gap={12}
-            direction={{ base: 'column', md: 'row' }}
-            textAlign={{ base: 'center', md: 'left' }}
+            direction={{ base: 'column', md: isDark ? 'column' : 'row' }}
+            textAlign={{ base: 'center', md: isDark ? 'center' : 'left' }}
           >
-            <VStack flex={1} align={{ base: 'center', md: 'flex-start' }} gap={4}>
-              <Heading as="h2" size="lg">
+            <VStack flex={1} align={{ base: 'center', md: isDark ? 'center' : 'flex-start' }} gap={4}>
+              <Heading as="h2" size="lg" color={colors.textPrimary}>
                 📊 Monthly Budget Planning
               </Heading>
-              <Text color="gray.600">
+              <Text color={colors.textSecondary}>
                 Set a total monthly budget and allocate limits to each spending category. Track spending in real-time.
               </Text>
               <Stack gap={2}>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Set limits per category</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Set limits per category</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Visual progress bars</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Visual progress bars</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Color-coded warnings (80%+, 100%+)</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Color-coded warnings (80%+, 100%+)</Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text color="blue.600" fontWeight="bold">✓</Text>
-                  <Text>Navigate to any month</Text>
+                  <Text color="blue.500" fontWeight="bold">✓</Text>
+                  <Text color={colors.textPrimary}>Navigate to any month</Text>
                 </Flex>
               </Stack>
             </VStack>
-            <Box flex={1}>
-              <Box as="img" src="/images/goal-tracking.png" alt="Monthly budget planning" w="100%" borderRadius="lg" style={{ mixBlendMode: 'multiply' }} />
-            </Box>
+            {!isDark && (
+              <Box flex={1}>
+                <Box as="img" src="/images/goal-tracking.png" alt="Monthly budget planning" w="100%" borderRadius="lg" />
+              </Box>
+            )}
           </Flex>
         </VStack>
       </Container>
 
       {/* Categories Section */}
-      <Box bg="gray.50" py={12}>
+      <Box bg={colors.cardBg} py={12}>
         <Container maxW="1200px" px={8}>
-          <Heading as="h2" size="lg" textAlign="center" mb={4}>
+          <Heading as="h2" size="lg" textAlign="center" mb={4} color={colors.textPrimary}>
             Pre-Configured Categories
           </Heading>
-          <Text color="gray.600" textAlign="center" mb={6} maxW="600px" mx="auto">
+          <Text color={colors.textSecondary} textAlign="center" mb={6} maxW="600px" mx="auto">
             Your account comes with expense categories ready to go. Add your own categories and merchant patterns anytime.
           </Text>
           <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} gap={3} maxW="900px" mx="auto">
@@ -379,12 +406,14 @@ function Home() {
                 py={2}
                 px={4}
                 borderRadius="full"
-                bg="white"
-                color="gray.700"
+                bg={colors.pageBg}
+                color={colors.textPrimary}
                 fontSize="sm"
                 fontWeight="medium"
                 textAlign="center"
                 shadow="sm"
+                border="1px solid"
+                borderColor={colors.borderSubtle}
               >
                 {category}
               </Badge>
@@ -394,33 +423,33 @@ function Home() {
       </Box>
 
       {/* Security Section */}
-      <Box py={12}>
+      <Box py={12} bg={colors.pageBg}>
         <Container maxW="800px" px={8} textAlign="center">
-          <Heading as="h2" size="lg" mb={4}>
+          <Heading as="h2" size="lg" mb={4} color={colors.textPrimary}>
             🔒 Enterprise-Grade Security
           </Heading>
-          <Text color="gray.600" mb={6}>
+          <Text color={colors.textSecondary} mb={6}>
             Built on Supabase with PostgreSQL. Row-level security ensures you only see your own data.
           </Text>
           <SimpleGrid columns={{ base: 1, md: 3 }} gap={6}>
             <VStack>
               <Text fontSize="xl">🛡️</Text>
-              <Text fontWeight="semibold" fontSize="sm">Row-Level Security</Text>
-              <Text color="gray.600" fontSize="xs">
+              <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>Row-Level Security</Text>
+              <Text color={colors.textSecondary} fontSize="xs">
                 Database policies ensure data isolation
               </Text>
             </VStack>
             <VStack>
               <Text fontSize="xl">🔐</Text>
-              <Text fontWeight="semibold" fontSize="sm">Encrypted Storage</Text>
-              <Text color="gray.600" fontSize="xs">
+              <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>Encrypted Storage</Text>
+              <Text color={colors.textSecondary} fontSize="xs">
                 All data encrypted at rest
               </Text>
             </VStack>
             <VStack>
               <Text fontSize="xl">✅</Text>
-              <Text fontWeight="semibold" fontSize="sm">Secure Auth</Text>
-              <Text color="gray.600" fontSize="xs">
+              <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>Secure Auth</Text>
+              <Text color={colors.textSecondary} fontSize="xs">
                 Supabase Auth with JWT tokens
               </Text>
             </VStack>

@@ -129,6 +129,29 @@ The application uses React's built-in state management:
 - Uses Chakra's default theme system
 - Responsive props using object syntax: `{{ base: 'value', md: 'value' }}`
 - No custom CSS files
+- **Dark mode support** via `next-themes` library (integrated with Chakra UI)
+
+**Dark Mode Implementation:**
+- Uses `ColorModeProvider` from `@/components/ui/color-mode`
+- Toggle via `ColorModeButton` in Header (sun/moon icons)
+- Custom `useDarkModeColors` hook (`frontend/src/lib/useDarkModeColors.js`) provides semantic color tokens:
+  - `pageBg`, `cardBg`, `inputBg`, `modalBg` - Background colors
+  - `textPrimary`, `textSecondary`, `textMuted` - Text colors
+  - `borderColor`, `borderSubtle`, `borderStrong` - Border colors
+  - `success`, `successBg`, `successBorder` - Success status colors
+  - `danger`, `dangerBg`, `dangerBorder` - Error/danger status colors
+  - `warning`, `warningBg`, `warningBorder` - Warning status colors
+  - `info`, `infoBg`, `infoBorder` - Info status colors
+- Theme persists in localStorage (key: "theme")
+- Usage pattern:
+  ```jsx
+  import { useDarkModeColors } from '../lib/useDarkModeColors';
+
+  function MyComponent() {
+    const colors = useDarkModeColors();
+    return <Box bg={colors.cardBg} color={colors.textPrimary}>...</Box>;
+  }
+  ```
 
 **Previous (v1.0.0):**
 - Single global CSS file with CSS custom properties
