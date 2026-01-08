@@ -197,6 +197,7 @@ export default function Budget() {
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [recurringPayments, setRecurringPayments] = useState([]);
   const [forecastData, setForecastData] = useState([]);
+  const [viewMode, setViewMode] = useState('current'); // 'current' or 'projected'
 
   useEffect(() => {
     if (user) {
@@ -727,7 +728,50 @@ export default function Budget() {
               </VStack>
             ) : (
               <VStack gap={6} align="stretch">
-                {/* Summary Section */}
+                {/* View Mode Toggle */}
+                {forecastData.length > 0 && totalLimit > 0 && (
+                  <Flex
+                    justify="center"
+                    p={1}
+                    bg={colors.cardBg}
+                    borderRadius="16px"
+                    border="1px solid"
+                    borderColor={colors.borderSubtle}
+                    w="fit-content"
+                    mx="auto"
+                  >
+                    <Button
+                      size="sm"
+                      px={6}
+                      py={2}
+                      borderRadius="12px"
+                      fontWeight="600"
+                      bg={viewMode === 'current' ? 'linear-gradient(135deg, #1E293B 0%, #334155 100%)' : 'transparent'}
+                      color={viewMode === 'current' ? 'white' : colors.textSecondary}
+                      _hover={{ bg: viewMode === 'current' ? undefined : colors.rowStripedBg }}
+                      onClick={() => setViewMode('current')}
+                    >
+                      Current
+                    </Button>
+                    <Button
+                      size="sm"
+                      px={6}
+                      py={2}
+                      borderRadius="12px"
+                      fontWeight="600"
+                      bg={viewMode === 'projected' ? 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)' : 'transparent'}
+                      color={viewMode === 'projected' ? 'white' : colors.textSecondary}
+                      _hover={{ bg: viewMode === 'projected' ? undefined : colors.rowStripedBg }}
+                      onClick={() => setViewMode('projected')}
+                    >
+                      Projected
+                    </Button>
+                  </Flex>
+                )}
+
+                {/* Current View */}
+                {viewMode === 'current' && (
+                <>
                 <Box
                   p={{ base: 5, md: 8 }}
                   bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)"
@@ -875,20 +919,12 @@ export default function Budget() {
                     ))}
                   </Box>
                 </Box>
+                </>
+                )}
 
-                {/* Forecast Section */}
-                {forecastData.length > 0 && totalLimit > 0 && (
+                {/* Projected View */}
+                {viewMode === 'projected' && forecastData.length > 0 && totalLimit > 0 && (
                   <Box>
-                    <Text
-                      fontSize="sm"
-                      fontWeight="600"
-                      textTransform="uppercase"
-                      letterSpacing="0.05em"
-                      color={colors.textMuted}
-                      mb={4}
-                    >
-                      End of Month Forecast
-                    </Text>
 
                     {/* Forecast Summary Card */}
                     {(() => {
@@ -947,7 +983,7 @@ export default function Budget() {
                                 </Text>
                                 {totalUpcoming > 0 && (
                                   <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                    + Upcoming: {formatCurrency(totalUpcoming)}
+                                    + Recurring: {formatCurrency(totalUpcoming)}
                                   </Text>
                                 )}
                                 {totalDiscretionary > 0 && (
