@@ -592,6 +592,7 @@ export default function Dashboard() {
   const [dailyTransactions, setDailyTransactions] = useState([[], [], [], [], [], [], []]); // Transactions by day
   const [selectedDayIndex, setSelectedDayIndex] = useState(null); // Selected day for details
   const [hoveredCategory, setHoveredCategory] = useState(null); // Hovered category for donut chart
+  const [othersExpanded, setOthersExpanded] = useState(false); // Whether "Others" breakdown is expanded
   const [monthlyDailySpending, setMonthlyDailySpending] = useState([]); // Daily spending for entire month
   const [selectedMonthDay, setSelectedMonthDay] = useState(null); // Selected day in monthly chart
   const [monthlyDailyTransactions, setMonthlyDailyTransactions] = useState([]); // Transactions by day for month
@@ -1402,52 +1403,104 @@ export default function Dashboard() {
                       const otherCategories = categoryBudgets.slice(TOP_COUNT);
                       const othersTotal = otherCategories.reduce((sum, cat) => sum + cat.spent, 0);
 
+                      // Filter out zero-spending categories from Others
+                      const otherCategoriesWithSpending = otherCategories.filter(cat => cat.spent > 0);
                       const legendItems = othersTotal > 0
-                        ? [...topCategories, { id: 'others', name: 'Others', spent: othersTotal }]
+                        ? [...topCategories, { id: 'others', name: 'Others', spent: othersTotal, otherCategories: otherCategoriesWithSpending }]
                         : topCategories;
 
                       return legendItems.map((cat) => {
                         const isHovered = hoveredCategory === cat.name;
                         const isOtherHovered = hoveredCategory && !isHovered;
+                        const isOthersCategory = cat.name === 'Others';
                         return (
-                          <Flex
-                            key={cat.id}
-                            align="center"
-                            justify="space-between"
-                            py={1.5}
-                            px={2}
-                            borderRadius="8px"
-                            bg={isHovered ? colors.rowHoverBg : 'transparent'}
-                            opacity={isOtherHovered ? 0.4 : 1}
-                            transition="all 0.15s"
-                            cursor="pointer"
-                            onMouseEnter={() => setHoveredCategory(cat.name)}
-                            onMouseLeave={() => setHoveredCategory(null)}
-                          >
-                            <HStack gap={2}>
-                              <Box
-                                w="10px"
-                                h="10px"
-                                borderRadius="full"
-                                bg={getCategoryColor(cat.name)}
-                                flexShrink={0}
-                              />
-                              <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color={colors.textPrimary} noOfLines={1}>
-                                {cat.name}
-                              </Text>
-                            </HStack>
-                            <HStack gap={2}>
-                              <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
-                                {formatCurrency(cat.spent)}
-                              </Text>
-                              <Text fontSize="xs" color={colors.textMuted}>
-                                {monthlySummary.expenses > 0
-                                  ? `${((cat.spent / monthlySummary.expenses) * 100).toFixed(0)}%`
-                                  : '0%'
-                                }
-                              </Text>
-                            </HStack>
-                          </Flex>
+                          <Box key={cat.id}>
+                            <Flex
+                              align="center"
+                              justify="space-between"
+                              py={1.5}
+                              px={2}
+                              borderRadius="8px"
+                              bg={isHovered || (isOthersCategory && othersExpanded) ? colors.rowHoverBg : 'transparent'}
+                              opacity={isOtherHovered ? 0.4 : 1}
+                              transition="all 0.15s"
+                              cursor="pointer"
+                              onClick={isOthersCategory ? () => setOthersExpanded(!othersExpanded) : undefined}
+                              onMouseEnter={() => setHoveredCategory(cat.name)}
+                              onMouseLeave={() => setHoveredCategory(null)}
+                            >
+                              <HStack gap={2}>
+                                <Box
+                                  w="10px"
+                                  h="10px"
+                                  borderRadius="full"
+                                  bg={getCategoryColor(cat.name)}
+                                  flexShrink={0}
+                                />
+                                <Text fontSize="sm" fontWeight={isHovered ? '600' : '500'} color={colors.textPrimary} noOfLines={1}>
+                                  {cat.name}
+                                </Text>
+                                {isOthersCategory && (
+                                  <Text fontSize="xs" color={colors.textMuted} ml={-1}>
+                                    {othersExpanded ? '▼' : '▶'}
+                                  </Text>
+                                )}
+                              </HStack>
+                              <HStack gap={2}>
+                                <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
+                                  {formatCurrency(cat.spent)}
+                                </Text>
+                                <Text fontSize="xs" color={colors.textMuted}>
+                                  {monthlySummary.expenses > 0
+                                    ? `${((cat.spent / monthlySummary.expenses) * 100).toFixed(0)}%`
+                                    : '0%'
+                                  }
+                                </Text>
+                              </HStack>
+                            </Flex>
+                            {/* Show breakdown when "Others" is expanded (click to toggle) */}
+                            {isOthersCategory && othersExpanded && cat.otherCategories && cat.otherCategories.length > 0 && (
+                              <VStack
+                                align="stretch"
+                                gap={0.5}
+                                pl={{ base: 4, md: 6 }}
+                                pr={{ base: 1, md: 2 }}
+                                py={2}
+                                mt={1}
+                                bg={colors.rowStripedBg}
+                                borderRadius="6px"
+                                maxH={{ base: '120px', md: '150px' }}
+                                overflowY="auto"
+                              >
+                                {cat.otherCategories.map((otherCat) => (
+                                  <Flex
+                                    key={otherCat.id}
+                                    justify="space-between"
+                                    align="center"
+                                    px={{ base: 1, md: 2 }}
+                                    py={0.5}
+                                    fontSize={{ base: '11px', md: 'xs' }}
+                                  >
+                                    <HStack gap={1.5} flex="1" minW="0">
+                                      <Box
+                                        w="6px"
+                                        h="6px"
+                                        borderRadius="full"
+                                        bg={getCategoryColor(otherCat.name)}
+                                        flexShrink={0}
+                                      />
+                                      <Text color={colors.textSecondary} noOfLines={1} flex="1" minW="0">
+                                        {otherCat.name}
+                                      </Text>
+                                    </HStack>
+                                    <Text fontWeight="500" color={colors.textPrimary} flexShrink={0} ml={2}>
+                                      {formatCurrency(otherCat.spent)}
+                                    </Text>
+                                  </Flex>
+                                ))}
+                              </VStack>
+                            )}
+                          </Box>
                         );
                       });
                     })()}

@@ -227,10 +227,13 @@ export default function Budget() {
     // Check if we're in the selected month
     const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
 
-    // Start date for forecast: today if current month, or start of month if future
+    // Start date for forecast: TOMORROW if current month (today's payments may already be spent),
+    // or start of month if future month
     let forecastStart;
     if (isCurrentMonth) {
-      forecastStart = new Date(today); // Include today's recurring payments
+      // Start from tomorrow to avoid double-counting payments due today that are already spent
+      forecastStart = new Date(today);
+      forecastStart.setDate(forecastStart.getDate() + 1);
     } else if (today < new Date(year, month - 1, 1)) {
       // Future month - forecast entire month
       forecastStart = new Date(year, month - 1, 1);
