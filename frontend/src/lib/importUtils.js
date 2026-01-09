@@ -62,6 +62,8 @@ function parseCSVText(csvText) {
   const amountIdx = headers.findIndex(h => h.includes('amount') || h.includes('debit') || h.includes('withdrawal'));
   // Find bank column (optional)
   const bankIdx = headers.findIndex(h => h === 'bank' || h.includes('bank') || h.includes('institution') || h.includes('source'));
+  // Find type column (optional) - for distinguishing income vs expense
+  const typeIdx = headers.findIndex(h => h === 'type' || h.includes('type'));
 
   // Need at least one description column
   const hasDescColumn = subDescIdx !== -1 || descIdx !== -1;
@@ -73,7 +75,7 @@ function parseCSVText(csvText) {
   const transactions = [];
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
-    const maxIdx = Math.max(dateIdx, subDescIdx, descIdx, amountIdx, bankIdx);
+    const maxIdx = Math.max(dateIdx, subDescIdx, descIdx, amountIdx, bankIdx, typeIdx);
     if (values.length <= maxIdx) continue;
 
     const date = parseDate(values[dateIdx]);
@@ -83,9 +85,12 @@ function parseCSVText(csvText) {
     const description = subDesc || desc || '';
     const amount = parseAmount(values[amountIdx]);
     const bank = bankIdx !== -1 ? values[bankIdx]?.trim() : '';
+    // Parse type column - default to 'expense' if not specified
+    const typeValue = typeIdx !== -1 ? values[typeIdx]?.trim().toLowerCase() : '';
+    const type = typeValue === 'income' ? 'income' : 'expense';
 
     if (date && description && !isNaN(amount) && amount > 0) {
-      transactions.push({ date, description, amount, bank });
+      transactions.push({ date, description, amount, bank, type });
     }
   }
 

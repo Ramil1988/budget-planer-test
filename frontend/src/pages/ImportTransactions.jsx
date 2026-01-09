@@ -147,6 +147,7 @@ export default function ImportTransactions() {
 
   // Fetch merchant mappings from Supabase and categorize transactions
   const categorizeTransactionsFromDB = async (transactions) => {
+    // Fetch all merchant mappings
     const { data: mappings, error: mappingsError } = await supabase
       .from('merchant_mappings')
       .select('transaction_description, category_name')
@@ -157,15 +158,46 @@ export default function ImportTransactions() {
       throw mappingsError;
     }
 
-    // Build lookup map
-    const mappingLookup = {};
+    // Fetch all categories to know which are income vs expense
+    const { data: categories, error: catError } = await supabase
+      .from('categories')
+      .select('name, type')
+      .eq('user_id', user.id);
+
+    if (catError) {
+      console.error('Error fetching categories:', catError);
+      throw catError;
+    }
+
+    // Build separate maps for expense and income category names
+    const incomeCategoryNames = new Set(
+      categories.filter(c => c.type === 'income').map(c => c.name)
+    );
+    const expenseCategoryNames = new Set(
+      categories.filter(c => c.type === 'expense').map(c => c.name)
+    );
+
+    // Build separate lookup maps for expense and income mappings
+    const expenseMappingLookup = {};
+    const incomeMappingLookup = {};
+
     (mappings || []).forEach(mapping => {
-      mappingLookup[mapping.transaction_description.toUpperCase()] = mapping.category_name;
+      const key = mapping.transaction_description.toUpperCase();
+      const categoryName = mapping.category_name;
+
+      if (incomeCategoryNames.has(categoryName)) {
+        incomeMappingLookup[key] = categoryName;
+      } else if (expenseCategoryNames.has(categoryName)) {
+        expenseMappingLookup[key] = categoryName;
+      }
     });
 
     // Categorize each transaction using substring matching
     return transactions.map(transaction => {
-      const category = categorizeTransaction(transaction.description, mappingLookup);
+      const isIncome = transaction.type === 'income';
+      const lookupMap = isIncome ? incomeMappingLookup : expenseMappingLookup;
+      const defaultCategory = isIncome ? null : 'Unexpected'; // null for income = use default income category
+      const category = categorizeTransaction(transaction.description, lookupMap, defaultCategory);
       return {
         ...transaction,
         category,
@@ -174,9 +206,9 @@ export default function ImportTransactions() {
   };
 
   // Categorize a single transaction using substring matching
-  const categorizeTransaction = (description, mappingLookup) => {
+  const categorizeTransaction = (description, mappingLookup, defaultCategory = 'Unexpected') => {
     if (!description || typeof description !== 'string') {
-      return 'Unexpected';
+      return defaultCategory;
     }
 
     const normalizedDesc = description.toUpperCase().trim().replace(/\s+/g, ' ');
@@ -187,7 +219,7 @@ export default function ImportTransactions() {
       }
     }
 
-    return 'Unexpected';
+    return defaultCategory;
   };
 
   // Calculate category statistics
@@ -327,18 +359,54 @@ export default function ImportTransactions() {
         accountId = accounts[0].id;
       }
 
-      // Get category IDs
+      // Get category IDs - fetch both expense and income categories
       const { data: categories, error: catError } = await supabase
         .from('categories')
-        .select('id, name')
+        .select('id, name, type')
         .eq('user_id', user.id);
 
       if (catError) throw catError;
 
-      const categoryMap = {};
+      // Separate expense and income category maps
+      const expenseCategoryMap = {};
+      const incomeCategoryMap = {};
       categories.forEach(cat => {
-        categoryMap[cat.name] = cat.id;
+        if (cat.type === 'income') {
+          incomeCategoryMap[cat.name] = cat.id;
+        } else {
+          expenseCategoryMap[cat.name] = cat.id;
+        }
       });
+
+      // Find or create default income category for income transactions
+      let defaultIncomeCategoryId = null;
+      const defaultIncomeCategory = categories.find(c => c.type === 'income');
+
+      if (defaultIncomeCategory) {
+        defaultIncomeCategoryId = defaultIncomeCategory.id;
+      } else {
+        // Check if we have any income transactions that need an income category
+        const hasIncomeTransactions = uniqueTransactions.some(t => t.type === 'income');
+        if (hasIncomeTransactions) {
+          // Create a default "Other Income" category
+          const { data: newCategory, error: createCatError } = await supabase
+            .from('categories')
+            .insert({
+              user_id: user.id,
+              name: 'Other Income',
+              type: 'income',
+            })
+            .select()
+            .single();
+
+          if (createCatError) {
+            console.error('Error creating income category:', createCatError);
+          } else {
+            defaultIncomeCategoryId = newCategory.id;
+            incomeCategoryMap['Other Income'] = newCategory.id;
+          }
+        }
+      }
 
       // Check for duplicates - get existing transactions
       const { data: existingTransactions, error: fetchError } = await supabase
@@ -378,16 +446,33 @@ export default function ImportTransactions() {
       }
 
       // Prepare and insert transactions
-      const transactionsToInsert = uniqueTransactions.map(t => ({
-        user_id: user.id,
-        account_id: accountId,
-        category_id: categoryMap[t.category] || categoryMap['Unexpected'],
-        type: 'expense',
-        amount: t.amount,
-        provider: t.bank || null, // Store bank name in provider field
-        description: t.description,
-        date: t.date,
-      }));
+      const transactionsToInsert = uniqueTransactions.map(t => {
+        const isIncome = t.type === 'income';
+        let categoryId;
+
+        if (isIncome) {
+          // For income transactions, use income category from merchant mapping if available
+          // Otherwise fall back to default income category
+          categoryId = t.category ? incomeCategoryMap[t.category] : null;
+          if (!categoryId) {
+            categoryId = defaultIncomeCategoryId;
+          }
+        } else {
+          // For expense transactions, use expense category map with merchant matching
+          categoryId = expenseCategoryMap[t.category] || expenseCategoryMap['Unexpected'];
+        }
+
+        return {
+          user_id: user.id,
+          account_id: accountId,
+          category_id: categoryId,
+          type: isIncome ? 'income' : 'expense',
+          amount: t.amount,
+          provider: t.bank || null, // Store bank name in provider field
+          description: t.description,
+          date: t.date,
+        };
+      });
 
       const { data: insertedTransactions, error: insertError } = await supabase
         .from('transactions')

@@ -24,7 +24,9 @@ export default function CategoryManager() {
   const [patterns, setPatterns] = useState({});
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedIncomeCategory, setSelectedIncomeCategory] = useState('');
   const [newPattern, setNewPattern] = useState('');
+  const [newIncomePattern, setNewIncomePattern] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export default function CategoryManager() {
     }
   };
 
-  // Add new merchant mapping to selected category
+  // Add new merchant mapping to selected category (expense)
   const handleAddPattern = async () => {
     if (!selectedCategory || !newPattern.trim()) {
       return;
@@ -114,6 +116,45 @@ export default function CategoryManager() {
     } catch (err) {
       setError(err.message);
       console.error('Error adding mapping:', err);
+    }
+  };
+
+  // Add new merchant mapping to selected income category
+  const handleAddIncomePattern = async () => {
+    if (!selectedIncomeCategory || !newIncomePattern.trim()) {
+      return;
+    }
+
+    const merchantName = newIncomePattern.trim().toUpperCase();
+
+    // Check if mapping already exists
+    if (patterns[selectedIncomeCategory]?.includes(merchantName)) {
+      setSaveMessage('Merchant already mapped in this category');
+      setTimeout(() => setSaveMessage(''), 3000);
+      return;
+    }
+
+    try {
+      // Insert mapping into database
+      const { error } = await supabase
+        .from('merchant_mappings')
+        .insert({
+          user_id: user.id,
+          transaction_description: merchantName,
+          category_name: selectedIncomeCategory,
+        });
+
+      if (error) throw error;
+
+      // Reload mappings from database
+      await loadPatternsFromDB();
+
+      setNewIncomePattern('');
+      setSaveMessage('Income merchant mapping added successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error adding income mapping:', err);
     }
   };
 
@@ -190,6 +231,9 @@ export default function CategoryManager() {
 
   // Category names for expense categories (for merchant mapping)
   const expenseCategoryNames = expenseCategories.map(c => c.name).sort();
+
+  // Category names for income categories (for merchant mapping)
+  const incomeCategoryNames = incomeCategories.map(c => c.name).sort();
 
   // Get all existing patterns across all categories for autocomplete
   const allExistingPatterns = [
@@ -483,57 +527,208 @@ export default function CategoryManager() {
 
         {/* INCOME TAB */}
         {activeTab === 'income' && (
-          <Box
-            p={6}
-            borderRadius="lg"
-            borderWidth="1px"
-            borderColor="green.200"
-            bg={colors.cardBg}
-          >
-            <Heading size="md" mb={4} color={colors.textPrimary}>Income Categories</Heading>
-            <Text color={colors.textSecondary} mb={4}>
-              Manage your income categories and add income transactions
-            </Text>
+          <>
+            {/* Income Categories */}
+            <Box
+              p={6}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor="green.200"
+              bg={colors.cardBg}
+            >
+              <Heading size="md" mb={4} color={colors.textPrimary}>Income Categories</Heading>
 
-            {/* Category List */}
-            <Box mb={6}>
-              <HStack wrap="wrap" gap={2}>
-                {incomeCategories.map((cat) => (
-                  <Badge
-                    key={cat.id}
-                    colorScheme="green"
-                    px={3}
-                    py={1}
-                    borderRadius="full"
-                    fontSize="sm"
-                  >
-                    {cat.name}
-                  </Badge>
-                ))}
-                {incomeCategories.length === 0 && (
-                  <Text color={colors.textMuted}>No income categories yet</Text>
-                )}
-              </HStack>
+              {/* Category List */}
+              <Box mb={6}>
+                <HStack wrap="wrap" gap={2}>
+                  {incomeCategories.map((cat) => (
+                    <Badge
+                      key={cat.id}
+                      colorScheme="green"
+                      px={3}
+                      py={1}
+                      borderRadius="full"
+                      fontSize="sm"
+                    >
+                      {cat.name}
+                    </Badge>
+                  ))}
+                  {incomeCategories.length === 0 && (
+                    <Text color={colors.textMuted}>No income categories yet</Text>
+                  )}
+                </HStack>
+              </Box>
+
+              {/* Add New Category */}
+              <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
+                <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Add New Income Category</Text>
+                <HStack gap={2}>
+                  <Input
+                    placeholder="e.g., Salary, Freelance, Dividends, Cashback"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+                    bg={colors.cardBg}
+                    borderColor={colors.borderColor}
+                    color={colors.textPrimary}
+                    flex={1}
+                  />
+                  <Button colorScheme="green" onClick={handleAddCategory}>
+                    Add
+                  </Button>
+                </HStack>
+              </Box>
             </Box>
 
-            {/* Add New Category */}
-            <Box p={4} bg={colors.rowStripedBg} borderRadius="md" mb={6}>
-              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Add New Income Category</Text>
-              <HStack gap={2}>
-                <Input
-                  placeholder="e.g., Salary, Freelance, Dividends"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
-                  bg={colors.cardBg}
-                  borderColor={colors.borderColor}
-                  color={colors.textPrimary}
-                  flex={1}
-                />
-                <Button colorScheme="green" onClick={handleAddCategory}>
-                  Add
+            {/* Income Merchant Mappings Section */}
+            <Box
+              p={6}
+              borderRadius="16px"
+              borderWidth="2px"
+              borderColor="green.200"
+              bg={colors.cardBg}
+              boxShadow="0 2px 8px rgba(0,0,0,0.05)"
+            >
+              <Heading size="lg" mb={2} color={colors.textPrimary}>
+                Income Merchant Mappings
+              </Heading>
+              <Text color={colors.textSecondary} mb={6} fontSize="md">
+                Map income sources to categories for automatic categorization when importing
+              </Text>
+              <VStack gap={5} align="stretch">
+                {/* Merchant Name Input */}
+                <Box>
+                  <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
+                    Income Source Name
+                  </Text>
+                  <Input
+                    placeholder="e.g., CASHBACK / REMISES, SALARY DEPOSIT, INTEREST"
+                    value={newIncomePattern}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setNewIncomePattern(value);
+
+                      // Auto-populate category if merchant exists
+                      const normalizedValue = value.toUpperCase().trim();
+                      for (const [categoryName, merchants] of Object.entries(patterns)) {
+                        if (merchants.includes(normalizedValue) && incomeCategoryNames.includes(categoryName)) {
+                          setSelectedIncomeCategory(categoryName);
+                          break;
+                        }
+                      }
+                    }}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddIncomePattern()}
+                    size="lg"
+                    bg={colors.rowStripedBg}
+                    borderColor={colors.borderColor}
+                    color={colors.textPrimary}
+                    _hover={{ borderColor: 'green.400' }}
+                    _focus={{ borderColor: 'green.500', bg: colors.cardBg, boxShadow: '0 0 0 1px #22C55E' }}
+                    fontSize="md"
+                    h="56px"
+                    borderRadius="12px"
+                    list="income-merchant-suggestions"
+                  />
+                  <datalist id="income-merchant-suggestions">
+                    {allExistingPatterns.map((pattern) => (
+                      <option key={pattern} value={pattern} />
+                    ))}
+                  </datalist>
+                  <Text fontSize="xs" color={colors.textMuted} mt={1}>
+                    Enter the exact income source name as it appears in your bank statements
+                  </Text>
+                </Box>
+
+                {/* Category Select */}
+                <Box>
+                  <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
+                    Assign to Income Category
+                  </Text>
+                  <select
+                    value={selectedIncomeCategory}
+                    onChange={(e) => setSelectedIncomeCategory(e.target.value)}
+                    style={{
+                      padding: '16px 14px',
+                      fontSize: '16px',
+                      borderRadius: '12px',
+                      border: `1px solid ${colors.borderColor}`,
+                      backgroundColor: colors.rowStripedBg,
+                      color: colors.textPrimary,
+                      height: '56px',
+                      width: '100%',
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">Select an income category...</option>
+                    {incomeCategoryNames.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </Box>
+
+                {/* Add Button */}
+                <Button
+                  colorScheme="green"
+                  size="lg"
+                  onClick={handleAddIncomePattern}
+                  disabled={!selectedIncomeCategory || !newIncomePattern.trim()}
+                  h="56px"
+                  w="100%"
+                  fontSize="md"
+                  fontWeight="600"
+                  borderRadius="12px"
+                  _hover={{ transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}
+                  transition="all 0.2s"
+                >
+                  Add Income Mapping
                 </Button>
-              </HStack>
+
+                {/* Show existing mappings for selected income category */}
+                {selectedIncomeCategory && patterns[selectedIncomeCategory]?.length > 0 && (
+                  <Box
+                    p={4}
+                    bg={colors.cardBg}
+                    borderRadius="md"
+                    borderWidth="1px"
+                    borderColor={colors.borderColor}
+                  >
+                    <HStack justify="space-between" mb={2}>
+                      <Text fontWeight="bold" fontSize="sm" color={colors.textSecondary}>
+                        Existing merchant mappings for "{selectedIncomeCategory}":
+                      </Text>
+                      <Badge colorScheme="green">{patterns[selectedIncomeCategory].length}</Badge>
+                    </HStack>
+                    <Box maxH="200px" overflowY="auto">
+                      <VStack gap={1} align="stretch">
+                        {patterns[selectedIncomeCategory].map((merchantName) => (
+                          <HStack
+                            key={merchantName}
+                            justify="space-between"
+                            p={2}
+                            bg={colors.rowStripedBg}
+                            borderRadius="md"
+                            fontSize="sm"
+                          >
+                            <Text color={colors.textPrimary}>{merchantName}</Text>
+                            <IconButton
+                              size="xs"
+                              colorScheme="red"
+                              variant="ghost"
+                              onClick={() => handleRemovePattern(selectedIncomeCategory, merchantName)}
+                              aria-label="Remove mapping"
+                            >
+                              ✕
+                            </IconButton>
+                          </HStack>
+                        ))}
+                      </VStack>
+                    </Box>
+                  </Box>
+                )}
+              </VStack>
             </Box>
 
             {/* Quick Action to Add Income */}
@@ -555,7 +750,7 @@ export default function CategoryManager() {
                 </Button>
               </HStack>
             </Box>
-          </Box>
+          </>
         )}
 
       </VStack>

@@ -145,30 +145,82 @@ export function AutoSyncProvider({ children }) {
       // Get or create default account
       let accountId = await getOrCreateAccount();
 
-      // Get category IDs
+      // Get category IDs - fetch both expense and income categories
       const { data: categories, error: catError } = await supabase
         .from('categories')
-        .select('id, name')
+        .select('id, name, type')
         .eq('user_id', user.id);
 
       if (catError) throw catError;
 
-      const categoryMap = {};
+      // Separate expense and income category maps
+      const expenseCategoryMap = {};
+      const incomeCategoryMap = {};
       categories.forEach(cat => {
-        categoryMap[cat.name] = cat.id;
+        if (cat.type === 'income') {
+          incomeCategoryMap[cat.name] = cat.id;
+        } else {
+          expenseCategoryMap[cat.name] = cat.id;
+        }
       });
 
+      // Find or create default income category for income transactions
+      let defaultIncomeCategoryId = null;
+      const defaultIncomeCategory = categories.find(c => c.type === 'income');
+
+      if (defaultIncomeCategory) {
+        defaultIncomeCategoryId = defaultIncomeCategory.id;
+      } else {
+        // Check if we have any income transactions that need an income category
+        const hasIncomeTransactions = categorizedTransactions.some(t => t.type === 'income');
+        if (hasIncomeTransactions) {
+          // Create a default "Other Income" category
+          const { data: newCategory, error: createCatError } = await supabase
+            .from('categories')
+            .insert({
+              user_id: user.id,
+              name: 'Other Income',
+              type: 'income',
+            })
+            .select()
+            .single();
+
+          if (createCatError) {
+            console.error('Error creating income category:', createCatError);
+          } else {
+            defaultIncomeCategoryId = newCategory.id;
+          }
+        }
+      }
+
       // Insert transactions
-      const transactionsToInsert = categorizedTransactions.map(t => ({
-        user_id: user.id,
-        account_id: accountId,
-        category_id: categoryMap[t.category] || categoryMap['Unexpected'],
-        type: 'expense',
-        amount: t.amount,
-        provider: t.bank || null, // Store bank name in provider field
-        description: t.description,
-        date: t.date,
-      }));
+      const transactionsToInsert = categorizedTransactions.map(t => {
+        const isIncome = t.type === 'income';
+        let categoryId;
+
+        if (isIncome) {
+          // For income transactions, use income category from merchant mapping if available
+          // Otherwise fall back to default income category
+          categoryId = t.category ? incomeCategoryMap[t.category] : null;
+          if (!categoryId) {
+            categoryId = defaultIncomeCategoryId;
+          }
+        } else {
+          // For expense transactions, use expense category map with merchant matching
+          categoryId = expenseCategoryMap[t.category] || expenseCategoryMap['Unexpected'];
+        }
+
+        return {
+          user_id: user.id,
+          account_id: accountId,
+          category_id: categoryId,
+          type: isIncome ? 'income' : 'expense',
+          amount: t.amount,
+          provider: t.bank || null, // Store bank name in provider field
+          description: t.description,
+          date: t.date,
+        };
+      });
 
       const { data: insertedTransactions, error: insertError } = await supabase
         .from('transactions')
@@ -227,24 +279,58 @@ export function AutoSyncProvider({ children }) {
 
     if (error) {
       console.error('Error fetching mappings:', error);
-      return transactions.map(t => ({ ...t, category: 'Unexpected' }));
+      return transactions.map(t => ({ ...t, category: t.type === 'income' ? null : 'Unexpected' }));
     }
 
-    // Build lookup array sorted by length (longest first for more specific matches)
-    const sortedMappings = (mappings || [])
-      .map(m => ({
+    // Fetch all categories to know which are income vs expense
+    const { data: categories, error: catError } = await supabase
+      .from('categories')
+      .select('name, type')
+      .eq('user_id', user.id);
+
+    if (catError) {
+      console.error('Error fetching categories:', catError);
+      return transactions.map(t => ({ ...t, category: t.type === 'income' ? null : 'Unexpected' }));
+    }
+
+    // Build separate sets for expense and income category names
+    const incomeCategoryNames = new Set(
+      categories.filter(c => c.type === 'income').map(c => c.name)
+    );
+    const expenseCategoryNames = new Set(
+      categories.filter(c => c.type === 'expense').map(c => c.name)
+    );
+
+    // Build separate lookup arrays for expense and income mappings, sorted by length (longest first)
+    const expenseMappings = [];
+    const incomeMappings = [];
+
+    (mappings || []).forEach(m => {
+      const mapping = {
         pattern: m.transaction_description.toUpperCase(),
         category: m.category_name
-      }))
-      .sort((a, b) => b.pattern.length - a.pattern.length);
+      };
+
+      if (incomeCategoryNames.has(m.category_name)) {
+        incomeMappings.push(mapping);
+      } else if (expenseCategoryNames.has(m.category_name)) {
+        expenseMappings.push(mapping);
+      }
+    });
+
+    // Sort by pattern length (longest/most specific first)
+    expenseMappings.sort((a, b) => b.pattern.length - a.pattern.length);
+    incomeMappings.sort((a, b) => b.pattern.length - a.pattern.length);
 
     // Categorize each transaction
     return transactions.map(t => {
       const normalizedDesc = t.description.toUpperCase().trim().replace(/\s+/g, ' ');
-      let category = 'Unexpected';
+      const isIncome = t.type === 'income';
+      const mappingsToUse = isIncome ? incomeMappings : expenseMappings;
+      let category = isIncome ? null : 'Unexpected'; // null for income = use default income category later
 
       // Check mappings in order (longest/most specific first)
-      for (const mapping of sortedMappings) {
+      for (const mapping of mappingsToUse) {
         if (normalizedDesc.includes(mapping.pattern)) {
           category = mapping.category;
           break;
