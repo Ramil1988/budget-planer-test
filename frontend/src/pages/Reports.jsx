@@ -23,7 +23,7 @@ const MONTHS = [
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Bar Chart Component for Income vs Expenses
-const MonthlyBarChart = ({ data, formatCurrency, colors }) => {
+const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHoverBarMonth }) => {
   const maxValue = Math.max(
     ...data.map(d => Math.max(d.income, d.expenses)),
     1
@@ -31,12 +31,13 @@ const MonthlyBarChart = ({ data, formatCurrency, colors }) => {
   const barHeight = 160;
 
   return (
-    <Box overflowX="auto" pb={2}>
-      <Flex gap={2} minW="700px" align="flex-end" h={`${barHeight + 60}px`} pt={4}>
+    <Box overflowX="auto" position="relative">
+      <Flex gap={2} minW="700px" align="flex-end" h={`${barHeight + 30}px`}>
         {data.map((month, index) => {
           const incomeHeight = (month.income / maxValue) * barHeight;
           const expenseHeight = (month.expenses / maxValue) * barHeight;
           const hasData = month.income > 0 || month.expenses > 0;
+          const isHovered = hoveredBarMonth === index;
 
           return (
             <Flex
@@ -45,40 +46,98 @@ const MonthlyBarChart = ({ data, formatCurrency, colors }) => {
               align="center"
               flex="1"
               gap={1}
+              onMouseEnter={() => onHoverBarMonth(index)}
+              onMouseLeave={() => onHoverBarMonth(null)}
+              cursor="pointer"
+              position="relative"
             >
               {/* Bars container */}
               <Flex gap={1} align="flex-end" h={`${barHeight}px`}>
                 {/* Income bar */}
                 <Box
-                  w="20px"
+                  w={isHovered ? "24px" : "20px"}
                   h={`${Math.max(incomeHeight, hasData ? 2 : 0)}px`}
                   bg="linear-gradient(180deg, #34D399 0%, #059669 100%)"
                   borderRadius="4px 4px 0 0"
-                  transition="height 0.5s ease"
-                  title={`Income: ${formatCurrency(month.income)}`}
-                  cursor="pointer"
-                  _hover={{ opacity: 0.8 }}
+                  transition="all 0.2s ease"
+                  opacity={hoveredBarMonth !== null && !isHovered ? 0.4 : 1}
+                  boxShadow={isHovered ? "0 4px 12px rgba(16, 185, 129, 0.4)" : "none"}
                 />
                 {/* Expense bar */}
                 <Box
-                  w="20px"
+                  w={isHovered ? "24px" : "20px"}
                   h={`${Math.max(expenseHeight, hasData ? 2 : 0)}px`}
                   bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)"
                   borderRadius="4px 4px 0 0"
-                  transition="height 0.5s ease"
-                  title={`Expenses: ${formatCurrency(month.expenses)}`}
-                  cursor="pointer"
-                  _hover={{ opacity: 0.8 }}
+                  transition="all 0.2s ease"
+                  opacity={hoveredBarMonth !== null && !isHovered ? 0.4 : 1}
+                  boxShadow={isHovered ? "0 4px 12px rgba(239, 68, 68, 0.4)" : "none"}
                 />
               </Flex>
               {/* Month label */}
-              <Text fontSize="xs" color={colors.textMuted} fontWeight="500">
+              <Text
+                fontSize="xs"
+                color={isHovered ? colors.textPrimary : colors.textMuted}
+                fontWeight={isHovered ? "700" : "500"}
+                transition="all 0.2s ease"
+              >
                 {MONTH_ABBR[index]}
               </Text>
             </Flex>
           );
         })}
       </Flex>
+
+      {/* Hover tooltip */}
+      {hoveredBarMonth !== null && (
+        <Box
+          position="absolute"
+          top="0"
+          right="10px"
+          bg={colors.cardBg}
+          p={3}
+          borderRadius="12px"
+          boxShadow="0 4px 16px rgba(0,0,0,0.15)"
+          border="1px solid"
+          borderColor={colors.borderColor}
+          minW="160px"
+          zIndex={10}
+        >
+          <Text fontSize="md" fontWeight="700" color={colors.textPrimary} mb={2}>
+            {MONTHS[hoveredBarMonth]}
+          </Text>
+          <Flex justify="space-between" mb={1} gap={3}>
+            <HStack gap={1}>
+              <Box w="10px" h="10px" borderRadius="2px" bg="linear-gradient(180deg, #34D399 0%, #059669 100%)" />
+              <Text fontSize="sm" color={colors.textSecondary}>Income:</Text>
+            </HStack>
+            <Text fontSize="sm" fontWeight="600" color="green.600">
+              {formatCurrency(data[hoveredBarMonth].income)}
+            </Text>
+          </Flex>
+          <Flex justify="space-between" mb={2} gap={3}>
+            <HStack gap={1}>
+              <Box w="10px" h="10px" borderRadius="2px" bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)" />
+              <Text fontSize="sm" color={colors.textSecondary}>Expenses:</Text>
+            </HStack>
+            <Text fontSize="sm" fontWeight="600" color="red.500">
+              {formatCurrency(data[hoveredBarMonth].expenses)}
+            </Text>
+          </Flex>
+          <Box h="1px" bg={colors.borderColor} mb={2} />
+          <Flex justify="space-between" gap={3}>
+            <Text fontSize="sm" color={colors.textSecondary}>Balance:</Text>
+            <Text
+              fontSize="sm"
+              fontWeight="700"
+              color={data[hoveredBarMonth].income - data[hoveredBarMonth].expenses >= 0 ? 'green.600' : 'red.500'}
+            >
+              {data[hoveredBarMonth].income - data[hoveredBarMonth].expenses >= 0 ? '+' : ''}
+              {formatCurrency(data[hoveredBarMonth].income - data[hoveredBarMonth].expenses)}
+            </Text>
+          </Flex>
+        </Box>
+      )}
     </Box>
   );
 };
@@ -494,6 +553,7 @@ export default function Reports() {
   const [totals, setTotals] = useState({ income: 0, expenses: 0, balance: 0 });
   const [hoveredCategory, setHoveredCategory] = useState(null);
   const [hoveredMonth, setHoveredMonth] = useState(null);
+  const [hoveredBarMonth, setHoveredBarMonth] = useState(null);
 
   // Generate year options
   const yearOptions = [2026, 2025];
@@ -710,7 +770,13 @@ export default function Reports() {
                 </HStack>
               </HStack>
             </Flex>
-            <MonthlyBarChart data={monthlyData} formatCurrency={formatCurrency} colors={colors} />
+            <MonthlyBarChart
+              data={monthlyData}
+              formatCurrency={formatCurrency}
+              colors={colors}
+              hoveredBarMonth={hoveredBarMonth}
+              onHoverBarMonth={setHoveredBarMonth}
+            />
           </Box>
 
           {/* Category Breakdown */}

@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Box, Flex } from '@chakra-ui/react'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -100,6 +100,12 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Redirect /report to /reports */}
+        <Route path="/report" element={<Navigate to="/reports" replace />} />
+
+        {/* Catch-all route - redirect unknown routes to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Box>
       <Footer />
