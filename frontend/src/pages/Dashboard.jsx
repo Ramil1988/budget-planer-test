@@ -149,10 +149,10 @@ const DonutChart = ({ data, total, size = 200, formatCurrency, hoveredCategory, 
 };
 
 // Weekly Spending Bar Chart Component
-const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selectedDayIndex, onDayClick }) => {
+const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0, weekDates, selectedDayIndex, onDayClick }) => {
   const colors = useDarkModeColors();
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const barHeight = 100;
+  const barHeight = 80;
 
   // Get current day (0 = Sunday, so we need to adjust for Mon-Sun array)
   const today = new Date().getDay();
@@ -160,79 +160,113 @@ const WeeklyBarChart = ({ dailyData, maxAmount, weekOffset = 0, weekDates, selec
 
   return (
     <VStack gap={3} align="stretch">
-      <Flex align="flex-end" justify="space-between" h={`${barHeight + 50}px`} gap={2}>
+      <Flex align="center" justify="space-between" h={`${barHeight * 2 + 60}px`} gap={2}>
         {days.map((day, index) => {
-          const amount = dailyData[index] || 0;
-          const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
+          const expense = dailyExpenses[index] || 0;
+          const income = dailyIncome[index] || 0;
+          const expensePercent = maxAmount > 0 ? (expense / maxAmount) * 100 : 0;
+          const incomePercent = maxAmount > 0 ? (income / maxAmount) * 100 : 0;
           // Only highlight "today" when viewing current week
           const isToday = weekOffset === 0 && index === todayIndex;
-          const hasSpending = amount > 0;
+          const hasActivity = expense > 0 || income > 0;
           const isSelected = selectedDayIndex === index;
           const dateNum = weekDates[index];
 
           return (
             <VStack
               key={day}
-              gap={1}
+              gap={0}
               flex="1"
               align="center"
-              cursor={hasSpending ? 'pointer' : 'default'}
-              onClick={() => hasSpending && onDayClick(index)}
+              cursor={hasActivity ? 'pointer' : 'default'}
+              onClick={() => hasActivity && onDayClick(index)}
               opacity={selectedDayIndex !== null && !isSelected ? 0.5 : 1}
               transition="opacity 0.2s"
             >
-              {/* Amount label above bar */}
-              <Text
-                fontSize="xs"
-                fontWeight="600"
-                color={hasSpending ? colors.textPrimary : colors.textMuted}
-                h="16px"
-              >
-                {hasSpending ? `$${amount.toFixed(0)}` : ''}
-              </Text>
-              <Box
-                w="100%"
-                maxW="40px"
-                h={`${barHeight - 20}px`}
-                bg={colors.rowStripedBg}
-                borderRadius="8px"
-                overflow="hidden"
-                position="relative"
-                border={isSelected ? '2px solid #2563EB' : 'none'}
-                boxSizing="border-box"
-              >
+              {/* Income bar (goes up) */}
+              <Box position="relative" w="100%" h={`${barHeight}px`}>
+                {/* Amount label */}
+                <Text
+                  position="absolute"
+                  top="0"
+                  left="50%"
+                  transform="translateX(-50%)"
+                  fontSize="10px"
+                  fontWeight="600"
+                  color={income > 0 ? '#059669' : 'transparent'}
+                  whiteSpace="nowrap"
+                >
+                  {income > 0 ? `+$${income.toFixed(0)}` : ''}
+                </Text>
                 <Box
                   position="absolute"
                   bottom="0"
-                  left="0"
-                  right="0"
-                  h={`${Math.max(heightPercent, hasSpending ? 8 : 0)}%`}
-                  bg={isToday
-                    ? 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)'
-                    : hasSpending
-                      ? 'linear-gradient(180deg, #A855F7 0%, #7C3AED 100%)'
-                      : '#E4E4E7'
-                  }
-                  borderRadius="6px"
+                  left="50%"
+                  transform="translateX(-50%)"
+                  w="70%"
+                  maxW="32px"
+                  h={`${Math.max(incomePercent * 0.8, income > 0 ? 8 : 0)}%`}
+                  bg={income > 0 ? 'linear-gradient(180deg, #10B981 0%, #059669 100%)' : 'transparent'}
+                  borderRadius="4px 4px 0 0"
                   transition="height 0.5s ease"
                 />
               </Box>
-              <Text
-                fontSize="xs"
-                fontWeight={isToday || isSelected ? '700' : '500'}
-                color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textMuted}
+
+              {/* Day label and date in the middle */}
+              <Box
+                py={1}
+                px={2}
+                borderRadius="6px"
+                bg={isSelected ? colors.rowHoverBg : 'transparent'}
+                border={isToday ? '2px solid #2563EB' : isSelected ? '1px solid' : 'none'}
+                borderColor={isSelected ? colors.borderColor : 'transparent'}
               >
-                {day}
-              </Text>
-              {/* Date number under day name */}
-              <Text
-                fontSize="10px"
-                fontWeight="500"
-                color={colors.textMuted}
-                mt={-1}
-              >
-                {dateNum}
-              </Text>
+                <Text
+                  fontSize="xs"
+                  fontWeight={isToday || isSelected ? '700' : '500'}
+                  color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textMuted}
+                  textAlign="center"
+                >
+                  {day}
+                </Text>
+                <Text
+                  fontSize="9px"
+                  fontWeight="500"
+                  color={colors.textMuted}
+                  textAlign="center"
+                >
+                  {dateNum}
+                </Text>
+              </Box>
+
+              {/* Expense bar (goes down) */}
+              <Box position="relative" w="100%" h={`${barHeight}px`}>
+                <Box
+                  position="absolute"
+                  top="0"
+                  left="50%"
+                  transform="translateX(-50%)"
+                  w="70%"
+                  maxW="32px"
+                  h={`${Math.max(expensePercent * 0.8, expense > 0 ? 8 : 0)}%`}
+                  bg={expense > 0 ? 'linear-gradient(180deg, #7C3AED 0%, #A855F7 100%)' : 'transparent'}
+                  borderRadius="0 0 4px 4px"
+                  transition="height 0.5s ease"
+                />
+                {/* Amount label */}
+                <Text
+                  position="absolute"
+                  bottom="0"
+                  left="50%"
+                  transform="translateX(-50%)"
+                  fontSize="10px"
+                  fontWeight="600"
+                  color={expense > 0 ? '#7C3AED' : 'transparent'}
+                  whiteSpace="nowrap"
+                >
+                  {expense > 0 ? `-$${expense.toFixed(0)}` : ''}
+                </Text>
+              </Box>
             </VStack>
           );
         })}
@@ -585,6 +619,7 @@ export default function Dashboard() {
   const [categoryBudgets, setCategoryBudgets] = useState([]);
   const [daysLeft, setDaysLeft] = useState(0);
   const [weeklySpending, setWeeklySpending] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [weeklyIncome, setWeeklyIncome] = useState([0, 0, 0, 0, 0, 0, 0]);
   const [maxDailySpending, setMaxDailySpending] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week, etc.
   const [allTransactions, setAllTransactions] = useState([]); // Store for week navigation
@@ -624,8 +659,9 @@ export default function Dashboard() {
     monday.setDate(today.getDate() + mondayOffset + (offset * 7));
     monday.setHours(0, 0, 0, 0);
 
-    const dailySpending = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun
-    const dailyTxs = [[], [], [], [], [], [], []]; // Transactions by day
+    const dailySpending = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun (expenses)
+    const dailyIncome = [0, 0, 0, 0, 0, 0, 0]; // Mon to Sun (income)
+    const dailyTxs = [[], [], [], [], [], [], []]; // Transactions by day (all types)
     const dates = []; // Date strings for each day
 
     // Calculate date numbers for the week
@@ -636,18 +672,23 @@ export default function Dashboard() {
     }
 
     transactions.forEach(tx => {
-      if (tx.type === 'expense') {
-        const txDate = new Date(tx.date + 'T00:00:00');
-        const dayDiff = Math.floor((txDate - monday) / (1000 * 60 * 60 * 24));
-        if (dayDiff >= 0 && dayDiff < 7) {
+      const txDate = new Date(tx.date + 'T00:00:00');
+      const dayDiff = Math.floor((txDate - monday) / (1000 * 60 * 60 * 24));
+      if (dayDiff >= 0 && dayDiff < 7) {
+        if (tx.type === 'expense') {
           dailySpending[dayDiff] += Number(tx.amount);
-          dailyTxs[dayDiff].push(tx);
+        } else if (tx.type === 'income') {
+          dailyIncome[dayDiff] += Number(tx.amount);
         }
+        dailyTxs[dayDiff].push(tx);
       }
     });
 
     setWeeklySpending(dailySpending);
-    setMaxDailySpending(Math.max(...dailySpending, 1));
+    setWeeklyIncome(dailyIncome);
+    const maxExpense = Math.max(...dailySpending);
+    const maxIncome = Math.max(...dailyIncome);
+    setMaxDailySpending(Math.max(maxExpense, maxIncome, 1));
     setWeekDates(dates);
     setDailyTransactions(dailyTxs);
     setSelectedDayIndex(null); // Reset selection when week changes
@@ -692,13 +733,7 @@ export default function Dashboard() {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
-    if (weekOffset === 0) {
-      return 'This Week';
-    } else if (weekOffset === -1) {
-      return 'Last Week';
-    } else {
-      return `${formatDate(monday)} - ${formatDate(sunday)}`;
-    }
+    return `${formatDate(monday)} - ${formatDate(sunday)}`;
   };
 
   const loadDashboardData = async () => {
@@ -1513,7 +1548,7 @@ export default function Dashboard() {
               )}
             </Box>
 
-            {/* Weekly Spending Chart */}
+            {/* Cash-flow Chart */}
             <Box
               flex="1"
               p={{ base: 5, md: 6 }}
@@ -1522,7 +1557,12 @@ export default function Dashboard() {
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
               border="1px solid" borderColor={colors.borderSubtle}
             >
-              <Flex justify="space-between" align="center" mb={5}>
+              <Flex justify="space-between" align="center" mb={3}>
+                <HStack gap={1}>
+                  <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
+                    Cash-flow
+                  </Heading>
+                </HStack>
                 <HStack gap={2}>
                   {/* Previous Week Button */}
                   <Button
@@ -1534,13 +1574,13 @@ export default function Dashboard() {
                     h="28px"
                     borderRadius="8px"
                     color={colors.textMuted}
-                    _hover={{ bg: '#F4F4F5', color: '#18181B' }}
+                    _hover={{ bg: colors.rowHoverBg }}
                   >
                     ←
                   </Button>
-                  <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em" minW="100px" textAlign="center">
+                  <Text fontSize="xs" fontWeight="600" color={colors.textMuted} minW="120px" textAlign="center">
                     {getWeekLabel()}
-                  </Heading>
+                  </Text>
                   {/* Next Week Button */}
                   <Button
                     size="sm"
@@ -1551,7 +1591,7 @@ export default function Dashboard() {
                     h="28px"
                     borderRadius="8px"
                     color={colors.textMuted}
-                    _hover={{ bg: '#F4F4F5', color: '#18181B' }}
+                    _hover={{ bg: colors.rowHoverBg }}
                     disabled={weekOffset >= 0}
                     opacity={weekOffset >= 0 ? 0.3 : 1}
                     cursor={weekOffset >= 0 ? 'not-allowed' : 'pointer'}
@@ -1559,15 +1599,29 @@ export default function Dashboard() {
                     →
                   </Button>
                 </HStack>
-                <Box bg={colors.rowStripedBg} px={3} py={1} borderRadius="full">
-                  <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
-                    {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
+              </Flex>
+
+              {/* Net summary */}
+              <Flex gap={4} mb={4} justify="center">
+                <HStack gap={1}>
+                  <Box w="8px" h="8px" borderRadius="full" bg="#10B981" />
+                  <Text fontSize="xs" color={colors.textMuted}>Income:</Text>
+                  <Text fontSize="xs" fontWeight="600" color="#059669">
+                    +{formatCurrency(weeklyIncome.reduce((a, b) => a + b, 0))}
                   </Text>
-                </Box>
+                </HStack>
+                <HStack gap={1}>
+                  <Box w="8px" h="8px" borderRadius="full" bg="#7C3AED" />
+                  <Text fontSize="xs" color={colors.textMuted}>Expenses:</Text>
+                  <Text fontSize="xs" fontWeight="600" color="#7C3AED">
+                    -{formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))}
+                  </Text>
+                </HStack>
               </Flex>
 
               <WeeklyBarChart
-                dailyData={weeklySpending}
+                dailyExpenses={weeklySpending}
+                dailyIncome={weeklyIncome}
                 maxAmount={maxDailySpending}
                 weekOffset={weekOffset}
                 weekDates={weekDates}
@@ -1583,8 +1637,8 @@ export default function Dashboard() {
                       <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
                         {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIndex]}, {weekDates[selectedDayIndex]}
                       </Text>
-                      <Text fontSize="sm" fontWeight="700" color="#7C3AED">
-                        {formatCurrency(weeklySpending[selectedDayIndex])}
+                      <Text fontSize="sm" fontWeight="700" color={weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex] >= 0 ? '#059669' : '#7C3AED'}>
+                        {weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex] >= 0 ? '+' : ''}{formatCurrency(weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex])}
                       </Text>
                     </Flex>
                     <Box maxH="150px" overflowY="auto">
@@ -1602,7 +1656,7 @@ export default function Dashboard() {
                               w="6px"
                               h="6px"
                               borderRadius="full"
-                              bg={getCategoryColor(tx.categories?.name || 'default')}
+                              bg={tx.type === 'income' ? '#10B981' : getCategoryColor(tx.categories?.name || 'default')}
                               flexShrink={0}
                             />
                             <VStack align="start" gap={0} flex="1" minW="0">
@@ -1614,8 +1668,8 @@ export default function Dashboard() {
                               </Text>
                             </VStack>
                           </HStack>
-                          <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={2}>
-                            {formatCurrency(tx.amount)}
+                          <Text fontSize="xs" fontWeight="600" color={tx.type === 'income' ? '#059669' : '#E11D48'} flexShrink={0} ml={2}>
+                            {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                           </Text>
                         </Flex>
                       ))}
@@ -1624,10 +1678,10 @@ export default function Dashboard() {
                 ) : (
                   <Flex justify="space-between" align="center">
                     <Text fontSize="sm" color={colors.textMuted}>
-                      {selectedDayIndex !== null ? 'No transactions' : 'Click a bar to see details'}
+                      {selectedDayIndex !== null ? 'No transactions' : 'Click a day to see details'}
                     </Text>
-                    <Text fontSize="sm" fontWeight="700" color={colors.textPrimary}>
-                      {formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))} total
+                    <Text fontSize="sm" fontWeight="700" color={weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0) >= 0 ? '#059669' : '#7C3AED'}>
+                      Net: {weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0) >= 0 ? '+' : ''}{formatCurrency(weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0))}
                     </Text>
                   </Flex>
                 )}
@@ -1803,24 +1857,16 @@ export default function Dashboard() {
                         {index + 1}
                       </Flex>
 
-                      {/* Category dot & name */}
-                      <HStack flex="1" gap={2}>
-                        <Box
-                          w="8px"
-                          h="8px"
-                          borderRadius="full"
-                          bg={getCategoryColor(cat.name)}
-                          flexShrink={0}
-                        />
-                        <Text
-                          fontWeight="500"
-                          fontSize="sm"
-                          color={colors.textPrimary}
-                          noOfLines={1}
-                        >
-                          {cat.name}
-                        </Text>
-                      </HStack>
+                      {/* Category name */}
+                      <Text
+                        flex="1"
+                        fontWeight="500"
+                        fontSize="sm"
+                        color={colors.textPrimary}
+                        noOfLines={1}
+                      >
+                        {cat.name}
+                      </Text>
 
                       {/* Amount */}
                       <Text
