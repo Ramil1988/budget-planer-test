@@ -72,6 +72,17 @@
   - [x] Mobile responsiveness tests
   - [x] Shared test utilities with login helpers
 
+#### Phase 5: Authentication & Data Management Enhancements
+- [x] Password Reset Flow
+  - [x] Forgot Password page (`/forgot-password`)
+  - [x] Reset Password page (`/reset-password`)
+  - [x] Supabase Auth integration for email-based reset
+  - [x] Success/error feedback and validation
+- [x] Bulk Transaction Management
+  - [x] "Remove All" button on Transactions page
+  - [x] Confirmation dialog with transaction count
+  - [x] Warning message for irreversible action
+
 ---
 
 ## In Progress
