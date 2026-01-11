@@ -1,6 +1,6 @@
 # Transaction Categorization Rules
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-10
 
 This document contains the mapping rules for automatically categorizing bank transactions based on their description.
 
@@ -547,3 +547,41 @@ This categorization logic will be used in:
 2. **Google Sheets Sync**: Categorize transactions synced from Sheets
 3. **Manual Entry**: Suggest category when user enters transaction description
 4. **Bulk Re-categorization**: Allow users to re-categorize multiple transactions at once
+
+---
+
+## Importing Merchant Mappings from CSV
+
+### Quick Actions in Category Manager
+
+The Category Manager page (`/categories`) now includes two quick action buttons:
+
+#### 1. Load Default Categories
+Loads 25 predefined categories:
+- **20 Expense Categories**: Afterschool, Autocredit, Clothes, Food, Food/Costco, Fuel, Government Loan, Haircut, Household items/Car, Insurance, Internet, Massage, Mobile/Internet, Mortgage, NB Power, Pharmacy, Property tax, Subscriptions, Unexpected, Weekend
+- **5 Income Categories**: Salary, Freelance, Investments, Rental Income, Other Income
+
+#### 2. Import Mappings from CSV
+Bulk import merchant-to-category mappings from a CSV file.
+
+**CSV Format:**
+```csv
+Name,Type
+COSTCO GAS W1345,Fuel
+TASTE OF HOMELAND,Food
+COSTCO WHOLESALE W1345,Food/Costco
+SHOPPERS DRUG MART,Pharmacy
+MCDONALD'S #151,Weekend
+```
+
+**How it works:**
+1. Reads the CSV file with `Name` and `Type` columns
+2. Creates any missing categories from the `Type` column (as expense type)
+3. Creates merchant mappings linking each `Name` to its `Type`
+4. Uses upsert to avoid duplicates
+
+**Notes:**
+- Merchant names are stored in UPPERCASE for case-insensitive matching
+- Categories are created as expense type by default
+- Existing mappings with the same merchant name are updated
+- The import processes in batches of 100 for large files

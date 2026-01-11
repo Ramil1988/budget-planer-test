@@ -53,6 +53,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- STEP 3: Create master seed function that calls all individual seed functions
 -- ============================================================================
+-- NOTE: Removed profiles table insert (table doesn't exist in current schema)
 CREATE OR REPLACE FUNCTION seed_new_user_data(target_user_id UUID)
 RETURNS void AS $$
 BEGIN
@@ -66,13 +67,6 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'seed_merchant_mappings') THEN
     PERFORM seed_merchant_mappings(target_user_id);
   END IF;
-
-  -- Create default profile
-  INSERT INTO profiles (id, email, full_name)
-  SELECT target_user_id, email, raw_user_meta_data->>'full_name'
-  FROM auth.users
-  WHERE id = target_user_id
-  ON CONFLICT (id) DO NOTHING;
 
   -- Create default account
   INSERT INTO accounts (user_id, name, balance)
@@ -89,10 +83,15 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ============================================================================
 -- STEP 4: Create trigger function for new user signup
 -- ============================================================================
+-- NOTE: Added EXCEPTION handler to ensure user signup succeeds even if seeding fails
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   PERFORM seed_new_user_data(NEW.id);
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Log error but don't fail signup
+  RAISE WARNING 'handle_new_user failed for %: %', NEW.id, SQLERRM;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

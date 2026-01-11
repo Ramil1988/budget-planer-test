@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -12,11 +12,26 @@ import {
   IconButton,
   Spinner,
   Badge,
+  Dialog,
+  Portal,
+  CloseButton,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
+
+// Default categories to seed for new users
+const DEFAULT_EXPENSE_CATEGORIES = [
+  'Afterschool', 'Autocredit', 'Clothes', 'Food', 'Food/Costco', 'Fuel',
+  'Government Loan', 'Haircut', 'Household items/Car', 'Insurance', 'Internet',
+  'Massage', 'Mobile/Internet', 'Mortgage', 'NB Power', 'Pharmacy',
+  'Property tax', 'Subscriptions', 'Unexpected', 'Weekend'
+];
+
+const DEFAULT_INCOME_CATEGORIES = [
+  'Salary', 'Freelance', 'Investments', 'Rental Income', 'Other Income'
+];
 
 export default function CategoryManager() {
   const { user } = useAuth();
@@ -32,6 +47,9 @@ export default function CategoryManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('expense');
+  const [importLoading, setImportLoading] = useState(false);
+  const [isDefaultModalOpen, setIsDefaultModalOpen] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Load patterns from database on mount
   useEffect(() => {
@@ -225,6 +243,150 @@ export default function CategoryManager() {
     }
   };
 
+  // Load default categories (both expense and income)
+  const loadDefaultCategories = async () => {
+    setImportLoading(true);
+    setError('');
+    try {
+      const expenseInserts = DEFAULT_EXPENSE_CATEGORIES.map(name => ({
+        user_id: user.id,
+        name,
+        type: 'expense'
+      }));
+
+      const incomeInserts = DEFAULT_INCOME_CATEGORIES.map(name => ({
+        user_id: user.id,
+        name,
+        type: 'income'
+      }));
+
+      const { error: insertError } = await supabase
+        .from('categories')
+        .upsert([...expenseInserts, ...incomeInserts], {
+          onConflict: 'user_id,name',
+          ignoreDuplicates: true
+        });
+
+      if (insertError) throw insertError;
+
+      await loadPatternsFromDB();
+      setIsDefaultModalOpen(false);
+      setSaveMessage(`Loaded ${DEFAULT_EXPENSE_CATEGORIES.length} expense and ${DEFAULT_INCOME_CATEGORIES.length} income categories!`);
+      setTimeout(() => setSaveMessage(''), 5000);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error loading default categories:', err);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // Handle file selection for CSV import
+  const handleFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        setError('Please select a CSV file');
+        return;
+      }
+      importMerchantMappingsFromCSV(file);
+    }
+  };
+
+  // Import merchant mappings from CSV (Name -> Type/Category)
+  const importMerchantMappingsFromCSV = async (file) => {
+    setImportLoading(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+
+      if (lines.length < 2) {
+        throw new Error('CSV file must have a header row and at least one data row');
+      }
+
+      const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+      const nameIndex = headers.indexOf('name');
+      const typeIndex = headers.indexOf('type');
+
+      if (nameIndex === -1 || typeIndex === -1) {
+        throw new Error('CSV must have "Name" and "Type" columns');
+      }
+
+      // Parse CSV rows
+      const mappings = lines.slice(1)
+        .map(line => {
+          // Handle CSV with quotes
+          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          const merchantName = values[nameIndex]?.toUpperCase();
+          const categoryName = values[typeIndex];
+          return { merchantName, categoryName };
+        })
+        .filter(m => m.merchantName && m.categoryName);
+
+      if (mappings.length === 0) {
+        throw new Error('No valid mappings found in CSV');
+      }
+
+      // Get unique categories from the Type column
+      const uniqueCategories = [...new Set(mappings.map(m => m.categoryName))];
+
+      // First, create any missing categories (as expense type)
+      const categoryInserts = uniqueCategories.map(name => ({
+        user_id: user.id,
+        name,
+        type: 'expense'
+      }));
+
+      const { error: catError } = await supabase
+        .from('categories')
+        .upsert(categoryInserts, {
+          onConflict: 'user_id,name',
+          ignoreDuplicates: true
+        });
+
+      if (catError) throw catError;
+
+      // Then, create merchant mappings
+      const mappingInserts = mappings.map(m => ({
+        user_id: user.id,
+        transaction_description: m.merchantName,
+        category_name: m.categoryName
+      }));
+
+      // Insert in batches to avoid issues
+      const batchSize = 100;
+      let insertedCount = 0;
+      for (let i = 0; i < mappingInserts.length; i += batchSize) {
+        const batch = mappingInserts.slice(i, i + batchSize);
+        const { error: mapError } = await supabase
+          .from('merchant_mappings')
+          .upsert(batch, {
+            onConflict: 'user_id,transaction_description',
+            ignoreDuplicates: true
+          });
+
+        if (mapError) throw mapError;
+        insertedCount += batch.length;
+      }
+
+      await loadPatternsFromDB();
+
+      setSaveMessage(`Imported ${uniqueCategories.length} categories and ${insertedCount} merchant mappings from CSV!`);
+      setTimeout(() => setSaveMessage(''), 5000);
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      setError(err.message);
+      console.error('Error importing merchant mappings from CSV:', err);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   // Filter categories by type
   const expenseCategories = categories.filter(c => c.type === 'expense');
   const incomeCategories = categories.filter(c => c.type === 'income');
@@ -316,6 +478,101 @@ export default function CategoryManager() {
             Income ({incomeCategories.length})
           </Button>
         </HStack>
+
+        {/* Quick Actions: Load Default & Import CSV */}
+        <Box
+          p={4}
+          borderRadius="lg"
+          borderWidth="1px"
+          borderColor={colors.borderColor}
+          bg={colors.cardBg}
+        >
+          <Text fontWeight="medium" mb={3} color={colors.textPrimary}>Quick Actions</Text>
+          <HStack gap={3} wrap="wrap">
+            <Button
+              colorScheme="purple"
+              onClick={() => setIsDefaultModalOpen(true)}
+              loading={importLoading}
+              loadingText="Loading..."
+            >
+              Load Default Categories
+            </Button>
+            <Button
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              loading={importLoading}
+              loadingText="Importing..."
+            >
+              Import Mappings from CSV
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".csv"
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+          </HStack>
+          <Text fontSize="xs" color={colors.textMuted} mt={2}>
+            CSV format: Name,Type (merchant name → category mapping)
+          </Text>
+        </Box>
+
+        {/* Confirmation Dialog for Loading Defaults */}
+        <Dialog.Root open={isDefaultModalOpen} onOpenChange={(e) => setIsDefaultModalOpen(e.open)}>
+          <Portal>
+            <Dialog.Backdrop bg="blackAlpha.600" />
+            <Dialog.Positioner>
+              <Dialog.Content bg={colors.cardBg} maxW="500px" w="90%" borderRadius="lg" p={0}>
+                <Dialog.Header p={4} borderBottomWidth="1px" borderColor={colors.borderColor}>
+                  <Flex justify="space-between" align="center" w="100%">
+                    <Dialog.Title color={colors.textPrimary} fontWeight="bold">Load Default Categories</Dialog.Title>
+                    <Dialog.CloseTrigger asChild>
+                      <CloseButton size="sm" />
+                    </Dialog.CloseTrigger>
+                  </Flex>
+                </Dialog.Header>
+                <Dialog.Body p={4}>
+                  <Text color={colors.textSecondary} mb={4}>
+                    This will add the following default categories to your account:
+                  </Text>
+                  <Box mb={4}>
+                    <Text fontWeight="bold" color={colors.textPrimary} mb={1}>
+                      Expense Categories ({DEFAULT_EXPENSE_CATEGORIES.length}):
+                    </Text>
+                    <Text fontSize="sm" color={colors.textMuted}>
+                      {DEFAULT_EXPENSE_CATEGORIES.join(', ')}
+                    </Text>
+                  </Box>
+                  <Box>
+                    <Text fontWeight="bold" color={colors.textPrimary} mb={1}>
+                      Income Categories ({DEFAULT_INCOME_CATEGORIES.length}):
+                    </Text>
+                    <Text fontSize="sm" color={colors.textMuted}>
+                      {DEFAULT_INCOME_CATEGORIES.join(', ')}
+                    </Text>
+                  </Box>
+                  <Text fontSize="sm" color={colors.textSecondary} mt={4}>
+                    Existing categories with the same name will not be duplicated.
+                  </Text>
+                </Dialog.Body>
+                <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor} gap={2}>
+                  <Button variant="ghost" onClick={() => setIsDefaultModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    colorScheme="purple"
+                    onClick={loadDefaultCategories}
+                    loading={importLoading}
+                  >
+                    Load Categories
+                  </Button>
+                </Dialog.Footer>
+              </Dialog.Content>
+            </Dialog.Positioner>
+          </Portal>
+        </Dialog.Root>
 
         {/* EXPENSE TAB */}
         {activeTab === 'expense' && (

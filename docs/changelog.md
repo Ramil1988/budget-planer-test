@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Category Manager Quick Actions (2026-01-10):**
+  - "Load Default Categories" button - loads 25 predefined categories (20 expense + 5 income)
+  - "Import Mappings from CSV" button - bulk import merchant-to-category mappings
+  - CSV format: `Name,Type` where Name is merchant name and Type is category
+  - Automatically creates missing categories from CSV Type column
+  - Creates merchant mappings for auto-categorization during transaction import
+  - Confirmation dialog before loading defaults showing all categories
+  - Duplicate handling via upsert (won't create duplicates)
+
+- **Database Trigger Fix (2026-01-10):**
+  - Fixed `handle_new_user()` trigger to handle errors gracefully
+  - Signup no longer fails if auto-seeding encounters issues
+  - Added EXCEPTION handler to ensure user creation succeeds
+
+- **Password Reset Flow (2026-01-10):**
+  - Forgot Password page (`/forgot-password`) - request password reset via email
+  - Reset Password page (`/reset-password`) - set new password from email link
+  - Integrated with Supabase Auth `resetPasswordForEmail` API
+  - Success/error feedback with user-friendly messages
+  - Automatic redirect to dashboard after password update
+
+- **Remove All Transactions (2026-01-10):**
+  - "Remove All" button added to Transactions page header
+  - Confirmation dialog before deletion to prevent accidents
+  - Shows count of transactions to be deleted
+  - Warning about irreversible action
+  - Loading state during deletion
+
 - **Auto-Seeding for New Users (2026-01-10):**
   - Database trigger automatically seeds default data for new signups
   - 20 expense categories (Food, Fuel, Clothes, etc.)
