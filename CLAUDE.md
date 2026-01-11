@@ -50,7 +50,12 @@ From the frontend directory (`cd frontend`):
 - `pnpm run dev` - Start Vite development server
 - `pnpm run build` - Build for production
 - `pnpm run preview` - Preview production build locally
-- `pnpm run test` - Run Playwright tests
+- `pnpm run test` - Run all Playwright tests
+- `pnpm run test:ui` - Run tests with interactive UI (recommended for development)
+- `pnpm run test:headed` - Run tests in headed mode (see browser)
+- `pnpm run test:debug` - Debug tests with Playwright inspector
+- `npx playwright test auth.spec.js` - Run specific test file
+- `npx playwright test -g "login"` - Run tests matching pattern
 
 Netlify Functions (serverless backend):
 - Functions are located in `netlify/functions/`
@@ -78,7 +83,18 @@ Netlify Functions (serverless backend):
 │   │       └── styles.css        # Global CSS with CSS custom properties
 │   ├── public/                   # Static assets
 │   ├── images/                   # Image assets
-│   ├── tests/                    # Playwright test files
+│   ├── tests/                    # Playwright E2E test files
+│   │   ├── test-utils.js         # Shared test utilities and helpers
+│   │   ├── auth.spec.js          # Authentication tests
+│   │   ├── dashboard.spec.js     # Dashboard tests
+│   │   ├── transactions.spec.js  # Transaction tests
+│   │   ├── budget.spec.js        # Budget tests
+│   │   ├── categories.spec.js    # Category tests
+│   │   ├── recurring.spec.js     # Recurring payments tests
+│   │   ├── reports.spec.js       # Reports tests
+│   │   ├── settings.spec.js      # Settings tests
+│   │   ├── import.spec.js        # Import tests
+│   │   └── mobile.spec.js        # Mobile responsiveness tests
 │   ├── index.html
 │   ├── vite.config.js
 │   ├── playwright.config.js
@@ -236,6 +252,15 @@ The backend is built with Netlify Functions, a serverless platform that runs eve
   - Budget categories secured via budget ownership check
 - See `backend/database/schema.sql` for complete schema definition
 
+**Auto-Seeding for New Users:**
+- Migration: `backend/database/migrations/002_auto_seed_new_users.sql`
+- Automatically creates for each new user:
+  - 20 expense categories (Food, Fuel, etc.)
+  - 5 income categories (Salary, Freelance, etc.)
+  - 300+ merchant mappings for auto-categorization
+  - Default profile, account, and user settings
+- CSV exports available in `backend/database/exports/` for manual import
+
 ## Database & Supabase
 
 ### Supabase Setup
@@ -333,3 +358,127 @@ export const handler = async (event, context) => {
 - Typography: Heading, Text
 - Interactive: Button, IconButton
 - See `docs/technical-reference.md` for detailed usage patterns
+
+## Google Sheets Integration
+
+BudgetWise supports two modes of syncing transactions from Google Sheets:
+
+### Polling Mode (Legacy)
+- Fetches data from Google Sheets at configurable intervals (1-60 minutes)
+- Uses public CSV export (`/gviz/tq?tqx=out:csv`)
+- Simple but inefficient (fetches even when no changes)
+
+### Webhook Mode (Recommended)
+- Real-time sync using Google Apps Script and webhooks
+- Transactions appear instantly (1-2 seconds) when added to the sheet
+- More efficient - only triggers when new data is added
+
+**Architecture:**
+```
+Google Sheet → Apps Script → Netlify Function → Supabase → Frontend (Realtime)
+```
+
+**Key Files:**
+- `netlify/functions/google-sheets-webhook.js` - Webhook endpoint
+- `docs/google-apps-script/WebhookSync.gs` - Google Apps Script code
+- `docs/google-apps-script/README.md` - Setup instructions
+- `backend/database/migrations/001_add_webhook_secret.sql` - Database migration
+
+**Setup Requirements:**
+1. Run database migration to add `webhook_secret`, `realtime_enabled` columns
+2. Set Netlify environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+3. Configure webhook in Import Transactions page
+4. Set up Google Apps Script with provided code
+
+See `docs/google-apps-script/README.md` for detailed setup instructions.
+
+## Testing
+
+### Playwright Test Suite
+
+BudgetWise has a comprehensive end-to-end test suite built with Playwright. Tests are located in `frontend/tests/`.
+
+**Test Configuration:**
+- Config file: `frontend/playwright.config.js`
+- Base URL: `http://localhost:5173` (Vite dev server)
+- Browsers: Chromium, Firefox, WebKit, Mobile Chrome (Pixel 5), Mobile Safari (iPhone 12)
+
+**Test Credentials:**
+- Email: `complianceramsharapov@gmail.com`
+- Password: `@Ramilka1988`
+- Stored in: `frontend/tests/test-utils.js`
+
+### Test Files
+
+| File | Description |
+|------|-------------|
+| `test-utils.js` | Shared utilities, login helper, common selectors |
+| `auth.spec.js` | Authentication: login, signup, logout, protected routes, session |
+| `dashboard.spec.js` | Dashboard: summary cards, charts, navigation, data loading |
+| `transactions.spec.js` | Transactions: list, add, filter, search, validation |
+| `budget.spec.js` | Budget: tracking, setup, category budgets, progress |
+| `categories.spec.js` | Categories: expense/income tabs, merchant mappings |
+| `recurring.spec.js` | Recurring payments: list, actions, next 30 days |
+| `reports.spec.js` | Reports: charts, tables, year selection |
+| `settings.spec.js` | Settings: notifications, account info |
+| `import.spec.js` | Import: Google Sheets sync, auto-sync, CSV upload |
+| `mobile.spec.js` | Mobile responsiveness: all pages on mobile/tablet viewports |
+
+### Test Utilities (`test-utils.js`)
+
+Common helper functions:
+- `loginUser(page, email?, password?)` - Log in a user
+- `logoutUser(page)` - Log out current user
+- `openMobileMenuIfNeeded(page)` - Open hamburger menu on mobile
+- `isMobileViewport(page)` - Check if viewport is mobile
+- `navigateToProtectedPage(page, path)` - Navigate with auto-login
+- `takeScreenshot(page, name)` - Take timestamped screenshot
+- `TEST_USER` - Object with test credentials
+- `SELECTORS` - Common CSS selectors
+
+### Running Tests
+
+```bash
+cd frontend
+
+# Run all tests (headless)
+npm test
+
+# Interactive UI mode (recommended for development)
+npm run test:ui
+
+# See browser while testing
+npm run test:headed
+
+# Debug with inspector
+npm run test:debug
+
+# Run specific file
+npx playwright test auth.spec.js
+
+# Run tests matching pattern
+npx playwright test -g "login"
+
+# View HTML report
+npm run test:report
+```
+
+### Writing New Tests
+
+```javascript
+import { test, expect } from '@playwright/test';
+import { loginUser, TEST_USER } from './test-utils.js';
+
+test.describe('My Feature', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginUser(page);
+  });
+
+  test('should do something', async ({ page }) => {
+    await page.goto('/my-page');
+    await expect(page.locator('h1')).toBeVisible();
+  });
+});
+```
+
+See `frontend/tests/README.md` for complete documentation.

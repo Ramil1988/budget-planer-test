@@ -13,6 +13,9 @@ import {
   Table,
   Icon,
   Collapsible,
+  Dialog,
+  Portal,
+  CloseButton,
 } from '@chakra-ui/react';
 import { LuFilter, LuX } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,6 +40,10 @@ export default function Transactions() {
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
+
+  // Delete all dialog state
+  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -218,6 +225,25 @@ export default function Transactions() {
     }
   };
 
+  const handleDeleteAllTransactions = async () => {
+    setDeletingAll(true);
+    try {
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (deleteError) throw deleteError;
+      setTransactions([]);
+      setShowDeleteAllDialog(false);
+    } catch (err) {
+      setError('Failed to delete all transactions: ' + err.message);
+      console.error('Delete all error:', err);
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   const applyCustomFilters = () => {
     setCustomFiltersApplied(true);
     setSelectedPeriod('custom');
@@ -317,6 +343,15 @@ export default function Transactions() {
           <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
             <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Transactions</Heading>
             <HStack gap={2}>
+              <Button
+                onClick={() => setShowDeleteAllDialog(true)}
+                variant="outline"
+                colorScheme="red"
+                size={{ base: 'sm', md: 'md' }}
+                disabled={transactions.length === 0}
+              >
+                Remove All
+              </Button>
               <Button
                 onClick={downloadCSV}
                 variant="outline"
@@ -650,6 +685,72 @@ export default function Transactions() {
             </Flex>
           )}
       </VStack>
+
+      {/* Delete All Confirmation Dialog */}
+      <Dialog.Root open={showDeleteAllDialog} onOpenChange={(e) => !e.open && setShowDeleteAllDialog(false)}>
+        <Portal>
+          <Dialog.Backdrop bg="blackAlpha.600" />
+          <Dialog.Positioner>
+            <Dialog.Content
+              maxW="400px"
+              w="90%"
+              borderRadius="16px"
+              overflow="hidden"
+              bg={colors.cardBg}
+            >
+              <Dialog.Header
+                bg="linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)"
+                color="white"
+                p={5}
+              >
+                <Flex justify="space-between" align="center">
+                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
+                    Remove All Transactions
+                  </Dialog.Title>
+                  <Dialog.CloseTrigger asChild>
+                    <CloseButton
+                      color="white"
+                      _hover={{ bg: 'whiteAlpha.200' }}
+                      borderRadius="full"
+                    />
+                  </Dialog.CloseTrigger>
+                </Flex>
+              </Dialog.Header>
+
+              <Dialog.Body p={6}>
+                <VStack gap={4} align="stretch">
+                  <Text color={colors.textPrimary} fontSize="md">
+                    Are you sure you want to delete <strong>all {transactions.length} transactions</strong>?
+                  </Text>
+                  <Text color={colors.textSecondary} fontSize="sm">
+                    This action cannot be undone. All your transaction history will be permanently removed.
+                  </Text>
+                </VStack>
+              </Dialog.Body>
+
+              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
+                <HStack gap={3} justify="flex-end" w="100%">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDeleteAllDialog(false)}
+                    disabled={deletingAll}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    colorScheme="red"
+                    onClick={handleDeleteAllTransactions}
+                    loading={deletingAll}
+                    loadingText="Deleting..."
+                  >
+                    Delete All
+                  </Button>
+                </HStack>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
     </PageContainer>
   );
 }

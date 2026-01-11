@@ -18,7 +18,10 @@ export function AutoSyncProvider({ children }) {
   const [syncInterval, setSyncInterval] = useState(5); // minutes
   const [lastSyncResult, setLastSyncResult] = useState(null);
   const [sheetSettings, setSheetSettings] = useState(null);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false); // Webhook/realtime mode
+  const [webhookSecret, setWebhookSecret] = useState(null);
   const intervalRef = useRef(null);
+  const channelRef = useRef(null); // Supabase realtime channel
   const isSyncingRef = useRef(false); // Synchronous guard to prevent race conditions
 
   // Load settings on mount
@@ -31,8 +34,17 @@ export function AutoSyncProvider({ children }) {
     }
   }, [user]);
 
-  // Set up polling interval
+  // Set up polling interval (only when realtime is disabled)
   useEffect(() => {
+    // Skip polling if realtime mode is enabled
+    if (realtimeEnabled) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
     if (isEnabled && sheetSettings?.google_sheet_url) {
       // Clear existing interval
       if (intervalRef.current) {
@@ -53,13 +65,87 @@ export function AutoSyncProvider({ children }) {
         }
       };
     }
-  }, [isEnabled, syncInterval, sheetSettings]);
+  }, [isEnabled, syncInterval, sheetSettings, realtimeEnabled]);
+
+  // Set up Supabase Realtime subscription (when realtime mode is enabled)
+  useEffect(() => {
+    if (!user || !realtimeEnabled) {
+      // Clean up existing channel
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      return;
+    }
+
+    // Subscribe to new transactions via Supabase Realtime
+    const channel = supabase
+      .channel(`transactions:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          // New transaction received via webhook
+          const newTransaction = payload.new;
+
+          // Update last sync time
+          setLastSyncTime(new Date());
+          setLastSyncResult({
+            success: true,
+            message: 'New transaction received via webhook',
+            imported: 1,
+          });
+
+          // Send notification
+          if (getNotificationPermission() === 'granted') {
+            const formattedAmount = new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            }).format(newTransaction.amount);
+
+            showNotification('New Transaction', {
+              body: `${newTransaction.description} - ${formattedAmount}`,
+              tag: 'realtime-' + newTransaction.id,
+            });
+
+            // Check budget limits
+            if (newTransaction.category_id) {
+              await checkBudgetAndNotify(
+                supabase,
+                user.id,
+                newTransaction.category_id,
+                newTransaction.amount
+              );
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime subscription active');
+        }
+      });
+
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [user, realtimeEnabled]);
 
   const loadSettings = async () => {
     try {
       const { data, error } = await supabase
         .from('user_settings')
-        .select('google_sheet_url, google_sheet_name, auto_sync_enabled, sync_interval_minutes')
+        .select('google_sheet_url, google_sheet_name, auto_sync_enabled, sync_interval_minutes, realtime_enabled, webhook_secret')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -69,6 +155,8 @@ export function AutoSyncProvider({ children }) {
         setSheetSettings(data);
         setIsEnabled(data.auto_sync_enabled || false);
         setSyncInterval(data.sync_interval_minutes || 5);
+        setRealtimeEnabled(data.realtime_enabled || false);
+        setWebhookSecret(data.webhook_secret || null);
       }
     } catch (err) {
       console.error('Error loading auto-sync settings:', err);
@@ -411,6 +499,93 @@ export function AutoSyncProvider({ children }) {
     }
   };
 
+  // Generate a new webhook secret
+  const generateWebhookSecret = async () => {
+    try {
+      // Generate a random 32-byte hex string
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      const newSecret = Array.from(array)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      // Save to database
+      const { data: existing } = await supabase
+        .from('user_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('user_settings')
+          .update({ webhook_secret: newSecret, updated_at: new Date().toISOString() })
+          .eq('user_id', user.id);
+      } else {
+        await supabase.from('user_settings').insert({
+          user_id: user.id,
+          webhook_secret: newSecret,
+        });
+      }
+
+      setWebhookSecret(newSecret);
+      return newSecret;
+    } catch (err) {
+      console.error('Error generating webhook secret:', err);
+      throw err;
+    }
+  };
+
+  // Toggle realtime/webhook mode
+  const toggleRealtimeMode = async (enabled) => {
+    try {
+      const { data: existing } = await supabase
+        .from('user_settings')
+        .select('id, webhook_secret')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      // If enabling realtime and no webhook secret exists, generate one
+      let secret = webhookSecret;
+      if (enabled && !secret) {
+        secret = await generateWebhookSecret();
+      }
+
+      if (existing) {
+        await supabase
+          .from('user_settings')
+          .update({ realtime_enabled: enabled, updated_at: new Date().toISOString() })
+          .eq('user_id', user.id);
+      } else {
+        await supabase.from('user_settings').insert({
+          user_id: user.id,
+          realtime_enabled: enabled,
+          webhook_secret: secret,
+        });
+      }
+
+      setRealtimeEnabled(enabled);
+
+      // If switching to realtime, disable polling
+      if (enabled) {
+        setIsEnabled(false);
+      }
+    } catch (err) {
+      console.error('Error toggling realtime mode:', err);
+      throw err;
+    }
+  };
+
+  // Get webhook URL for the current environment
+  const getWebhookUrl = () => {
+    // In development, use Netlify dev server
+    if (import.meta.env.DEV) {
+      return 'http://localhost:8888/.netlify/functions/google-sheets-webhook';
+    }
+    // In production, use the current origin
+    return `${window.location.origin}/.netlify/functions/google-sheets-webhook`;
+  };
+
   const value = {
     isEnabled,
     isSyncing,
@@ -422,6 +597,13 @@ export function AutoSyncProvider({ children }) {
     updateSyncInterval,
     performSync,
     refreshSettings: loadSettings,
+    // Webhook/Realtime sync
+    realtimeEnabled,
+    webhookSecret,
+    toggleRealtimeMode,
+    generateWebhookSecret,
+    getWebhookUrl,
+    userId: user?.id,
   };
 
   return (

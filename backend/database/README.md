@@ -13,6 +13,14 @@ This directory contains SQL scripts to set up your Budget Planner database in Su
    - This will automatically seed categories and patterns for ALL existing users
    - Creates a reusable function for future users
 
+3. **Enable Auto-Seeding for New Users** (Recommended)
+   - Run `migrations/002_auto_seed_new_users.sql` in Supabase SQL Editor
+   - This creates a trigger that automatically seeds new users with:
+     - 20 expense categories
+     - 5 income categories
+     - 300+ merchant mappings
+     - Default profile, account, and settings
+
 ## What seed-all.sql Does
 
 When you run this script, it will:
@@ -98,8 +106,24 @@ Transactions are automatically categorized based on merchant names:
 ## Files Overview
 
 - **schema.sql** - Complete database schema (tables, triggers, RLS)
-- **seed-all.sql** - Seeds categories and patterns for all users
+- **seed-all.sql** - Seeds merchant mappings for all users
+- **add-income-categories.sql** - Adds income categories
+- **migrations/002_auto_seed_new_users.sql** - Auto-seeds new users on signup
+- **exports/categories.csv** - CSV import file for categories
+- **exports/merchant_mappings.csv** - CSV import file for merchant mappings
+- **exports/README.md** - Instructions for CSV import
 - **README.md** - This file
+
+## Manual CSV Import (For Existing Users)
+
+If you have existing users without categories, you can manually import them:
+
+1. Go to `exports/` folder
+2. Edit `categories.csv` or `merchant_mappings.csv`
+3. Replace `YOUR_USER_ID_HERE` with the actual user UUID
+4. Import via Supabase Dashboard > Table Editor > Import CSV
+
+See `exports/README.md` for detailed instructions.
 
 ## Troubleshooting
 

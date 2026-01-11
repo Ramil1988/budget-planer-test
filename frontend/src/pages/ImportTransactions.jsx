@@ -12,6 +12,8 @@ import {
   Table,
   Badge,
   Switch,
+  IconButton,
+  Tabs,
 } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAutoSync } from '../contexts/AutoSyncContext';
@@ -34,7 +36,17 @@ export default function ImportTransactions() {
     updateSyncInterval,
     performSync,
     refreshSettings: refreshAutoSync,
+    // Webhook/Realtime sync
+    realtimeEnabled,
+    webhookSecret,
+    toggleRealtimeMode,
+    generateWebhookSecret,
+    getWebhookUrl,
+    userId,
   } = useAutoSync();
+
+  // Webhook setup state
+  const [copiedField, setCopiedField] = useState(null);
 
   // Sheet configuration state
   const [sheetUrl, setSheetUrl] = useState('');
@@ -592,101 +604,482 @@ export default function ImportTransactions() {
           </VStack>
         </Box>
 
-        {/* Auto-Sync Settings - Only show when sheet is connected */}
+        {/* Sync Settings - Only show when sheet is connected */}
         {hasConnectedSheet && (
           <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
             <Heading size="lg" mb={4} color={colors.textPrimary}>
-              Auto-Sync Settings
+              Sync Settings
             </Heading>
-            <Text color={colors.textSecondary} mb={6}>
-              Automatically sync new transactions from your Google Sheet at regular intervals.
-            </Text>
 
-            <VStack gap={4} align="stretch">
-              {/* Enable/Disable Toggle */}
-              <HStack justify="space-between">
-                <Box>
-                  <Text fontWeight="medium" color={colors.textPrimary}>Enable Auto-Sync</Text>
-                  <Text fontSize="sm" color={colors.textMuted}>
-                    Automatically import new transactions
-                  </Text>
-                </Box>
-                <Switch.Root
-                  checked={autoSyncEnabled}
-                  onCheckedChange={(e) => toggleAutoSync(e.checked)}
-                >
-                  <Switch.HiddenInput />
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch.Root>
-              </HStack>
-
-              {/* Sync Interval */}
-              <Box>
-                <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Sync Interval</Text>
-                <select
-                  value={syncInterval}
-                  onChange={(e) => updateSyncInterval(Number(e.target.value))}
-                  disabled={!autoSyncEnabled}
+            {/* Sync Mode Tabs */}
+            <Tabs.Root defaultValue={realtimeEnabled ? 'webhook' : 'polling'} mb={6}>
+              <Tabs.List>
+                <Tabs.Trigger
+                  value="polling"
+                  onClick={() => realtimeEnabled && toggleRealtimeMode(false)}
                   style={{
-                    padding: '12px',
-                    fontSize: '16px',
-                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    borderRadius: '8px 0 0 8px',
                     border: `1px solid ${colors.borderColor}`,
-                    backgroundColor: autoSyncEnabled ? colors.cardBg : colors.rowStripedBg,
+                    backgroundColor: !realtimeEnabled ? colors.primaryBg : colors.cardBg,
                     color: colors.textPrimary,
-                    width: '200px',
+                    cursor: 'pointer',
                   }}
                 >
-                  <option value={1}>Every 1 minute</option>
-                  <option value={5}>Every 5 minutes</option>
-                  <option value={15}>Every 15 minutes</option>
-                  <option value={30}>Every 30 minutes</option>
-                  <option value={60}>Every hour</option>
-                </select>
-              </Box>
+                  Polling Mode
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="webhook"
+                  onClick={() => !realtimeEnabled && toggleRealtimeMode(true)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '0 8px 8px 0',
+                    border: `1px solid ${colors.borderColor}`,
+                    borderLeft: 'none',
+                    backgroundColor: realtimeEnabled ? colors.primaryBg : colors.cardBg,
+                    color: colors.textPrimary,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Webhook Mode (Recommended)
+                </Tabs.Trigger>
+              </Tabs.List>
 
-              {/* Sync Status */}
-              <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
-                <HStack justify="space-between" align="center">
-                  <VStack align="start" gap={1}>
-                    <HStack>
-                      <Text fontWeight="medium" color={colors.textPrimary}>Status:</Text>
-                      {isSyncing ? (
-                        <Badge colorScheme="blue">Syncing...</Badge>
-                      ) : autoSyncEnabled ? (
-                        <Badge colorScheme="green">Active</Badge>
-                      ) : (
-                        <Badge colorScheme="gray">Disabled</Badge>
-                      )}
-                    </HStack>
-                    {lastSyncTime && (
-                      <Text fontSize="sm" color={colors.textSecondary}>
-                        Last sync: {lastSyncTime.toLocaleDateString()} {lastSyncTime.toLocaleTimeString()}
-                      </Text>
-                    )}
-                    {lastSyncResult && (
-                      <Text
-                        fontSize="sm"
-                        color={lastSyncResult.success ? 'green.600' : 'red.600'}
+              {/* Polling Mode Content */}
+              <Tabs.Content value="polling">
+                <Box mt={4}>
+                  <Text color={colors.textSecondary} mb={4}>
+                    Periodically check for new transactions. Simple but less efficient.
+                  </Text>
+
+                  <VStack gap={4} align="stretch">
+                    {/* Enable/Disable Toggle */}
+                    <HStack justify="space-between">
+                      <Box>
+                        <Text fontWeight="medium" color={colors.textPrimary}>Enable Auto-Sync</Text>
+                        <Text fontSize="sm" color={colors.textMuted}>
+                          Automatically import new transactions
+                        </Text>
+                      </Box>
+                      <Switch.Root
+                        checked={autoSyncEnabled}
+                        onCheckedChange={(e) => toggleAutoSync(e.checked)}
                       >
-                        {lastSyncResult.message}
-                      </Text>
-                    )}
+                        <Switch.HiddenInput />
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch.Root>
+                    </HStack>
+
+                    {/* Sync Interval */}
+                    <Box>
+                      <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Sync Interval</Text>
+                      <select
+                        value={syncInterval}
+                        onChange={(e) => updateSyncInterval(Number(e.target.value))}
+                        disabled={!autoSyncEnabled}
+                        style={{
+                          padding: '12px',
+                          fontSize: '16px',
+                          borderRadius: '8px',
+                          border: `1px solid ${colors.borderColor}`,
+                          backgroundColor: autoSyncEnabled ? colors.cardBg : colors.rowStripedBg,
+                          color: colors.textPrimary,
+                          width: '200px',
+                        }}
+                      >
+                        <option value={1}>Every 1 minute</option>
+                        <option value={5}>Every 5 minutes</option>
+                        <option value={15}>Every 15 minutes</option>
+                        <option value={30}>Every 30 minutes</option>
+                        <option value={60}>Every hour</option>
+                      </select>
+                    </Box>
+
+                    {/* Sync Status */}
+                    <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
+                      <HStack justify="space-between" align="center">
+                        <VStack align="start" gap={1}>
+                          <HStack>
+                            <Text fontWeight="medium" color={colors.textPrimary}>Status:</Text>
+                            {isSyncing ? (
+                              <Badge colorScheme="blue">Syncing...</Badge>
+                            ) : autoSyncEnabled ? (
+                              <Badge colorScheme="green">Active</Badge>
+                            ) : (
+                              <Badge colorScheme="gray">Disabled</Badge>
+                            )}
+                          </HStack>
+                          {lastSyncTime && (
+                            <Text fontSize="sm" color={colors.textSecondary}>
+                              Last sync: {lastSyncTime.toLocaleDateString()} {lastSyncTime.toLocaleTimeString()}
+                            </Text>
+                          )}
+                          {lastSyncResult && (
+                            <Text
+                              fontSize="sm"
+                              color={lastSyncResult.success ? 'green.600' : 'red.600'}
+                            >
+                              {lastSyncResult.message}
+                            </Text>
+                          )}
+                        </VStack>
+                        <Button
+                          colorScheme="blue"
+                          variant="outline"
+                          onClick={performSync}
+                          isLoading={isSyncing}
+                          loadingText="Syncing..."
+                        >
+                          Sync Now
+                        </Button>
+                      </HStack>
+                    </Box>
                   </VStack>
-                  <Button
-                    colorScheme="blue"
-                    variant="outline"
-                    onClick={performSync}
-                    isLoading={isSyncing}
-                    loadingText="Syncing..."
-                  >
-                    Sync Now
-                  </Button>
-                </HStack>
-              </Box>
-            </VStack>
+                </Box>
+              </Tabs.Content>
+
+              {/* Webhook Mode Content */}
+              <Tabs.Content value="webhook">
+                <Box mt={4}>
+                  <Text color={colors.textSecondary} mb={4}>
+                    Instant updates when new transactions are added to your sheet. More efficient and real-time.
+                  </Text>
+
+                  <VStack gap={4} align="stretch">
+                    {/* Enable/Disable Toggle */}
+                    <HStack justify="space-between" p={4} bg={colors.rowStripedBg} borderRadius="md">
+                      <Box>
+                        <Text fontWeight="medium" color={colors.textPrimary}>Enable Webhook Sync</Text>
+                        <Text fontSize="sm" color={colors.textMuted}>
+                          Receive transactions automatically via webhook
+                        </Text>
+                      </Box>
+                      <Switch.Root
+                        checked={realtimeEnabled}
+                        onCheckedChange={(e) => toggleRealtimeMode(e.checked)}
+                      >
+                        <Switch.HiddenInput />
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch.Root>
+                    </HStack>
+
+                    {/* Status */}
+                    <Box p={4} bg={realtimeEnabled ? colors.successBg : colors.rowStripedBg} borderRadius="md">
+                      <HStack>
+                        <Text fontWeight="medium" color={colors.textPrimary}>Status:</Text>
+                        {realtimeEnabled ? (
+                          <Badge colorScheme="green">Active - Listening for updates</Badge>
+                        ) : (
+                          <Badge colorScheme="gray">Disabled</Badge>
+                        )}
+                      </HStack>
+                      {realtimeEnabled && lastSyncTime && (
+                        <Text fontSize="sm" color={colors.textSecondary} mt={2}>
+                          Last update: {lastSyncTime.toLocaleDateString()} {lastSyncTime.toLocaleTimeString()}
+                        </Text>
+                      )}
+                    </Box>
+
+                    {/* Webhook Configuration */}
+                    <Box p={4} borderWidth="1px" borderColor={colors.borderColor} borderRadius="md">
+                      <Heading size="md" mb={4} color={colors.textPrimary}>
+                        Google Apps Script Setup
+                      </Heading>
+                      <Text fontSize="sm" color={colors.textSecondary} mb={4}>
+                        Copy these values into your Google Apps Script to enable real-time sync.
+                        Go to Extensions → Apps Script in your Google Sheet.
+                      </Text>
+
+                      {/* Webhook URL */}
+                      <Box mb={4}>
+                        <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Webhook URL</Text>
+                        <HStack>
+                          <Input
+                            value={getWebhookUrl()}
+                            readOnly
+                            size="sm"
+                            bg={colors.rowStripedBg}
+                            color={colors.textPrimary}
+                          />
+                          <Button
+                            size="sm"
+                            colorScheme={copiedField === 'url' ? 'green' : 'blue'}
+                            onClick={() => {
+                              navigator.clipboard.writeText(getWebhookUrl());
+                              setCopiedField('url');
+                              setTimeout(() => setCopiedField(null), 2000);
+                            }}
+                          >
+                            {copiedField === 'url' ? 'Copied!' : 'Copy'}
+                          </Button>
+                        </HStack>
+                      </Box>
+
+                      {/* User ID */}
+                      <Box mb={4}>
+                        <Text fontWeight="medium" mb={2} color={colors.textPrimary}>User ID</Text>
+                        <HStack>
+                          <Input
+                            value={userId || ''}
+                            readOnly
+                            size="sm"
+                            bg={colors.rowStripedBg}
+                            color={colors.textPrimary}
+                          />
+                          <Button
+                            size="sm"
+                            colorScheme={copiedField === 'userId' ? 'green' : 'blue'}
+                            onClick={() => {
+                              navigator.clipboard.writeText(userId);
+                              setCopiedField('userId');
+                              setTimeout(() => setCopiedField(null), 2000);
+                            }}
+                          >
+                            {copiedField === 'userId' ? 'Copied!' : 'Copy'}
+                          </Button>
+                        </HStack>
+                      </Box>
+
+                      {/* Webhook Secret */}
+                      <Box mb={4}>
+                        <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Webhook Secret</Text>
+                        <HStack>
+                          <Input
+                            value={webhookSecret || 'Click "Generate" to create a secret'}
+                            readOnly
+                            size="sm"
+                            bg={colors.rowStripedBg}
+                            color={colors.textPrimary}
+                            type={webhookSecret ? 'text' : 'text'}
+                          />
+                          {webhookSecret ? (
+                            <Button
+                              size="sm"
+                              colorScheme={copiedField === 'secret' ? 'green' : 'blue'}
+                              onClick={() => {
+                                navigator.clipboard.writeText(webhookSecret);
+                                setCopiedField('secret');
+                                setTimeout(() => setCopiedField(null), 2000);
+                              }}
+                            >
+                              {copiedField === 'secret' ? 'Copied!' : 'Copy'}
+                            </Button>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            colorScheme="purple"
+                            onClick={generateWebhookSecret}
+                          >
+                            {webhookSecret ? 'Regenerate' : 'Generate'}
+                          </Button>
+                        </HStack>
+                        <Text fontSize="xs" color={colors.textMuted} mt={1}>
+                          Keep this secret safe. Regenerating will invalidate the old one.
+                        </Text>
+                      </Box>
+
+                      {/* Copy Full Script Button */}
+                      <Box mb={4}>
+                        <Button
+                          colorScheme={copiedField === 'fullScript' ? 'green' : 'purple'}
+                          size="md"
+                          width="100%"
+                          onClick={() => {
+                            const fullScript = `/**
+ * BudgetWise Webhook Sync Script
+ * Auto-generated with your credentials
+ */
+
+const CONFIG = {
+  WEBHOOK_URL: '${getWebhookUrl()}',
+  USER_ID: '${userId}',
+  WEBHOOK_SECRET: '${webhookSecret || 'GENERATE_SECRET_FIRST'}',
+  SHEET_NAME: 'Expenses',
+  HEADER_ROWS: 1,
+};
+
+function setupTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  ScriptApp.newTrigger('onSheetChange').forSpreadsheet(SpreadsheetApp.getActive()).onChange().create();
+  ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
+  Logger.log('Triggers set up successfully!');
+}
+
+function onSheetChange(e) {
+  if (e.changeType === 'INSERT_ROW' || e.changeType === 'EDIT') syncRecentRows();
+}
+
+function onSheetEdit(e) {
+  const sheet = e.source.getActiveSheet();
+  if (sheet.getName() !== CONFIG.SHEET_NAME) return;
+  if (e.range.getRow() > CONFIG.HEADER_ROWS) syncRow(sheet, e.range.getRow());
+}
+
+function syncRecentRows() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return;
+  const lastRow = sheet.getLastRow();
+  const lastSyncedRow = getLastSyncedRow();
+  if (lastRow <= lastSyncedRow) return;
+  const transactions = [];
+  for (let row = lastSyncedRow + 1; row <= lastRow; row++) {
+    const tx = getTransactionFromRow(sheet, row);
+    if (tx) transactions.push(tx);
+  }
+  if (transactions.length > 0) {
+    sendToWebhook(transactions);
+    setLastSyncedRow(lastRow);
+  }
+}
+
+function syncRow(sheet, row) {
+  const tx = getTransactionFromRow(sheet, row);
+  if (tx) sendToWebhook([tx]);
+}
+
+function getTransactionFromRow(sheet, row) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().trim());
+  const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const dateIdx = headers.findIndex(h => h.includes('date'));
+  const subDescIdx = headers.findIndex(h => h.includes('sub-description') || h.includes('sub_description'));
+  const descIdx = headers.findIndex(h => h === 'description' || h.includes('merchant') || h.includes('name'));
+  const amountIdx = headers.findIndex(h => h.includes('amount') || h.includes('debit'));
+  const typeIdx = headers.findIndex(h => h === 'type');
+  const bankIdx = headers.findIndex(h => h === 'bank' || h.includes('source'));
+  if (dateIdx === -1 || amountIdx === -1 || (subDescIdx === -1 && descIdx === -1)) return null;
+  const date = values[dateIdx];
+  const description = String(values[subDescIdx] || values[descIdx] || '').trim();
+  const amount = values[amountIdx];
+  if (!date || !description || !amount) return null;
+  return {
+    date: formatDate(date),
+    description: description,
+    amount: parseAmount(amount),
+    type: typeIdx !== -1 && String(values[typeIdx]).toLowerCase() === 'income' ? 'income' : 'expense',
+    bank: bankIdx !== -1 ? String(values[bankIdx]).trim() : '',
+  };
+}
+
+function formatDate(date) {
+  if (date instanceof Date) return \`\${date.getFullYear()}-\${String(date.getMonth() + 1).padStart(2, '0')}-\${String(date.getDate()).padStart(2, '0')}\`;
+  return String(date);
+}
+
+function parseAmount(amount) {
+  if (typeof amount === 'number') return Math.abs(amount);
+  return Math.abs(parseFloat(String(amount).replace(/[$,]/g, '').replace(/[()]/g, '-').trim()));
+}
+
+function sendToWebhook(transactions) {
+  const payload = { transactions, userId: CONFIG.USER_ID, webhookSecret: CONFIG.WEBHOOK_SECRET };
+  const options = { method: 'POST', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true };
+  try {
+    const response = UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options);
+    Logger.log(response.getResponseCode() === 200 ? 'Sync successful!' : 'Sync failed: ' + response.getContentText());
+  } catch (error) {
+    Logger.log('Sync error: ' + error.message);
+  }
+}
+
+function getLastSyncedRow() {
+  const value = PropertiesService.getScriptProperties().getProperty('lastSyncedRow');
+  return value ? parseInt(value) : CONFIG.HEADER_ROWS;
+}
+
+function setLastSyncedRow(row) {
+  PropertiesService.getScriptProperties().setProperty('lastSyncedRow', String(row));
+}
+
+function manualSync() { syncRecentRows(); }
+function resetSyncState() { PropertiesService.getScriptProperties().deleteProperty('lastSyncedRow'); }
+function testConnection() {
+  const options = { method: 'POST', contentType: 'application/json', payload: JSON.stringify({ transactions: [], userId: CONFIG.USER_ID, webhookSecret: CONFIG.WEBHOOK_SECRET }), muteHttpExceptions: true };
+  try {
+    const response = UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options);
+    Logger.log(response.getResponseCode() === 200 ? '✅ Connection successful!' : '❌ Failed: ' + response.getResponseCode());
+  } catch (error) { Logger.log('❌ Error: ' + error.message); }
+}`;
+                            navigator.clipboard.writeText(fullScript);
+                            setCopiedField('fullScript');
+                            setTimeout(() => setCopiedField(null), 3000);
+                          }}
+                        >
+                          {copiedField === 'fullScript' ? '✓ Script Copied!' : '📋 Copy Complete Script (with your credentials)'}
+                        </Button>
+                      </Box>
+
+                      {/* Step-by-Step Instructions */}
+                      <Box p={4} bg={colors.infoBg} borderRadius="md">
+                        <Text fontWeight="bold" mb={3} color={colors.textPrimary} fontSize="md">
+                          📖 Step-by-Step Setup Guide
+                        </Text>
+
+                        <VStack align="start" gap={3} fontSize="sm">
+                          <Box>
+                            <Text fontWeight="semibold" color={colors.textPrimary}>Step 1: Prepare Your Google Sheet</Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              Your sheet needs columns: <strong>Date</strong>, <strong>Description</strong> (or Sub-Description), <strong>Amount</strong>
+                            </Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              Optional columns: <strong>Type</strong> (income/expense), <strong>Bank</strong>
+                            </Text>
+                          </Box>
+
+                          <Box>
+                            <Text fontWeight="semibold" color={colors.textPrimary}>Step 2: Open Apps Script</Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              In your Google Sheet: <strong>Extensions → Apps Script</strong>
+                            </Text>
+                          </Box>
+
+                          <Box>
+                            <Text fontWeight="semibold" color={colors.textPrimary}>Step 3: Add the Script</Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              Click <strong>"Copy Complete Script"</strong> button above, then paste it in Apps Script
+                            </Text>
+                            <Text color={colors.warning} ml={4} fontWeight="medium">
+                              ⚠️ If you have existing scripts, paste BELOW them (don't replace!)
+                            </Text>
+                          </Box>
+
+                          <Box>
+                            <Text fontWeight="semibold" color={colors.textPrimary}>Step 4: Save & Run Setup</Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              Press <strong>Ctrl+S</strong> to save, then select <strong>"setupTriggers"</strong> from the dropdown and click <strong>Run</strong>
+                            </Text>
+                          </Box>
+
+                          <Box>
+                            <Text fontWeight="semibold" color={colors.textPrimary}>Step 5: Grant Permissions</Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              Click "Review Permissions" → Choose your account → "Advanced" → "Go to BudgetWise (unsafe)" → "Allow"
+                            </Text>
+                          </Box>
+
+                          <Box>
+                            <Text fontWeight="semibold" color={colors.textPrimary}>Step 6: Test Connection</Text>
+                            <Text color={colors.textSecondary} ml={4}>
+                              Select <strong>"testConnection"</strong> and click Run. Check the logs for "✅ Connection successful!"
+                            </Text>
+                          </Box>
+
+                          <Box p={2} bg={colors.successBg} borderRadius="md" width="100%">
+                            <Text fontWeight="medium" color={colors.success}>
+                              ✅ Done! New transactions will sync automatically when added to your sheet.
+                            </Text>
+                          </Box>
+                        </VStack>
+                      </Box>
+                    </Box>
+                  </VStack>
+                </Box>
+              </Tabs.Content>
+            </Tabs.Root>
           </Box>
         )}
 

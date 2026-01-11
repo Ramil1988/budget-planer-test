@@ -3,31 +3,34 @@
 
 [build]
   # Build command: install dependencies then build frontend
-  command = "cd frontend && pnpm install && pnpm run build"
+  command = "cd frontend && npm install && npm run build"
 
   # Publish directory is where Vite outputs the built files
   publish = "frontend/dist"
 
-  # Serverless functions directory (for future backend API)
+  # Serverless functions directory
   functions = "netlify/functions"
 
 [build.environment]
   # Node.js version to use during build
   NODE_VERSION = "18"
 
-# Redirect all routes to index.html for React Router (SPA)
-# This fixes the 404 error when navigating directly to routes like /features
+# Functions configuration
+[functions]
+  # Use ES modules for functions
+  node_bundler = "esbuild"
+
+# API endpoints - webhook for Google Sheets
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Redirect all other routes to index.html for React Router (SPA)
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-# Future: API endpoints will be served at /api/*
-# Uncomment when Netlify Functions are implemented
-# [[redirects]]
-#   from = "/api/*"
-#   to = "/.netlify/functions/:splat"
-#   status = 200
 
 # Headers for security and performance
 [[headers]]

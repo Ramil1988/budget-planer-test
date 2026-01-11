@@ -1,0 +1,26 @@
+user_id,name,type
+YOUR_USER_ID_HERE,Afterschool,expense
+YOUR_USER_ID_HERE,Autocredit,expense
+YOUR_USER_ID_HERE,Clothes,expense
+YOUR_USER_ID_HERE,Food,expense
+YOUR_USER_ID_HERE,Food/Costco,expense
+YOUR_USER_ID_HERE,Fuel,expense
+YOUR_USER_ID_HERE,Government Loan,expense
+YOUR_USER_ID_HERE,Haircut,expense
+YOUR_USER_ID_HERE,Household items/Car,expense
+YOUR_USER_ID_HERE,Insurance,expense
+YOUR_USER_ID_HERE,Internet,expense
+YOUR_USER_ID_HERE,Massage,expense
+YOUR_USER_ID_HERE,Mobile/Internet,expense
+YOUR_USER_ID_HERE,Mortgage,expense
+YOUR_USER_ID_HERE,NB Power,expense
+YOUR_USER_ID_HERE,Pharmacy,expense
+YOUR_USER_ID_HERE,Property tax,expense
+YOUR_USER_ID_HERE,Subscriptions,expense
+YOUR_USER_ID_HERE,Unexpected,expense
+YOUR_USER_ID_HERE,Weekend,expense
+YOUR_USER_ID_HERE,Salary,income
+YOUR_USER_ID_HERE,Freelance,income
+YOUR_USER_ID_HERE,Investments,income
+YOUR_USER_ID_HERE,Rental Income,income
+YOUR_USER_ID_HERE,Other Income,income
