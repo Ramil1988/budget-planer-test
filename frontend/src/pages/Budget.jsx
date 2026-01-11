@@ -1284,7 +1284,7 @@ export default function Budget() {
                             fontWeight="600"
                             fontSize="lg"
                             color={colors.textPrimary}
-                            _focus={{ bg: 'blue.50', boxShadow: 'none' }}
+                            _focus={{ bg: colors.primaryBg, boxShadow: 'none' }}
                             _placeholder={{ color: colors.textMuted }}
                           />
                         </HStack>
