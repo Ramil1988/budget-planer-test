@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated:** 2025-12-29
+**Last Updated:** 2026-01-10
 **Current Version:** 2.0.0
 **Status:** Active Development
 
@@ -52,6 +52,25 @@
 - [x] Set up Supabase Auth integration
 - [x] Configure CORS for frontend-backend communication
 - [x] Update all documentation with database architecture
+
+#### Phase 4: User Onboarding & Testing Infrastructure
+- [x] Auto-seeding for new users
+  - [x] Database trigger for automatic category seeding
+  - [x] 20 expense + 5 income default categories
+  - [x] 300+ merchant mappings for auto-categorization
+  - [x] Default profile, account, and user settings creation
+  - [x] CSV export files for manual import
+- [x] Google Sheets webhook integration
+  - [x] Real-time transaction sync via webhook
+  - [x] Netlify Function endpoint
+  - [x] Google Apps Script for instant notifications
+  - [x] Per-user webhook authentication
+- [x] Playwright E2E test suite
+  - [x] 11 comprehensive test files
+  - [x] Auth, dashboard, transactions, budget, categories tests
+  - [x] Recurring payments, reports, settings, import tests
+  - [x] Mobile responsiveness tests
+  - [x] Shared test utilities with login helpers
 
 ---
 

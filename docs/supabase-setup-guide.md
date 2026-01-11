@@ -1,6 +1,6 @@
 # Supabase Setup Guide
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-10
 
 This guide will walk you through setting up Supabase for authentication and database in the BudgetWise application.
 
@@ -104,6 +104,43 @@ This will create:
 - **budget_categories** table - Category-level budget limits
 - **Triggers** - Automatic balance calculations
 - **Row Level Security** - Users can only see their own data
+
+---
+
+## Step 5b: Run Migrations (Required)
+
+After the schema, run these migrations for full functionality:
+
+### Migration 1: Merchant Mappings (seed-all.sql)
+1. Open `/backend/database/seed-all.sql`
+2. Copy and paste into Supabase SQL Editor
+3. Click "Run"
+
+This creates the `seed_merchant_mappings()` function with 300+ merchant patterns.
+
+### Migration 2: Auto-Seeding for New Users
+1. Open `/backend/database/migrations/002_auto_seed_new_users.sql`
+2. Copy and paste into Supabase SQL Editor
+3. Click "Run"
+
+This creates:
+- `seed_user_categories()` - Seeds 20 expense categories
+- `seed_income_categories()` - Seeds 5 income categories
+- `seed_new_user_data()` - Master seeding function
+- **Database trigger** on `auth.users` - Automatically seeds new signups
+- Also seeds any existing users who are missing categories
+
+**After running this migration, all new users will automatically receive:**
+- 20 default expense categories (Food, Fuel, Clothes, etc.)
+- 5 default income categories (Salary, Freelance, etc.)
+- 300+ merchant mappings for auto-categorization
+- Default profile, account, and user settings
+
+### Migration 3: Webhook Support (Optional)
+If using Google Sheets real-time sync:
+1. Open `/backend/database/migrations/001_add_webhook_secret.sql`
+2. Copy and paste into Supabase SQL Editor
+3. Click "Run"
 
 ---
 

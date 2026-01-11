@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Auto-Seeding for New Users (2026-01-10):**
+  - Database trigger automatically seeds default data for new signups
+  - 20 expense categories (Food, Fuel, Clothes, etc.)
+  - 5 income categories (Salary, Freelance, etc.)
+  - 300+ merchant mappings for auto-categorization
+  - Default profile, account, and user settings
+  - CSV export files for manual import in `backend/database/exports/`
+  - Migration: `backend/database/migrations/002_auto_seed_new_users.sql`
+
+- **Google Sheets Webhook Integration (2026-01-10):**
+  - Real-time transaction sync from Google Sheets
+  - Netlify Function webhook endpoint
+  - Google Apps Script for instant notifications
+  - Secure webhook authentication with per-user secrets
+  - Migration: `backend/database/migrations/001_add_webhook_secret.sql`
+
+- **Playwright E2E Test Suite (2026-01-10):**
+  - 11 comprehensive test files covering all features
+  - Test files: auth, dashboard, transactions, budget, categories, recurring, reports, settings, import, mobile
+  - Shared test utilities with login helpers
+  - Multi-browser support (Chromium, Firefox, WebKit, Mobile)
+
 - **Dark Mode Support (2026-01-08):**
   - Full dark mode implementation across all pages and components
   - New `useDarkModeColors` hook providing semantic color tokens:
