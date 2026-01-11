@@ -342,12 +342,12 @@ export default function Transactions() {
           {/* Header */}
           <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
             <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Transactions</Heading>
-            <HStack gap={2}>
+            <Flex gap={2} flexWrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
               <Button
                 onClick={() => setShowDeleteAllDialog(true)}
                 variant="outline"
                 colorScheme="red"
-                size={{ base: 'sm', md: 'md' }}
+                size={{ base: 'xs', md: 'md' }}
                 disabled={transactions.length === 0}
               >
                 Remove All
@@ -355,7 +355,7 @@ export default function Transactions() {
               <Button
                 onClick={downloadCSV}
                 variant="outline"
-                size={{ base: 'sm', md: 'md' }}
+                size={{ base: 'xs', md: 'md' }}
                 disabled={filteredTransactions.length === 0}
                 _hover={{ bg: colors.rowStripedBg }}
               >
@@ -365,11 +365,11 @@ export default function Transactions() {
                 as={RouterLink}
                 to="/add-transaction"
                 colorScheme="green"
-                size={{ base: 'sm', md: 'md' }}
+                size={{ base: 'xs', md: 'md' }}
               >
                 + Add Transaction
               </Button>
-            </HStack>
+            </Flex>
           </Flex>
 
           {/* Error Message */}
