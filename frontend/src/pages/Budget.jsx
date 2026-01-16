@@ -276,22 +276,24 @@ export default function Budget() {
     }
 
     // Build forecast data by merging with budget data
-    // Logic:
-    // - Categories WITH recurring payments: projected = spent + recurring (exact forecast)
-    // - Categories WITHOUT recurring payments: projected = budget limit (assume full budget usage)
+    // Logic: For ALL categories with a budget limit, projected = at least the budget limit
+    // - Categories WITH recurring: projected = max(spent + recurring, limit)
+    // - Categories WITHOUT recurring: projected = max(spent, limit)
     const forecast = budgetData.map(item => {
       const upcoming = upcomingByCategory[item.id] || { amount: 0, payments: [] };
       const hasRecurring = upcoming.amount > 0;
       const spentPlusUpcoming = item.spent + upcoming.amount;
 
-      // Only add discretionary spending assumption for categories WITHOUT recurring payments
-      // Categories with recurring payments have predictable spending, no need to assume extra
+      // For all categories, assume at least the budget limit will be spent
       let projectedSpent;
       let discretionaryAmount = 0;
 
       if (hasRecurring) {
-        // Has recurring: exact forecast (spent + upcoming recurring)
-        projectedSpent = spentPlusUpcoming;
+        // Has recurring: spent + upcoming, but assume at least budget limit will be used
+        projectedSpent = item.limit > 0 ? Math.max(spentPlusUpcoming, item.limit) : spentPlusUpcoming;
+        discretionaryAmount = item.limit > 0 && spentPlusUpcoming < item.limit
+          ? item.limit - spentPlusUpcoming
+          : 0;
       } else {
         // No recurring: assume full budget will be spent
         projectedSpent = item.limit > 0 ? Math.max(item.spent, item.limit) : item.spent;
