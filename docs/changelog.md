@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Budget Projected View Calculation (2026-01-16):**
+  - Fixed "Over Budget By" calculation to compare total projected vs total budget instead of summing individual category overages
+  - Fixed projected spending for categories with recurring payments to include expected discretionary spending up to budget limit
+  - Previously, categories with recurring payments only projected spent + recurring, ignoring remaining budget capacity
+  - Now all categories with budget limits correctly project at least their full budget amount
+  - Projected Total Spending now accurately reflects: Spent + Recurring + Expected (to fill budgets) + any overspending
+
 ### Added
 - **Category Manager Quick Actions (2026-01-10):**
   - "Load Default Categories" button - loads 25 predefined categories (20 expense + 5 income)
