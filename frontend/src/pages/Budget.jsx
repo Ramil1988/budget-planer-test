@@ -933,9 +933,10 @@ export default function Budget() {
                       const totalUpcoming = forecastData.reduce((sum, f) => sum + f.upcomingAmount, 0);
                       const totalDiscretionary = forecastData.reduce((sum, f) => sum + f.discretionaryAmount, 0);
                       const totalProjected = forecastData.reduce((sum, f) => sum + f.projectedSpent, 0);
-                      const totalOverBudget = forecastData.reduce((sum, f) => sum + f.overAmount, 0);
+                      // Calculate true over-budget based on total projected vs total limit (not sum of individual overages)
+                      const totalOverBudget = Math.max(0, totalProjected - totalLimit);
                       const projectedRemaining = totalLimit - totalProjected;
-                      const willExceedTotal = totalOverBudget > 0;
+                      const willExceedTotal = totalProjected > totalLimit;
                       const categoriesWillExceed = forecastData.filter(f => f.willExceed).length;
 
                       return (
