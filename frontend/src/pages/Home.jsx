@@ -43,7 +43,7 @@ function Home() {
   const categories = [
     'Afterschool', 'Autocredit', 'Clothes', 'Food', 'Food/Costco',
     'Fuel', 'Government Loan', 'Haircut', 'Household items/Car', 'Insurance',
-    'Internet', 'Massage', 'Mobile/Internet', 'Mortgage', 'NB Power',
+    'Internet', 'Massage', 'Mobile/Internet', 'Mortgage', 'Electricity',
     'Pharmacy', 'Property tax', 'Subscriptions', 'Unexpected', 'Weekend'
   ]
 

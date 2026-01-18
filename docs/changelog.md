@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Category Rename: "NB Power" → "Electricity" (2026-01-18):**
+  - Renamed category from provider-specific "NB Power" to generic "Electricity"
+  - Updated frontend components (Home, Dashboard, RecurringPayments, CategoryManager)
+  - Updated database seed scripts and migrations
+  - Updated CSV export files for categories and merchant mappings
+  - Added migration script `003_rename_nb_power_to_electricity.sql` for existing data
+  - Merchant mappings still recognize NB Power transactions and map to Electricity
+
 ### Fixed
 - **Budget Projected View Calculation (2026-01-16):**
   - Fixed "Over Budget By" calculation to compare total projected vs total budget instead of summing individual category overages

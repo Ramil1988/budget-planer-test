@@ -401,7 +401,7 @@ BEGIN
     ON CONFLICT DO NOTHING;
   END LOOP;
 
-  -- NB Power
+  -- Electricity
   FOR mapping_data IN (VALUES
     ('MB-ENERGIE NB POWER'),
     ('NB POWER'),
@@ -409,7 +409,7 @@ BEGIN
     ('TS-ENERGIE NB POWER')
   ) LOOP
     INSERT INTO merchant_mappings (user_id, transaction_description, category_name)
-    VALUES (target_user_id, mapping_data.column1, 'NB Power')
+    VALUES (target_user_id, mapping_data.column1, 'Electricity')
     ON CONFLICT DO NOTHING;
   END LOOP;
 

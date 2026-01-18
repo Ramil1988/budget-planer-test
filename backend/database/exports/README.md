@@ -58,7 +58,7 @@ sed "s/YOUR_USER_ID_HERE/$USER_ID/g" merchant_mappings.csv > merchant_mappings_r
 - Massage
 - Mobile/Internet
 - Mortgage
-- NB Power
+- Electricity
 - Pharmacy
 - Property tax
 - Subscriptions

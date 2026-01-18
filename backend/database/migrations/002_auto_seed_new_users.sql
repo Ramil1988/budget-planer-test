@@ -23,7 +23,7 @@ BEGIN
     (target_user_id, 'Massage', 'expense'),
     (target_user_id, 'Mobile/Internet', 'expense'),
     (target_user_id, 'Mortgage', 'expense'),
-    (target_user_id, 'NB Power', 'expense'),
+    (target_user_id, 'Electricity', 'expense'),
     (target_user_id, 'Pharmacy', 'expense'),
     (target_user_id, 'Property tax', 'expense'),
     (target_user_id, 'Subscriptions', 'expense'),

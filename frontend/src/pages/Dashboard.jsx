@@ -25,7 +25,7 @@ const categoryColors = {
   'Food': '#F59E0B',
   'Subscriptions': '#8B5CF6',
   'Mobile/Internet': '#3B82F6',
-  'NB Power': '#EF4444',
+  'Electricity': '#EF4444',
   'Autocredit': '#10B981',
   'Fuel': '#F97316',
   'Unexpected': '#EC4899',

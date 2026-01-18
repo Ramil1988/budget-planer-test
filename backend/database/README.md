@@ -87,7 +87,7 @@ The seed script creates these 20 expense categories with merchant patterns:
 12. **Massage** - Massage therapy, wellness
 13. **Mobile/Internet** - Cell phone providers
 14. **Mortgage** - Mortgage payments
-15. **NB Power** - Electricity bills
+15. **Electricity** - Electricity bills
 16. **Pharmacy** - Drug stores, health products
 17. **Property tax** - Municipal taxes
 18. **Subscriptions** - Digital subscriptions, gym memberships

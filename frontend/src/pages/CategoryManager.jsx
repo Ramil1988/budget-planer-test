@@ -25,7 +25,7 @@ import { useDarkModeColors } from '../lib/useDarkModeColors';
 const DEFAULT_EXPENSE_CATEGORIES = [
   'Afterschool', 'Autocredit', 'Clothes', 'Food', 'Food/Costco', 'Fuel',
   'Government Loan', 'Haircut', 'Household items/Car', 'Insurance', 'Internet',
-  'Massage', 'Mobile/Internet', 'Mortgage', 'NB Power', 'Pharmacy',
+  'Massage', 'Mobile/Internet', 'Mortgage', 'Electricity', 'Pharmacy',
   'Property tax', 'Subscriptions', 'Unexpected', 'Weekend'
 ];
 

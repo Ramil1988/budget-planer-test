@@ -39,7 +39,7 @@ const categoryColors = {
   'Massage': '#22C55E',
   'Mortgage': '#10B981',
   'Insurance': '#14B8A6',
-  'NB Power': '#06B6D4',
+  'Electricity': '#06B6D4',
   'Mobile/Internet': '#0EA5E9',
   'Household items/Car': '#3B82F6',
   'Pharmacy': '#6366F1',

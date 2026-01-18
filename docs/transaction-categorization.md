@@ -12,7 +12,7 @@ Based on your budget, we have these categories:
 - Subscriptions
 - Property tax
 - Pharmacy
-- NB Power
+- Electricity
 - Mortgage
 - Mobile/Internet
 - Massage
@@ -318,7 +318,7 @@ CO-OPERATORS
 FN (mortgage payment code)
 ```
 
-### NB Power
+### Electricity
 ```
 TS-ENERGIE NB POWER
 PC-ENERGIE NB POWER
@@ -454,7 +454,7 @@ function categorizeTransaction(description) {
   if (matchesPattern(desc, FOOD_COSTCO_PATTERNS)) return 'Food/Costco';
   if (matchesPattern(desc, FUEL_PATTERNS)) return 'Fuel';
   if (matchesPattern(desc, MORTGAGE_PATTERNS)) return 'Mortgage';
-  if (matchesPattern(desc, NB_POWER_PATTERNS)) return 'NB Power';
+  if (matchesPattern(desc, NB_POWER_PATTERNS)) return 'Electricity';
   if (matchesPattern(desc, AFTERSCHOOL_PATTERNS)) return 'Aftershool';
   if (matchesPattern(desc, AUTOCREDIT_PATTERNS)) return 'Autocredit';
   if (matchesPattern(desc, PROPERTY_TAX_PATTERNS)) return 'Property tax';
@@ -558,7 +558,7 @@ The Category Manager page (`/categories`) now includes two quick action buttons:
 
 #### 1. Load Default Categories
 Loads 25 predefined categories:
-- **20 Expense Categories**: Afterschool, Autocredit, Clothes, Food, Food/Costco, Fuel, Government Loan, Haircut, Household items/Car, Insurance, Internet, Massage, Mobile/Internet, Mortgage, NB Power, Pharmacy, Property tax, Subscriptions, Unexpected, Weekend
+- **20 Expense Categories**: Afterschool, Autocredit, Clothes, Food, Food/Costco, Fuel, Government Loan, Haircut, Household items/Car, Insurance, Internet, Massage, Mobile/Internet, Mortgage, Electricity, Pharmacy, Property tax, Subscriptions, Unexpected, Weekend
 - **5 Income Categories**: Salary, Freelance, Investments, Rental Income, Other Income
 
 #### 2. Import Mappings from CSV
