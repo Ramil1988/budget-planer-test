@@ -200,6 +200,7 @@ export default function Budget() {
   const [viewMode, setViewMode] = useState('current'); // 'current' or 'projected'
   const [previousMonthLimits, setPreviousMonthLimits] = useState({}); // Previous month's budget limits for comparison
   const [setupSortBy, setSetupSortBy] = useState('amount'); // 'amount' or 'name'
+  const [committedLimits, setCommittedLimits] = useState({}); // Used for sorting - only updates on blur
 
   useEffect(() => {
     if (user) {
@@ -438,6 +439,7 @@ export default function Budget() {
         }
       }
       setBudgetLimits(limitsMap);
+      setCommittedLimits(limitsMap); // Sync committed limits for sorting
 
       // Load transactions for this month to calculate spent
       const { data: transactions, error: txError } = await supabase
@@ -545,6 +547,14 @@ export default function Budget() {
     setBudgetLimits(prev => ({
       ...prev,
       [categoryId]: value === '' ? '' : Number(value),
+    }));
+  };
+
+  // Commit limit on blur - this triggers re-sorting only when user finishes editing
+  const handleLimitBlur = (categoryId) => {
+    setCommittedLimits(prev => ({
+      ...prev,
+      [categoryId]: budgetLimits[categoryId] ?? '',
     }));
   };
 
@@ -1350,8 +1360,9 @@ export default function Budget() {
                     .slice() // Clone to avoid mutating original
                     .sort((a, b) => {
                       if (setupSortBy === 'amount') {
-                        const aAmount = Number(budgetLimits[a.id] || 0);
-                        const bAmount = Number(budgetLimits[b.id] || 0);
+                        // Use committedLimits for sorting to prevent re-sorting while typing
+                        const aAmount = Number(committedLimits[a.id] || 0);
+                        const bAmount = Number(committedLimits[b.id] || 0);
                         return bAmount - aAmount; // Largest first
                       }
                       return a.name.localeCompare(b.name);
@@ -1399,6 +1410,7 @@ export default function Budget() {
                               step="0.01"
                               value={budgetLimits[cat.id] ?? ''}
                               onChange={(e) => handleLimitChange(cat.id, e.target.value)}
+                              onBlur={() => handleLimitBlur(cat.id)}
                               placeholder="0.00"
                               size="md"
                               border="none"

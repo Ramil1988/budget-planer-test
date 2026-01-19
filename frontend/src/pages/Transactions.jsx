@@ -57,9 +57,14 @@ export default function Transactions() {
   const [showEmptyTrashDialog, setShowEmptyTrashDialog] = useState(false);
   const [emptyingTrash, setEmptyingTrash] = useState(false);
 
+  // Restore all dialog
+  const [showRestoreAllDialog, setShowRestoreAllDialog] = useState(false);
+  const [restoringAll, setRestoringAll] = useState(false);
+
   useEffect(() => {
     if (user) {
       loadTransactions();
+      loadTrashTransactions(); // Load trash count on mount
     }
   }, [user]);
 
@@ -67,7 +72,7 @@ export default function Transactions() {
     filterTransactions();
   }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount]);
 
-  // Load trash when switching to trash view
+  // Refresh trash when switching to trash view (in case items were restored/deleted elsewhere)
   useEffect(() => {
     if (viewMode === 'trash' && user) {
       loadTrashTransactions();
@@ -283,10 +288,17 @@ export default function Transactions() {
         .eq('user_id', user.id);
 
       if (deleteError) throw deleteError;
+
+      // Find the deleted transaction before removing it from active list
+      const deletedTransaction = transactions.find(t => t.id === transactionId);
       setTransactions(prev => prev.filter(t => t.id !== transactionId));
-      // Refresh trash count if we're tracking it
-      if (viewMode === 'active') {
-        setTrashedTransactions(prev => [...prev, { id: transactionId }]);
+
+      // Add the full transaction object to trash (not just the id)
+      if (deletedTransaction) {
+        setTrashedTransactions(prev => [...prev, {
+          ...deletedTransaction,
+          deletedAt: new Date().toISOString(),
+        }]);
       }
     } catch (err) {
       setError('Failed to delete transaction: ' + err.message);
@@ -377,6 +389,29 @@ export default function Transactions() {
       console.error('Empty trash error:', err);
     } finally {
       setEmptyingTrash(false);
+    }
+  };
+
+  // Restore all trashed items
+  const handleRestoreAll = async () => {
+    setRestoringAll(true);
+    try {
+      const { error: restoreError } = await supabase
+        .from('transactions')
+        .update({ deleted_at: null })
+        .eq('user_id', user.id)
+        .not('deleted_at', 'is', null);  // Only restore trashed items
+
+      if (restoreError) throw restoreError;
+      setTrashedTransactions([]);
+      setShowRestoreAllDialog(false);
+      // Refresh active transactions
+      loadTransactions();
+    } catch (err) {
+      setError('Failed to restore all transactions: ' + err.message);
+      console.error('Restore all error:', err);
+    } finally {
+      setRestoringAll(false);
     }
   };
 
@@ -533,14 +568,25 @@ export default function Transactions() {
                   </Button>
                 </>
               ) : (
-                <Button
-                  onClick={() => setShowEmptyTrashDialog(true)}
-                  colorScheme="red"
-                  size={{ base: 'xs', md: 'md' }}
-                  disabled={trashedTransactions.length === 0}
-                >
-                  Empty Trash
-                </Button>
+                <HStack gap={2}>
+                  <Button
+                    onClick={() => setShowRestoreAllDialog(true)}
+                    colorScheme="green"
+                    variant="outline"
+                    size={{ base: 'xs', md: 'md' }}
+                    disabled={trashedTransactions.length === 0}
+                  >
+                    Restore All
+                  </Button>
+                  <Button
+                    onClick={() => setShowEmptyTrashDialog(true)}
+                    colorScheme="red"
+                    size={{ base: 'xs', md: 'md' }}
+                    disabled={trashedTransactions.length === 0}
+                  >
+                    Empty Trash
+                  </Button>
+                </HStack>
               )}
             </Flex>
           </Flex>
@@ -958,7 +1004,7 @@ export default function Transactions() {
                           <Table.ColumnHeader py={4} px={6} w="12%" color={colors.textSecondary}>Date</Table.ColumnHeader>
                           <Table.ColumnHeader py={4} px={6} w="auto" color={colors.textSecondary}>Description</Table.ColumnHeader>
                           <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Amount</Table.ColumnHeader>
-                          <Table.ColumnHeader py={4} px={6} w="18%" color={colors.textSecondary}>Actions</Table.ColumnHeader>
+                          <Table.ColumnHeader py={4} px={6} w="18%" textAlign="center" color={colors.textSecondary}>Actions</Table.ColumnHeader>
                         </Table.Row>
                       </Table.Header>
                       <Table.Body>
@@ -992,7 +1038,7 @@ export default function Transactions() {
                                 </Text>
                               </Table.Cell>
                               <Table.Cell py={4} px={6}>
-                                <HStack gap={2}>
+                                <HStack gap={2} justify="center">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -1148,6 +1194,72 @@ export default function Transactions() {
                     loadingText="Deleting..."
                   >
                     Empty Trash
+                  </Button>
+                </HStack>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+
+      {/* Restore All Confirmation Dialog */}
+      <Dialog.Root open={showRestoreAllDialog} onOpenChange={(e) => !e.open && setShowRestoreAllDialog(false)}>
+        <Portal>
+          <Dialog.Backdrop bg="blackAlpha.600" />
+          <Dialog.Positioner>
+            <Dialog.Content
+              maxW="400px"
+              w="90%"
+              borderRadius="16px"
+              overflow="hidden"
+              bg={colors.cardBg}
+            >
+              <Dialog.Header
+                bg="linear-gradient(135deg, #16A34A 0%, #15803D 100%)"
+                color="white"
+                p={5}
+              >
+                <Flex justify="space-between" align="center">
+                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
+                    Restore All Transactions
+                  </Dialog.Title>
+                  <Dialog.CloseTrigger asChild>
+                    <CloseButton
+                      color="white"
+                      _hover={{ bg: 'whiteAlpha.200' }}
+                      borderRadius="full"
+                    />
+                  </Dialog.CloseTrigger>
+                </Flex>
+              </Dialog.Header>
+
+              <Dialog.Body p={6}>
+                <VStack gap={4} align="stretch">
+                  <Text color={colors.textPrimary} fontSize="md">
+                    Are you sure you want to restore <strong>all {trashedTransactions.length} transactions</strong> from trash?
+                  </Text>
+                  <Text color={colors.textSecondary} fontSize="sm">
+                    All transactions will be moved back to your active transactions list.
+                  </Text>
+                </VStack>
+              </Dialog.Body>
+
+              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
+                <HStack gap={3} justify="flex-end" w="100%">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowRestoreAllDialog(false)}
+                    disabled={restoringAll}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    colorScheme="green"
+                    onClick={handleRestoreAll}
+                    loading={restoringAll}
+                    loadingText="Restoring..."
+                  >
+                    Restore All
                   </Button>
                 </HStack>
               </Dialog.Footer>
