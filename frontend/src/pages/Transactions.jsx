@@ -45,6 +45,18 @@ export default function Transactions() {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
 
+  // Trash/Active view state
+  const [viewMode, setViewMode] = useState('active'); // 'active' | 'trash'
+  const [trashedTransactions, setTrashedTransactions] = useState([]);
+  const [loadingTrash, setLoadingTrash] = useState(false);
+
+  // Restore/Permanent delete states
+  const [restoringId, setRestoringId] = useState(null);
+
+  // Empty trash dialog
+  const [showEmptyTrashDialog, setShowEmptyTrashDialog] = useState(false);
+  const [emptyingTrash, setEmptyingTrash] = useState(false);
+
   useEffect(() => {
     if (user) {
       loadTransactions();
@@ -54,6 +66,13 @@ export default function Transactions() {
   useEffect(() => {
     filterTransactions();
   }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount]);
+
+  // Load trash when switching to trash view
+  useEffect(() => {
+    if (viewMode === 'trash' && user) {
+      loadTrashTransactions();
+    }
+  }, [viewMode, user]);
 
   const loadTransactions = async () => {
     setLoading(true);
@@ -73,6 +92,7 @@ export default function Transactions() {
           categories (name)
         `)
         .eq('user_id', user.id)
+        .is('deleted_at', null)  // Only load active (non-deleted) transactions
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -113,6 +133,50 @@ export default function Transactions() {
       console.error('Error loading transactions:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTrashTransactions = async () => {
+    setLoadingTrash(true);
+    setError('');
+    try {
+      const { data, error: txError } = await supabase
+        .from('transactions')
+        .select(`
+          id,
+          description,
+          date,
+          amount,
+          type,
+          provider,
+          category_id,
+          created_at,
+          deleted_at,
+          categories (name)
+        `)
+        .eq('user_id', user.id)
+        .not('deleted_at', 'is', null)  // Only deleted items
+        .order('deleted_at', { ascending: false }); // Most recently deleted first
+
+      if (txError) throw txError;
+
+      const transformedTransactions = (data || []).map((t) => ({
+        id: t.id,
+        description: t.description,
+        date: t.date,
+        amount: t.amount,
+        type: t.type,
+        category: t.categories?.name || 'Unknown',
+        bank: t.provider || null,
+        deletedAt: t.deleted_at,
+      }));
+
+      setTrashedTransactions(transformedTransactions);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error loading trash:', err);
+    } finally {
+      setLoadingTrash(false);
     }
   };
 
@@ -209,7 +273,77 @@ export default function Transactions() {
     return balance < 0 ? `-$${formatted}` : `$${formatted}`;
   };
 
+  // Soft delete - moves to trash instead of permanent deletion
   const handleDeleteTransaction = async (transactionId) => {
+    try {
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', transactionId)
+        .eq('user_id', user.id);
+
+      if (deleteError) throw deleteError;
+      setTransactions(prev => prev.filter(t => t.id !== transactionId));
+      // Refresh trash count if we're tracking it
+      if (viewMode === 'active') {
+        setTrashedTransactions(prev => [...prev, { id: transactionId }]);
+      }
+    } catch (err) {
+      setError('Failed to delete transaction: ' + err.message);
+      console.error('Delete error:', err);
+    }
+  };
+
+  // Soft delete all - moves all to trash
+  const handleDeleteAllTransactions = async () => {
+    setDeletingAll(true);
+    try {
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .is('deleted_at', null);  // Only soft delete active transactions
+
+      if (deleteError) throw deleteError;
+      const movedCount = transactions.length;
+      setTransactions([]);
+      setShowDeleteAllDialog(false);
+      // Update trash count
+      loadTrashTransactions();
+    } catch (err) {
+      setError('Failed to delete all transactions: ' + err.message);
+      console.error('Delete all error:', err);
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  // Restore transaction from trash
+  const handleRestoreTransaction = async (transactionId) => {
+    setRestoringId(transactionId);
+    try {
+      const { error: restoreError } = await supabase
+        .from('transactions')
+        .update({ deleted_at: null })
+        .eq('id', transactionId)
+        .eq('user_id', user.id);
+
+      if (restoreError) throw restoreError;
+
+      // Remove from trash list
+      setTrashedTransactions(prev => prev.filter(t => t.id !== transactionId));
+      // Refresh active transactions
+      loadTransactions();
+    } catch (err) {
+      setError('Failed to restore transaction: ' + err.message);
+      console.error('Restore error:', err);
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  // Permanently delete a single transaction from trash
+  const handlePermanentDelete = async (transactionId) => {
     try {
       const { error: deleteError } = await supabase
         .from('transactions')
@@ -218,29 +352,31 @@ export default function Transactions() {
         .eq('user_id', user.id);
 
       if (deleteError) throw deleteError;
-      setTransactions(prev => prev.filter(t => t.id !== transactionId));
+      setTrashedTransactions(prev => prev.filter(t => t.id !== transactionId));
     } catch (err) {
-      setError('Failed to delete transaction: ' + err.message);
-      console.error('Delete error:', err);
+      setError('Failed to permanently delete transaction: ' + err.message);
+      console.error('Permanent delete error:', err);
     }
   };
 
-  const handleDeleteAllTransactions = async () => {
-    setDeletingAll(true);
+  // Empty all trash - permanently delete all trashed items
+  const handleEmptyTrash = async () => {
+    setEmptyingTrash(true);
     try {
       const { error: deleteError } = await supabase
         .from('transactions')
         .delete()
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .not('deleted_at', 'is', null);  // Only delete trashed items
 
       if (deleteError) throw deleteError;
-      setTransactions([]);
-      setShowDeleteAllDialog(false);
+      setTrashedTransactions([]);
+      setShowEmptyTrashDialog(false);
     } catch (err) {
-      setError('Failed to delete all transactions: ' + err.message);
-      console.error('Delete all error:', err);
+      setError('Failed to empty trash: ' + err.message);
+      console.error('Empty trash error:', err);
     } finally {
-      setDeletingAll(false);
+      setEmptyingTrash(false);
     }
   };
 
@@ -341,34 +477,71 @@ export default function Transactions() {
       <VStack gap={4} align="stretch" w="100%">
           {/* Header */}
           <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
-            <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Transactions</Heading>
+            <HStack gap={4} flexWrap="wrap">
+              <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Transactions</Heading>
+
+              {/* Active/Trash Toggle */}
+              <HStack gap={1}>
+                <Button
+                  size={{ base: 'xs', md: 'sm' }}
+                  variant={viewMode === 'active' ? 'solid' : 'outline'}
+                  colorScheme="blue"
+                  onClick={() => setViewMode('active')}
+                >
+                  Active ({transactions.length})
+                </Button>
+                <Button
+                  size={{ base: 'xs', md: 'sm' }}
+                  variant={viewMode === 'trash' ? 'solid' : 'outline'}
+                  colorScheme={viewMode === 'trash' ? 'red' : 'gray'}
+                  onClick={() => setViewMode('trash')}
+                >
+                  Trash ({trashedTransactions.length})
+                </Button>
+              </HStack>
+            </HStack>
+
+            {/* Action buttons - change based on view mode */}
             <Flex gap={2} flexWrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
-              <Button
-                onClick={() => setShowDeleteAllDialog(true)}
-                variant="outline"
-                colorScheme="red"
-                size={{ base: 'xs', md: 'md' }}
-                disabled={transactions.length === 0}
-              >
-                Remove All
-              </Button>
-              <Button
-                onClick={downloadCSV}
-                variant="outline"
-                size={{ base: 'xs', md: 'md' }}
-                disabled={filteredTransactions.length === 0}
-                _hover={{ bg: colors.rowStripedBg }}
-              >
-                Download CSV
-              </Button>
-              <Button
-                as={RouterLink}
-                to="/add-transaction"
-                colorScheme="green"
-                size={{ base: 'xs', md: 'md' }}
-              >
-                + Add Transaction
-              </Button>
+              {viewMode === 'active' ? (
+                <>
+                  <Button
+                    onClick={() => setShowDeleteAllDialog(true)}
+                    variant="outline"
+                    colorScheme="red"
+                    size={{ base: 'xs', md: 'md' }}
+                    disabled={transactions.length === 0}
+                  >
+                    Remove All
+                  </Button>
+                  <Button
+                    onClick={downloadCSV}
+                    variant="outline"
+                    size={{ base: 'xs', md: 'md' }}
+                    disabled={filteredTransactions.length === 0}
+                    _hover={{ bg: colors.rowStripedBg }}
+                  >
+                    Download CSV
+                  </Button>
+                  <Button
+                    as={RouterLink}
+                    to="/add-transaction"
+                    colorScheme="green"
+                    size={{ base: 'xs', md: 'md' }}
+                  >
+                    + Add Transaction
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => setShowEmptyTrashDialog(true)}
+                  colorScheme="red"
+                  size={{ base: 'xs', md: 'md' }}
+                  disabled={trashedTransactions.length === 0}
+                >
+                  Empty Trash
+                </Button>
+              )}
             </Flex>
           </Flex>
 
@@ -379,63 +552,66 @@ export default function Transactions() {
             </Box>
           )}
 
-          {/* Filters Row */}
-          <Flex gap={{ base: 2, md: 4 }} align="center" flexWrap="wrap" w="100%">
-            <Input
-              placeholder="Search transactions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              size={{ base: 'sm', md: 'md' }}
-              bg={colors.cardBg}
-              borderColor={colors.borderColor}
-              color={colors.textPrimary}
-              maxW={{ base: '100%', md: '400px' }}
-              flex="1"
-              minW={{ base: '100%', sm: '200px' }}
-            />
-            {!customFiltersApplied && (
-              <select
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: '14px',
-                  borderRadius: '6px',
-                  border: `1px solid ${colors.borderColor}`,
-                  backgroundColor: colors.cardBg,
-                  color: colors.textPrimary,
-                  minWidth: '130px',
-                }}
-              >
-                <option value="current">This month</option>
-                <option value="last-month">Last month</option>
-                <option value="all">All time</option>
-              </select>
-            )}
-            <Button
-              variant={showCustomFilters || customFiltersApplied ? 'solid' : 'outline'}
-              colorScheme={customFiltersApplied ? 'blue' : 'gray'}
-              size={{ base: 'sm', md: 'md' }}
-              onClick={toggleCustomFilters}
-            >
-              <Icon as={LuFilter} mr={2} />
-              {customFiltersApplied ? 'Custom filters' : 'Filters'}
-            </Button>
-            {customFiltersApplied && (
-              <Button
-                variant="ghost"
-                size={{ base: 'sm', md: 'md' }}
-                onClick={clearCustomFilters}
-                color="red.500"
-              >
-                <Icon as={LuX} mr={1} />
-                Reset
-              </Button>
-            )}
-            <Text fontSize="sm" color={colors.textMuted}>
-              {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
-            </Text>
-          </Flex>
+          {/* Active View - Filters and Transaction List */}
+          {viewMode === 'active' && (
+            <>
+              {/* Filters Row */}
+              <Flex gap={{ base: 2, md: 4 }} align="center" flexWrap="wrap" w="100%">
+                <Input
+                  placeholder="Search transactions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  size={{ base: 'sm', md: 'md' }}
+                  bg={colors.cardBg}
+                  borderColor={colors.borderColor}
+                  color={colors.textPrimary}
+                  maxW={{ base: '100%', md: '400px' }}
+                  flex="1"
+                  minW={{ base: '100%', sm: '200px' }}
+                />
+                {!customFiltersApplied && (
+                  <select
+                    value={selectedPeriod}
+                    onChange={(e) => setSelectedPeriod(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      borderRadius: '6px',
+                      border: `1px solid ${colors.borderColor}`,
+                      backgroundColor: colors.cardBg,
+                      color: colors.textPrimary,
+                      minWidth: '130px',
+                    }}
+                  >
+                    <option value="current">This month</option>
+                    <option value="last-month">Last month</option>
+                    <option value="all">All time</option>
+                  </select>
+                )}
+                <Button
+                  variant={showCustomFilters || customFiltersApplied ? 'solid' : 'outline'}
+                  colorScheme={customFiltersApplied ? 'blue' : 'gray'}
+                  size={{ base: 'sm', md: 'md' }}
+                  onClick={toggleCustomFilters}
+                >
+                  <Icon as={LuFilter} mr={2} />
+                  {customFiltersApplied ? 'Custom filters' : 'Filters'}
+                </Button>
+                {customFiltersApplied && (
+                  <Button
+                    variant="ghost"
+                    size={{ base: 'sm', md: 'md' }}
+                    onClick={clearCustomFilters}
+                    color="red.500"
+                  >
+                    <Icon as={LuX} mr={1} />
+                    Reset
+                  </Button>
+                )}
+                <Text fontSize="sm" color={colors.textMuted}>
+                  {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
+                </Text>
+              </Flex>
 
           {/* Custom Filters Panel */}
           <Collapsible.Root open={showCustomFilters}>
@@ -666,23 +842,185 @@ export default function Transactions() {
             </Table.Root>
           </Box>
 
-          {/* Summary Footer - shows total expenses only */}
-          {filteredTransactions.length > 0 && (
-            <Flex justify="flex-end" px={4} w="100%">
-              <HStack gap={2}>
-                <Text color={colors.textSecondary}>Period total:</Text>
-                <Text
-                  fontWeight="bold"
-                  fontSize="lg"
-                  color="red.600"
-                >
-                  -${filteredTransactions
-                    .filter(t => t.type === 'expense')
-                    .reduce((sum, t) => sum + t.amount, 0)
-                    .toFixed(2)}
-                </Text>
-              </HStack>
-            </Flex>
+              {/* Summary Footer - shows total expenses only */}
+              {filteredTransactions.length > 0 && (
+                <Flex justify="flex-end" px={4} w="100%">
+                  <HStack gap={2}>
+                    <Text color={colors.textSecondary}>Period total:</Text>
+                    <Text
+                      fontWeight="bold"
+                      fontSize="lg"
+                      color="red.600"
+                    >
+                      -${filteredTransactions
+                        .filter(t => t.type === 'expense')
+                        .reduce((sum, t) => sum + t.amount, 0)
+                        .toFixed(2)}
+                    </Text>
+                  </HStack>
+                </Flex>
+              )}
+            </>
+          )}
+
+          {/* Trash View */}
+          {viewMode === 'trash' && (
+            <>
+              {loadingTrash ? (
+                <Flex w="100%" minH="200px" align="center" justify="center">
+                  <VStack gap={4}>
+                    <Spinner size="xl" />
+                    <Text color={colors.textSecondary}>Loading trash...</Text>
+                  </VStack>
+                </Flex>
+              ) : (
+                <>
+                  {/* Trash info banner */}
+                  <Box p={4} bg={colors.warningBg} borderRadius="md" borderWidth="1px" borderColor={colors.warningBorder}>
+                    <Text color={colors.warning} fontSize="sm">
+                      Items in trash can be restored or permanently deleted. Restore items you want to keep.
+                    </Text>
+                  </Box>
+
+                  {/* Mobile Trash Cards */}
+                  <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch" w="100%">
+                    {trashedTransactions.length === 0 ? (
+                      <Box p={6} bg={colors.cardBg} borderRadius="lg" borderWidth="1px" borderColor={colors.borderColor} textAlign="center">
+                        <Text color={colors.textMuted}>Trash is empty</Text>
+                      </Box>
+                    ) : (
+                      trashedTransactions.map((transaction) => (
+                        <Box
+                          key={transaction.id}
+                          p={4}
+                          bg={colors.cardBg}
+                          borderRadius="lg"
+                          borderWidth="1px"
+                          borderColor={colors.borderColor}
+                          opacity={0.85}
+                        >
+                          <Flex justify="space-between" align="flex-start" mb={2}>
+                            <Box flex="1">
+                              <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>{transaction.category}</Text>
+                              <Text fontSize="xs" color={colors.textSecondary} noOfLines={2}>
+                                {transaction.description}
+                              </Text>
+                            </Box>
+                            <Text
+                              fontWeight="bold"
+                              fontSize="md"
+                              color={transaction.type === 'income' ? 'green.600' : 'red.600'}
+                              ml={2}
+                            >
+                              {formatAmount(transaction.amount, transaction.type)}
+                            </Text>
+                          </Flex>
+                          <Flex justify="space-between" align="center">
+                            <Text fontSize="xs" color={colors.textMuted}>{formatDate(transaction.date)}</Text>
+                            <HStack gap={1}>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                colorScheme="green"
+                                onClick={() => handleRestoreTransaction(transaction.id)}
+                                loading={restoringId === transaction.id}
+                              >
+                                Restore
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                colorScheme="red"
+                                onClick={() => handlePermanentDelete(transaction.id)}
+                              >
+                                Delete
+                              </Button>
+                            </HStack>
+                          </Flex>
+                        </Box>
+                      ))
+                    )}
+                  </VStack>
+
+                  {/* Desktop Trash Table */}
+                  <Box
+                    display={{ base: 'none', md: 'block' }}
+                    borderWidth="1px"
+                    borderColor={colors.borderColor}
+                    borderRadius="lg"
+                    overflow="hidden"
+                    bg={colors.cardBg}
+                    w="100%"
+                  >
+                    <Table.Root size="md" w="100%" style={{ tableLayout: 'fixed' }}>
+                      <Table.Header>
+                        <Table.Row bg={colors.rowStripedBg}>
+                          <Table.ColumnHeader py={4} px={6} w="12%" color={colors.textSecondary}>Date</Table.ColumnHeader>
+                          <Table.ColumnHeader py={4} px={6} w="auto" color={colors.textSecondary}>Description</Table.ColumnHeader>
+                          <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Amount</Table.ColumnHeader>
+                          <Table.ColumnHeader py={4} px={6} w="18%" color={colors.textSecondary}>Actions</Table.ColumnHeader>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {trashedTransactions.length === 0 ? (
+                          <Table.Row>
+                            <Table.Cell colSpan={4} textAlign="center" py={12}>
+                              <Text color={colors.textMuted}>Trash is empty</Text>
+                            </Table.Cell>
+                          </Table.Row>
+                        ) : (
+                          trashedTransactions.map((transaction) => (
+                            <Table.Row key={transaction.id} bg={colors.cardBg} _hover={{ bg: colors.rowHoverBg }} opacity={0.85}>
+                              <Table.Cell py={4} px={6}>
+                                <Text color={colors.textSecondary}>{formatDate(transaction.date)}</Text>
+                              </Table.Cell>
+                              <Table.Cell py={4} px={6}>
+                                <Text fontWeight="medium" color={colors.textPrimary}>{transaction.category}</Text>
+                                <Text fontSize="sm" color={colors.textSecondary} noOfLines={1}>
+                                  {transaction.description}
+                                  {transaction.bank && transaction.bank !== transaction.description && (
+                                    <Text as="span" color="blue.500" ml={2}>• {transaction.bank}</Text>
+                                  )}
+                                </Text>
+                              </Table.Cell>
+                              <Table.Cell textAlign="right" py={4} px={6}>
+                                <Text
+                                  fontWeight="bold"
+                                  color={transaction.type === 'income' ? 'green.600' : 'red.600'}
+                                >
+                                  {formatAmount(transaction.amount, transaction.type)}
+                                </Text>
+                              </Table.Cell>
+                              <Table.Cell py={4} px={6}>
+                                <HStack gap={2}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    colorScheme="green"
+                                    onClick={() => handleRestoreTransaction(transaction.id)}
+                                    loading={restoringId === transaction.id}
+                                  >
+                                    Restore
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    colorScheme="red"
+                                    onClick={() => handlePermanentDelete(transaction.id)}
+                                  >
+                                    Delete
+                                  </Button>
+                                </HStack>
+                              </Table.Cell>
+                            </Table.Row>
+                          ))
+                        )}
+                      </Table.Body>
+                    </Table.Root>
+                  </Box>
+                </>
+              )}
+            </>
           )}
       </VStack>
 
@@ -720,10 +1058,10 @@ export default function Transactions() {
               <Dialog.Body p={6}>
                 <VStack gap={4} align="stretch">
                   <Text color={colors.textPrimary} fontSize="md">
-                    Are you sure you want to delete <strong>all {transactions.length} transactions</strong>?
+                    Are you sure you want to move <strong>all {transactions.length} transactions</strong> to trash?
                   </Text>
                   <Text color={colors.textSecondary} fontSize="sm">
-                    This action cannot be undone. All your transaction history will be permanently removed.
+                    Transactions will be moved to trash where you can restore them or delete them permanently.
                   </Text>
                 </VStack>
               </Dialog.Body>
@@ -741,9 +1079,75 @@ export default function Transactions() {
                     colorScheme="red"
                     onClick={handleDeleteAllTransactions}
                     loading={deletingAll}
+                    loadingText="Moving..."
+                  >
+                    Move to Trash
+                  </Button>
+                </HStack>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+
+      {/* Empty Trash Confirmation Dialog */}
+      <Dialog.Root open={showEmptyTrashDialog} onOpenChange={(e) => !e.open && setShowEmptyTrashDialog(false)}>
+        <Portal>
+          <Dialog.Backdrop bg="blackAlpha.600" />
+          <Dialog.Positioner>
+            <Dialog.Content
+              maxW="400px"
+              w="90%"
+              borderRadius="16px"
+              overflow="hidden"
+              bg={colors.cardBg}
+            >
+              <Dialog.Header
+                bg="linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)"
+                color="white"
+                p={5}
+              >
+                <Flex justify="space-between" align="center">
+                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
+                    Empty Trash
+                  </Dialog.Title>
+                  <Dialog.CloseTrigger asChild>
+                    <CloseButton
+                      color="white"
+                      _hover={{ bg: 'whiteAlpha.200' }}
+                      borderRadius="full"
+                    />
+                  </Dialog.CloseTrigger>
+                </Flex>
+              </Dialog.Header>
+
+              <Dialog.Body p={6}>
+                <VStack gap={4} align="stretch">
+                  <Text color={colors.textPrimary} fontSize="md">
+                    Are you sure you want to permanently delete <strong>all {trashedTransactions.length} items</strong> in trash?
+                  </Text>
+                  <Text color={colors.textSecondary} fontSize="sm">
+                    This action cannot be undone. All items will be permanently removed.
+                  </Text>
+                </VStack>
+              </Dialog.Body>
+
+              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
+                <HStack gap={3} justify="flex-end" w="100%">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowEmptyTrashDialog(false)}
+                    disabled={emptyingTrash}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    colorScheme="red"
+                    onClick={handleEmptyTrash}
+                    loading={emptyingTrash}
                     loadingText="Deleting..."
                   >
-                    Delete All
+                    Empty Trash
                   </Button>
                 </HStack>
               </Dialog.Footer>

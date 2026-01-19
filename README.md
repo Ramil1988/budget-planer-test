@@ -61,6 +61,7 @@ netlify deploy --prod
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [System Overview](docs/system-overview.md)
 - [Changelog](docs/changelog.md)
 - [Project Status](docs/project-status.md)
 

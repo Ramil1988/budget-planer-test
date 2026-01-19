@@ -198,6 +198,8 @@ export default function Budget() {
   const [recurringPayments, setRecurringPayments] = useState([]);
   const [forecastData, setForecastData] = useState([]);
   const [viewMode, setViewMode] = useState('current'); // 'current' or 'projected'
+  const [previousMonthLimits, setPreviousMonthLimits] = useState({}); // Previous month's budget limits for comparison
+  const [setupSortBy, setSetupSortBy] = useState('amount'); // 'amount' or 'name'
 
   useEffect(() => {
     if (user) {
@@ -496,6 +498,48 @@ export default function Budget() {
       setLoading(false);
     }
   };
+
+  // Load previous month's budget limits for comparison in Budget Setup
+  const loadPreviousMonthBudget = async () => {
+    try {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const prevYear = month === 1 ? year - 1 : year;
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevStartDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+      const prevNextMonthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+
+      const { data: prevBudgetRow } = await supabase
+        .from('budgets')
+        .select(`
+          id,
+          budget_categories (
+            category_id,
+            limit_amount
+          )
+        `)
+        .eq('user_id', user.id)
+        .gte('month', prevStartDate)
+        .lt('month', prevNextMonthStart)
+        .maybeSingle();
+
+      const prevLimitsMap = {};
+      if (prevBudgetRow?.budget_categories) {
+        prevBudgetRow.budget_categories.forEach(bc => {
+          prevLimitsMap[bc.category_id] = bc.limit_amount;
+        });
+      }
+      setPreviousMonthLimits(prevLimitsMap);
+    } catch (err) {
+      console.error('Failed to load previous month budget:', err);
+    }
+  };
+
+  // Load previous month data when switching to setup tab or changing month
+  useEffect(() => {
+    if (user && activeTab === 'setup') {
+      loadPreviousMonthBudget();
+    }
+  }, [user, selectedMonth, activeTab]);
 
   const handleLimitChange = (categoryId, value) => {
     setBudgetLimits(prev => ({
@@ -1188,111 +1232,194 @@ export default function Budget() {
           <Tabs.Content value="setup" pt={4}>
             <VStack gap={6} align="stretch" w="100%">
               {/* Total Budget Summary Card */}
-              <Box
-                p={6}
-                bg="linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)"
-                borderRadius="20px"
-                color="white"
-                position="relative"
-                overflow="hidden"
-                style={{ animation: 'fadeSlideIn 0.4s ease-out' }}
-              >
-                <Box
-                  position="absolute"
-                  top="-30%"
-                  right="-10%"
-                  w="200px"
-                  h="200px"
-                  bg="rgba(255,255,255,0.1)"
-                  borderRadius="full"
-                  pointerEvents="none"
-                />
-                <Flex justify="space-between" align="center" position="relative" zIndex={1}>
-                  <Box>
-                    <Text
-                      fontSize="xs"
-                      fontWeight="600"
-                      textTransform="uppercase"
-                      letterSpacing="0.1em"
-                      color="rgba(255,255,255,0.7)"
-                      mb={1}
-                    >
-                      Total Monthly Budget
-                    </Text>
-                    <Text fontSize="3xl" fontWeight="800">
-                      {formatCurrency(
-                        Object.values(budgetLimits).reduce((sum, val) => sum + Number(val || 0), 0)
-                      )}
-                    </Text>
-                  </Box>
+              {(() => {
+                const currentTotal = Object.values(budgetLimits).reduce((sum, val) => sum + Number(val || 0), 0);
+                const prevTotal = Object.values(previousMonthLimits).reduce((sum, val) => sum + Number(val || 0), 0);
+                const totalDiff = currentTotal - prevTotal;
+                const hasPrevMonth = Object.keys(previousMonthLimits).length > 0;
+
+                return (
                   <Box
-                    p={3}
-                    bg="rgba(255,255,255,0.2)"
-                    borderRadius="full"
+                    p={6}
+                    bg="linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)"
+                    borderRadius="20px"
+                    color="white"
+                    position="relative"
+                    overflow="hidden"
+                    style={{ animation: 'fadeSlideIn 0.4s ease-out' }}
                   >
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                    </svg>
+                    <Box
+                      position="absolute"
+                      top="-30%"
+                      right="-10%"
+                      w="200px"
+                      h="200px"
+                      bg="rgba(255,255,255,0.1)"
+                      borderRadius="full"
+                      pointerEvents="none"
+                    />
+                    <Flex justify="space-between" align="center" position="relative" zIndex={1}>
+                      <Box>
+                        <Text
+                          fontSize="xs"
+                          fontWeight="600"
+                          textTransform="uppercase"
+                          letterSpacing="0.1em"
+                          color="rgba(255,255,255,0.7)"
+                          mb={1}
+                        >
+                          Total Monthly Budget
+                        </Text>
+                        <Flex align="baseline" gap={3}>
+                          <Text fontSize="3xl" fontWeight="800">
+                            {formatCurrency(currentTotal)}
+                          </Text>
+                          {hasPrevMonth && totalDiff !== 0 && (
+                            <Text
+                              fontSize="sm"
+                              fontWeight="600"
+                              color={totalDiff > 0 ? 'green.200' : 'red.200'}
+                              bg={totalDiff > 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}
+                              px={2}
+                              py={0.5}
+                              borderRadius="full"
+                            >
+                              {totalDiff > 0 ? '▲' : '▼'} ${Math.abs(totalDiff).toLocaleString()}
+                            </Text>
+                          )}
+                        </Flex>
+                        {hasPrevMonth && (
+                          <Text fontSize="xs" color="rgba(255,255,255,0.6)" mt={1}>
+                            Last month: {formatCurrency(prevTotal)}
+                          </Text>
+                        )}
+                      </Box>
+                      <Box
+                        p={3}
+                        bg="rgba(255,255,255,0.2)"
+                        borderRadius="full"
+                      >
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                      </Box>
+                    </Flex>
                   </Box>
-                </Flex>
-              </Box>
+                );
+              })()}
 
               {/* Category Limit Cards */}
               <Box>
-                <Text
-                  fontSize="sm"
-                  fontWeight="600"
-                  textTransform="uppercase"
-                  letterSpacing="0.05em"
-                  color={colors.textMuted}
-                  mb={4}
-                >
-                  Set Category Limits
-                </Text>
+                <Flex justify="space-between" align="center" mb={4}>
+                  <Text
+                    fontSize="sm"
+                    fontWeight="600"
+                    textTransform="uppercase"
+                    letterSpacing="0.05em"
+                    color={colors.textMuted}
+                  >
+                    Set Category Limits
+                  </Text>
+                  <HStack gap={2}>
+                    <Text fontSize="xs" color={colors.textMuted}>Sort by:</Text>
+                    <select
+                      value={setupSortBy}
+                      onChange={(e) => setSetupSortBy(e.target.value)}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        borderRadius: '8px',
+                        border: `1px solid ${colors.borderColor}`,
+                        backgroundColor: colors.cardBg,
+                        color: colors.textPrimary,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="amount">Amount (Highest)</option>
+                      <option value="name">Name (A-Z)</option>
+                    </select>
+                  </HStack>
+                </Flex>
                 <Box
                   display="grid"
                   gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
                   gap={3}
                 >
                   {categories
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((cat, index) => (
-                      <Box
-                        key={cat.id}
-                        p={4}
-                        bg={colors.cardBg}
-                        borderRadius="12px"
-                        border="1px solid"
-                        borderColor={colors.borderColor}
-                        transition="all 0.2s ease"
-                        _hover={{ borderColor: 'blue.300', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}
-                        style={{ animation: `fadeSlideIn 0.3s ease-out ${index * 0.03}s both` }}
-                      >
-                        <Text fontWeight="600" fontSize="sm" color={colors.textSecondary} mb={3}>
-                          {cat.name}
-                        </Text>
-                        <HStack>
-                          <Text color={colors.textMuted} fontSize="lg" fontWeight="500">$</Text>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={budgetLimits[cat.id] ?? ''}
-                            onChange={(e) => handleLimitChange(cat.id, e.target.value)}
-                            placeholder="0.00"
-                            size="md"
-                            border="none"
-                            bg={colors.rowStripedBg}
-                            borderRadius="8px"
-                            fontWeight="600"
-                            fontSize="lg"
-                            color={colors.textPrimary}
-                            _focus={{ bg: colors.primaryBg, boxShadow: 'none' }}
-                            _placeholder={{ color: colors.textMuted }}
-                          />
-                        </HStack>
-                      </Box>
-                    ))}
+                    .slice() // Clone to avoid mutating original
+                    .sort((a, b) => {
+                      if (setupSortBy === 'amount') {
+                        const aAmount = Number(budgetLimits[a.id] || 0);
+                        const bAmount = Number(budgetLimits[b.id] || 0);
+                        return bAmount - aAmount; // Largest first
+                      }
+                      return a.name.localeCompare(b.name);
+                    })
+                    .map((cat, index) => {
+                      const currentLimit = Number(budgetLimits[cat.id] || 0);
+                      const prevLimit = Number(previousMonthLimits[cat.id] || 0);
+                      const diff = currentLimit - prevLimit;
+                      const hasPrevData = prevLimit > 0 || (cat.id in previousMonthLimits);
+
+                      return (
+                        <Box
+                          key={cat.id}
+                          p={4}
+                          bg={colors.cardBg}
+                          borderRadius="12px"
+                          border="1px solid"
+                          borderColor={diff !== 0 && hasPrevData ? (diff > 0 ? 'green.300' : 'red.300') : colors.borderColor}
+                          transition="all 0.2s ease"
+                          _hover={{ borderColor: 'blue.300', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}
+                          style={{ animation: `fadeSlideIn 0.3s ease-out ${index * 0.03}s both` }}
+                        >
+                          <Flex justify="space-between" align="flex-start" mb={3}>
+                            <Text fontWeight="600" fontSize="sm" color={colors.textSecondary}>
+                              {cat.name}
+                            </Text>
+                            {/* Show difference indicator */}
+                            {hasPrevData && diff !== 0 && (
+                              <HStack gap={1}>
+                                <Text
+                                  fontSize="xs"
+                                  fontWeight="600"
+                                  color={diff > 0 ? 'green.500' : 'red.500'}
+                                >
+                                  {diff > 0 ? '▲' : '▼'} ${Math.abs(diff).toLocaleString()}
+                                </Text>
+                              </HStack>
+                            )}
+                          </Flex>
+                          <HStack>
+                            <Text color={colors.textMuted} fontSize="lg" fontWeight="500">$</Text>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={budgetLimits[cat.id] ?? ''}
+                              onChange={(e) => handleLimitChange(cat.id, e.target.value)}
+                              placeholder="0.00"
+                              size="md"
+                              border="none"
+                              bg={colors.rowStripedBg}
+                              borderRadius="8px"
+                              fontWeight="600"
+                              fontSize="lg"
+                              color={colors.textPrimary}
+                              _focus={{ bg: colors.primaryBg, boxShadow: 'none' }}
+                              _placeholder={{ color: colors.textMuted }}
+                            />
+                          </HStack>
+                          {/* Show last month's value */}
+                          {hasPrevData && (
+                            <Text fontSize="xs" color={colors.textMuted} mt={2}>
+                              Last month: ${prevLimit.toLocaleString()}
+                            </Text>
+                          )}
+                        </Box>
+                      );
+                    })}
                 </Box>
               </Box>
 

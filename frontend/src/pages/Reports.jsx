@@ -429,7 +429,7 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth, colo
 };
 
 // Category Donut Chart with hover effects (matching Dashboard style)
-const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory, themeColors }) => {
+const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory, themeColors, othersExpanded, onToggleOthers }) => {
   const size = 180;
   const strokeWidth = 35;
   const radius = (size - strokeWidth) / 2;
@@ -541,33 +541,83 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
         {categories.map((cat, index) => {
           const isHovered = hoveredCategory === cat.name;
           const isOtherHovered = hoveredCategory && !isHovered;
+          const isOthersCategory = cat.name === 'Others';
           return (
-            <Flex
-              key={cat.name}
-              justify="space-between"
-              align="center"
-              fontSize="sm"
-              py={1}
-              px={2}
-              borderRadius="6px"
-              bg={isHovered ? themeColors.rowStripedBg : 'transparent'}
-              opacity={isOtherHovered ? 0.4 : 1}
-              transition="all 0.15s"
-              cursor="pointer"
-              onMouseEnter={() => onHoverCategory(cat.name)}
-              onMouseLeave={() => onHoverCategory(null)}
-            >
-              <HStack gap={2}>
-                <Box w="10px" h="10px" borderRadius="full" bg={getCategoryColor(cat.name, index)} flexShrink={0} />
-                <Text color={themeColors.textSecondary} noOfLines={1} fontWeight={isHovered ? '600' : '500'}>{cat.name}</Text>
-              </HStack>
-              <HStack gap={2}>
-                <Text fontWeight="600" color={themeColors.textPrimary}>{formatCurrency(cat.amount)}</Text>
-                <Text fontSize="xs" color={themeColors.textMuted}>
-                  {total > 0 ? ((cat.amount / total) * 100).toFixed(0) : 0}%
-                </Text>
-              </HStack>
-            </Flex>
+            <Box key={cat.name}>
+              <Flex
+                justify="space-between"
+                align="center"
+                fontSize="sm"
+                py={1}
+                px={2}
+                borderRadius="6px"
+                bg={isHovered || (isOthersCategory && othersExpanded) ? themeColors.rowStripedBg : 'transparent'}
+                opacity={isOtherHovered ? 0.4 : 1}
+                transition="all 0.15s"
+                cursor="pointer"
+                onClick={isOthersCategory ? onToggleOthers : undefined}
+                onMouseEnter={() => onHoverCategory(cat.name)}
+                onMouseLeave={() => onHoverCategory(null)}
+              >
+                <HStack gap={2}>
+                  {isOthersCategory && (
+                    <Text fontSize="xs" color={themeColors.textMuted} ml={-1}>
+                      {othersExpanded ? '▼' : '▶'}
+                    </Text>
+                  )}
+                  <Box w="10px" h="10px" borderRadius="full" bg={getCategoryColor(cat.name, index)} flexShrink={0} />
+                  <Text color={themeColors.textSecondary} noOfLines={1} fontWeight={isHovered ? '600' : '500'}>{cat.name}</Text>
+                </HStack>
+                <HStack gap={2}>
+                  <Text fontWeight="600" color={themeColors.textPrimary}>{formatCurrency(cat.amount)}</Text>
+                  <Text fontSize="xs" color={themeColors.textMuted}>
+                    {total > 0 ? ((cat.amount / total) * 100).toFixed(0) : 0}%
+                  </Text>
+                </HStack>
+              </Flex>
+              {/* Expanded Others breakdown */}
+              {isOthersCategory && othersExpanded && cat.otherCategories && cat.otherCategories.length > 0 && (
+                <VStack
+                  align="stretch"
+                  gap={0.5}
+                  pl={{ base: 4, md: 6 }}
+                  pr={{ base: 1, md: 2 }}
+                  py={2}
+                  mt={1}
+                  bg={themeColors.rowStripedBg}
+                  borderRadius="6px"
+                  maxH={{ base: '120px', md: '150px' }}
+                  overflowY="auto"
+                >
+                  {cat.otherCategories.map((otherCat, otherIndex) => (
+                    <Flex
+                      key={otherCat.name}
+                      justify="space-between"
+                      align="center"
+                      px={{ base: 1, md: 2 }}
+                      py={0.5}
+                      fontSize={{ base: '11px', md: 'xs' }}
+                    >
+                      <HStack gap={1.5} flex="1" minW="0">
+                        <Box
+                          w="6px"
+                          h="6px"
+                          borderRadius="full"
+                          bg={getCategoryColor(otherCat.name, index + otherIndex + 1)}
+                          flexShrink={0}
+                        />
+                        <Text color={themeColors.textSecondary} noOfLines={1} flex="1" minW="0">
+                          {otherCat.name}
+                        </Text>
+                      </HStack>
+                      <Text fontWeight="500" color={themeColors.textPrimary} flexShrink={0} ml={2}>
+                        {formatCurrency(otherCat.amount)}
+                      </Text>
+                    </Flex>
+                  ))}
+                </VStack>
+              )}
+            </Box>
           );
         })}
       </VStack>
@@ -620,6 +670,7 @@ export default function Reports() {
   const [hoveredCategory, setHoveredCategory] = useState(null);
   const [hoveredMonth, setHoveredMonth] = useState(null);
   const [hoveredBarMonth, setHoveredBarMonth] = useState(null);
+  const [othersExpanded, setOthersExpanded] = useState(false);
 
   // Generate year options
   const yearOptions = [2026, 2025];
@@ -696,8 +747,14 @@ export default function Reports() {
       let categoryArray;
       if (sortedCategories.length > 5) {
         const top5 = sortedCategories.slice(0, 5);
-        const othersAmount = sortedCategories.slice(5).reduce((sum, cat) => sum + cat.amount, 0);
-        categoryArray = [...top5, { name: 'Others', amount: othersAmount }];
+        const otherCategories = sortedCategories.slice(5);
+        const othersAmount = otherCategories.reduce((sum, cat) => sum + cat.amount, 0);
+        // Store the individual categories that make up "Others" for the breakdown
+        categoryArray = [...top5, {
+          name: 'Others',
+          amount: othersAmount,
+          otherCategories: otherCategories.filter(cat => cat.amount > 0)
+        }];
       } else {
         categoryArray = sortedCategories;
       }
@@ -878,6 +935,8 @@ export default function Reports() {
                 hoveredCategory={hoveredCategory}
                 onHoverCategory={setHoveredCategory}
                 themeColors={colors}
+                othersExpanded={othersExpanded}
+                onToggleOthers={() => setOthersExpanded(!othersExpanded)}
               />
             ) : (
               <Flex justify="center" align="center" h="200px">

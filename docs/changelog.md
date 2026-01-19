@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Transaction Soft Delete & Trash (2026-01-18):**
+  - Soft delete: Deleted transactions are now moved to trash instead of being permanently deleted
+  - Active/Trash toggle: Switch between viewing active transactions and trash
+  - Restore: Recover accidentally deleted transactions from trash
+  - Permanent delete: Option to permanently remove individual items from trash
+  - Empty Trash: Bulk permanent delete all trashed transactions
+  - Database migration: Added `deleted_at` column to transactions table
+  - Migration file: `backend/database/migrations/004_soft_delete_transactions.sql`
+  - Updated "Remove All" to move transactions to trash with option to restore
+
+- **Reports Page: Expandable "Others" Breakdown (2026-01-18):**
+  - Added expandable breakdown for "Others" category in the Top Categories donut chart
+  - Click on "Others" row to expand and see all individual categories included
+  - Shows category name with colored dot and amount for each item
+  - Arrow indicator (▼/▶) shows expanded/collapsed state
+  - Scrollable list with max height for better UX when many categories
+  - Matches the same functionality as Dashboard's Spending Breakdown
+
+- **Budget Setup: Month-over-Month Comparison (2026-01-18):**
+  - Added comparison with previous month's budget when setting up a new month
+  - Each category card shows last month's limit value
+  - Visual indicator (▲/▼) shows the difference from last month with color coding
+  - Green border/arrow for increases, red for decreases
+  - Total Monthly Budget header shows difference from last month
+  - Sort dropdown: Sort categories by "Amount (Highest)" or "Name (A-Z)"
+  - Helps quickly identify budget changes when planning next month
+
 ### Changed
 - **Category Rename: "NB Power" → "Electricity" (2026-01-18):**
   - Renamed category from provider-specific "NB Power" to generic "Electricity"
