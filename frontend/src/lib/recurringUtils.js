@@ -146,24 +146,64 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
   rEnd.setHours(23, 59, 59, 999); // End of day for range end
   const end = endDate ? parseLocalDate(endDate) : null;
 
-  // Get first payment date that could be in range
-  let currentDate = getNextPaymentDate(startDate, frequency, rStart, endDate, businessDaysOnly);
+  // IMPORTANT: Get dates WITHOUT business day adjustment first to ensure proper loop advancement.
+  // If we adjust to business days inside the loop, weekend dates get pulled back to Friday,
+  // but then the next iteration starts from Saturday again, causing infinite loops.
+  // We collect the raw scheduled dates first, then adjust at the end.
+  let currentDate = getNextPaymentDate(startDate, frequency, rStart, endDate, false);
 
   // If no next date (ended), return empty
   if (!currentDate) return dates;
 
-  // Collect all dates in range
+  // Collect all dates in range (unadjusted)
+  const rawDates = [];
+  let lastDateKey = null;
+
   while (currentDate && currentDate <= rEnd) {
     if (end && currentDate > end) break;
-    dates.push(new Date(currentDate));
 
-    // Get next date (from day after current)
+    // Safety check: detect stuck loop (same date appearing twice)
+    const currentDateKey = currentDate.toISOString().split('T')[0];
+    if (currentDateKey === lastDateKey) {
+      console.warn('getPaymentDatesInRange: Detected stuck loop, breaking', { startDate, frequency, currentDateKey });
+      break;
+    }
+    lastDateKey = currentDateKey;
+
+    rawDates.push(new Date(currentDate));
+
+    // Get next date (from day after current unadjusted date)
     const nextDay = new Date(currentDate);
     nextDay.setDate(nextDay.getDate() + 1);
-    currentDate = getNextPaymentDate(startDate, frequency, nextDay, endDate, businessDaysOnly);
+    currentDate = getNextPaymentDate(startDate, frequency, nextDay, endDate, false);
 
-    // Safety: prevent infinite loops
-    if (dates.length > 366) break;
+    // Safety: prevent infinite loops (max ~1 year of daily payments)
+    if (rawDates.length > 366) {
+      console.warn('getPaymentDatesInRange: Hit 366 date limit, breaking', { startDate, frequency });
+      break;
+    }
+  }
+
+  // Now apply business day adjustment if needed, and filter to range
+  // (adjustment might move dates slightly, so re-check range bounds)
+  // Use a Set to deduplicate - when businessDaysOnly is true, multiple weekend dates
+  // could get adjusted to the same Friday (e.g., both Sat and Sun -> Fri)
+  const seenDates = new Set();
+
+  for (const date of rawDates) {
+    let finalDate = date;
+    if (businessDaysOnly) {
+      finalDate = adjustToBusinessDay(date);
+    }
+
+    // Create a date key for deduplication (YYYY-MM-DD format)
+    const dateKey = finalDate.toISOString().split('T')[0];
+
+    // Only include if still in range after adjustment AND not already added
+    if (finalDate >= rStart && finalDate <= rEnd && !seenDates.has(dateKey)) {
+      seenDates.add(dateKey);
+      dates.push(finalDate);
+    }
   }
 
   return dates;

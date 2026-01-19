@@ -45,6 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merchant mappings still recognize NB Power transactions and map to Electricity
 
 ### Fixed
+- **Business Days Only Recurring Payments Infinite Loop (2026-01-18):**
+  - Fixed critical bug where recurring payments with "business days only" enabled caused infinite loop
+  - Bug caused payments to appear 367+ times in projections instead of correct count
+  - Root cause: When weekend dates were adjusted to Friday, the loop would advance to Saturday, recalculate, and get Friday again
+  - Fix: Now collects raw scheduled dates first, then applies business day adjustment at the end
+  - Affected: Budget projected view, Recurring payments "Next 30 Days" view
+
 - **Budget Projected View Calculation (2026-01-16):**
   - Fixed "Over Budget By" calculation to compare total projected vs total budget instead of summing individual category overages
   - Fixed projected spending for categories with recurring payments to include expected discretionary spending up to budget limit
