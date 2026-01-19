@@ -257,7 +257,8 @@ export default function Budget() {
         payment.frequency,
         forecastStart,
         endOfMonth,
-        payment.end_date
+        payment.end_date,
+        payment.business_days_only || false
       );
 
       const totalAmount = dates.length * Number(payment.amount);

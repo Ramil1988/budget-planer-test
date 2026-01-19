@@ -84,6 +84,7 @@ export default function RecurringPayments() {
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     notes: '',
+    business_days_only: false,
   });
 
   // Load data on mount
@@ -139,6 +140,7 @@ export default function RecurringPayments() {
         end_date: formData.end_date || null,
         notes: formData.notes.trim() || null,
         is_active: true,
+        business_days_only: formData.business_days_only,
       };
 
       if (editingPayment) {
@@ -206,6 +208,7 @@ export default function RecurringPayments() {
       start_date: new Date().toISOString().split('T')[0],
       end_date: '',
       notes: '',
+      business_days_only: false,
     });
     setIsModalOpen(true);
   };
@@ -221,6 +224,7 @@ export default function RecurringPayments() {
       start_date: payment.start_date,
       end_date: payment.end_date || '',
       notes: payment.notes || '',
+      business_days_only: payment.business_days_only || false,
     });
     setIsModalOpen(true);
   };
@@ -399,7 +403,7 @@ export default function RecurringPayments() {
         ) : (
           <VStack gap={{ base: 2, md: 3 }} align="stretch">
             {filteredPayments.map((payment) => {
-              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date);
+              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date, payment.business_days_only || false);
               const daysUntil = nextDate ? Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
 
               return (
@@ -451,6 +455,11 @@ export default function RecurringPayments() {
                             <Text fontSize="10px" color={colors.textMuted}>
                               {formatFrequency(payment.frequency)}
                             </Text>
+                            {payment.business_days_only && (
+                              <Badge colorPalette="blue" variant="subtle" fontSize="10px">
+                                Weekdays
+                              </Badge>
+                            )}
                             {payment.end_date && (
                               <Text fontSize="10px" color={colors.textMuted}>
                                 until {formatDate(payment.end_date)}
@@ -546,6 +555,11 @@ export default function RecurringPayments() {
                           <Text fontSize="xs" color={colors.textMuted}>
                             {formatFrequency(payment.frequency)}
                           </Text>
+                          {payment.business_days_only && (
+                            <Badge colorPalette="blue" variant="subtle" size="sm">
+                              Weekdays
+                            </Badge>
+                          )}
                           {payment.end_date && (
                             <Text fontSize="xs" color={colors.textMuted}>
                               until {formatDate(payment.end_date)}
@@ -826,6 +840,50 @@ export default function RecurringPayments() {
                         />
                       </Box>
                     </SimpleGrid>
+
+                    {/* Business Days Only */}
+                    <Box>
+                      <Flex
+                        align="center"
+                        gap={3}
+                        p={3}
+                        borderRadius="10px"
+                        bg={formData.business_days_only ? colors.primaryBg : colors.rowStripedBg}
+                        border="1px solid"
+                        borderColor={formData.business_days_only ? 'blue.300' : colors.borderColor}
+                        cursor="pointer"
+                        onClick={() => setFormData({ ...formData, business_days_only: !formData.business_days_only })}
+                        transition="all 0.2s"
+                        _hover={{ borderColor: 'blue.300' }}
+                      >
+                        <Box
+                          w="20px"
+                          h="20px"
+                          borderRadius="4px"
+                          border="2px solid"
+                          borderColor={formData.business_days_only ? 'blue.500' : colors.borderColor}
+                          bg={formData.business_days_only ? 'blue.500' : 'transparent'}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          flexShrink={0}
+                        >
+                          {formData.business_days_only && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </Box>
+                        <Box flex="1">
+                          <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
+                            Business days only
+                          </Text>
+                          <Text fontSize="xs" color={colors.textMuted}>
+                            Adjust weekend dates to nearest weekday (Sat→Fri, Sun→Mon)
+                          </Text>
+                        </Box>
+                      </Flex>
+                    </Box>
 
                     {/* Notes */}
                     <Box>
