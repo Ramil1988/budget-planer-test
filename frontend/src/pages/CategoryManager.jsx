@@ -107,27 +107,43 @@ export default function CategoryManager() {
       // Get the category ID for the new category
       const targetCategory = categories.find(c => c.name === categoryName && c.type === transactionType);
       if (!targetCategory) {
-        console.error('Category not found:', categoryName);
-        return { updated: 0, error: 'Category not found' };
+        console.error('Category not found:', categoryName, 'Available:', categories.map(c => c.name));
+        return { updated: 0, error: `Category "${categoryName}" not found` };
       }
 
       // Fetch transactions that match the merchant name (case-insensitive substring match)
+      // Also filter out soft-deleted transactions
       const { data: transactions, error: fetchError } = await supabase
         .from('transactions')
         .select('id, description, category_id')
         .eq('user_id', user.id)
         .eq('type', transactionType)
+        .is('deleted_at', null)
         .ilike('description', `%${merchantName}%`);
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error('Error fetching transactions:', fetchError);
+        throw fetchError;
+      }
+
+      const foundCount = transactions?.length || 0;
 
       // Filter out transactions that already have the correct category
       const transactionsToUpdate = (transactions || []).filter(
         t => t.category_id !== targetCategory.id
       );
+      const alreadyCorrect = foundCount - transactionsToUpdate.length;
 
       if (transactionsToUpdate.length === 0) {
-        return { updated: 0 };
+        // Return more detailed info about why no updates
+        return {
+          updated: 0,
+          found: foundCount,
+          alreadyCorrect: alreadyCorrect,
+          info: foundCount === 0
+            ? `No transactions found matching "${merchantName}"`
+            : `${foundCount} transaction(s) already in "${categoryName}" (ID: ${targetCategory.id})`
+        };
       }
 
       // Update transactions in batches
@@ -135,13 +151,16 @@ export default function CategoryManager() {
       let updatedCount = 0;
       for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
         const batchIds = transactionsToUpdate.slice(i, i + batchSize).map(t => t.id);
-        const { error: updateError } = await supabase
+
+        const { data: updatedData, error: updateError } = await supabase
           .from('transactions')
           .update({ category_id: targetCategory.id })
-          .in('id', batchIds);
+          .in('id', batchIds)
+          .select('id');
 
         if (updateError) throw updateError;
-        updatedCount += batchIds.length;
+
+        updatedCount += updatedData?.length || 0;
       }
 
       return { updated: updatedCount };
@@ -275,9 +294,13 @@ export default function CategoryManager() {
 
       // Update existing transactions if checkbox is checked
       let updatedTransactions = 0;
+      let updateError = null;
+      let updateInfo = null;
       if (updateExistingTransactions) {
         const result = await updateTransactionsByMerchant(merchantName, selectedCategory, 'expense');
         updatedTransactions = result.updated;
+        updateError = result.error;
+        updateInfo = result.info;
       }
 
       // Reload mappings from database
@@ -289,14 +312,23 @@ export default function CategoryManager() {
         message = `Moved "${merchantName}" from ${previousCategory} to ${selectedCategory}.`;
         if (updatedTransactions > 0) {
           message += ` Updated ${updatedTransactions} transaction${updatedTransactions !== 1 ? 's' : ''}.`;
+        } else if (updateError) {
+          message += ` (Error: ${updateError})`;
+        } else if (updateInfo) {
+          message += ` (${updateInfo})`;
         }
       } else {
         message = updatedTransactions > 0
           ? `Merchant mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
           : 'Merchant mapping added successfully!';
+        if (updateError) {
+          message += ` (Error: ${updateError})`;
+        } else if (updateInfo) {
+          message += ` (${updateInfo})`;
+        }
       }
       setSaveMessage(message);
-      setTimeout(() => setSaveMessage(''), 5000);
+      setTimeout(() => setSaveMessage(''), 6000);
     } catch (err) {
       setError(err.message);
       console.error('Error adding mapping:', err);

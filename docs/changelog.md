@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Inline Category Editing on Transactions Page (2026-01-20):**
+  - Click on any category name (shown in blue) to change it directly
+  - Dropdown shows all categories matching the transaction type (expense/income)
+  - Updates transaction immediately in Supabase
+  - Works on both desktop table view and mobile card view
+  - Provides direct control over transaction categories without pattern matching
+
 - **Re-categorize Existing Transactions (2026-01-20):**
   - New checkbox "Update existing transactions" when adding merchant mappings (checked by default)
   - Automatically updates existing transactions to new category when mapping is added

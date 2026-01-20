@@ -61,12 +61,56 @@ export default function Transactions() {
   const [showRestoreAllDialog, setShowRestoreAllDialog] = useState(false);
   const [restoringAll, setRestoringAll] = useState(false);
 
+  // Category editing state
+  const [categories, setCategories] = useState([]);
+  const [editingTransactionId, setEditingTransactionId] = useState(null);
+  const [updatingCategory, setUpdatingCategory] = useState(false);
+
   useEffect(() => {
     if (user) {
       loadTransactions();
       loadTrashTransactions(); // Load trash count on mount
+      loadCategories();
     }
   }, [user]);
+
+  const loadCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, type')
+        .eq('user_id', user.id)
+        .order('name');
+      if (!error) setCategories(data || []);
+    } catch (err) {
+      console.error('Error loading categories:', err);
+    }
+  };
+
+  const updateTransactionCategory = async (transactionId, newCategoryId, transactionType) => {
+    setUpdatingCategory(true);
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ category_id: newCategoryId })
+        .eq('id', transactionId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Update local state
+      const newCategory = categories.find(c => c.id === newCategoryId);
+      setTransactions(prev => prev.map(t =>
+        t.id === transactionId ? { ...t, category: newCategory?.name || 'Unknown', category_id: newCategoryId } : t
+      ));
+      setEditingTransactionId(null);
+    } catch (err) {
+      console.error('Error updating category:', err);
+      setError('Failed to update category');
+    } finally {
+      setUpdatingCategory(false);
+    }
+  };
 
   useEffect(() => {
     filterTransactions();
@@ -128,6 +172,7 @@ export default function Transactions() {
         amount: t.amount,
         type: t.type,
         category: t.categories?.name || 'Unknown',
+        category_id: t.category_id,
         bank: t.provider || null,
         balance: balanceMap.get(t.id),
       }));
@@ -777,7 +822,42 @@ export default function Transactions() {
                 >
                   <Flex justify="space-between" align="flex-start" mb={2}>
                     <Box flex="1">
-                      <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>{transaction.category}</Text>
+                      {editingTransactionId === transaction.id ? (
+                        <HStack gap={2} mb={1}>
+                          <select
+                            value={transaction.category_id || ''}
+                            onChange={(e) => updateTransactionCategory(transaction.id, e.target.value, transaction.type)}
+                            disabled={updatingCategory}
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '13px',
+                              borderRadius: '6px',
+                              border: `1px solid ${colors.borderColor}`,
+                              backgroundColor: colors.inputBg,
+                              color: colors.textPrimary,
+                              cursor: updatingCategory ? 'wait' : 'pointer',
+                              flex: 1,
+                              maxWidth: '160px',
+                            }}
+                            autoFocus
+                          >
+                            {categories.filter(c => c.type === transaction.type).map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                          <Button size="xs" variant="ghost" onClick={() => setEditingTransactionId(null)}>✕</Button>
+                        </HStack>
+                      ) : (
+                        <Text
+                          fontWeight="semibold"
+                          fontSize="sm"
+                          color="blue.500"
+                          cursor="pointer"
+                          onClick={() => setEditingTransactionId(transaction.id)}
+                        >
+                          {transaction.category}
+                        </Text>
+                      )}
                       <Text fontSize="xs" color={colors.textSecondary} noOfLines={2}>
                         {transaction.description}
                       </Text>
@@ -848,7 +928,42 @@ export default function Transactions() {
                         <Text color={colors.textSecondary}>{formatDate(transaction.date)}</Text>
                       </Table.Cell>
                       <Table.Cell py={4} px={6}>
-                        <Text fontWeight="medium" color={colors.textPrimary}>{transaction.category}</Text>
+                        {editingTransactionId === transaction.id ? (
+                          <HStack gap={2}>
+                            <select
+                              value={transaction.category_id || ''}
+                              onChange={(e) => updateTransactionCategory(transaction.id, e.target.value, transaction.type)}
+                              disabled={updatingCategory}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '14px',
+                                borderRadius: '6px',
+                                border: `1px solid ${colors.borderColor}`,
+                                backgroundColor: colors.inputBg,
+                                color: colors.textPrimary,
+                                cursor: updatingCategory ? 'wait' : 'pointer',
+                                minWidth: '140px',
+                              }}
+                              autoFocus
+                            >
+                              {categories.filter(c => c.type === transaction.type).map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                              ))}
+                            </select>
+                            <Button size="xs" variant="ghost" onClick={() => setEditingTransactionId(null)}>✕</Button>
+                          </HStack>
+                        ) : (
+                          <Text
+                            fontWeight="medium"
+                            color="blue.500"
+                            cursor="pointer"
+                            _hover={{ textDecoration: 'underline' }}
+                            onClick={() => setEditingTransactionId(transaction.id)}
+                            title="Click to change category"
+                          >
+                            {transaction.category}
+                          </Text>
+                        )}
                         <Text fontSize="sm" color={colors.textSecondary} noOfLines={1}>
                           {transaction.description}
                           {transaction.bank && transaction.bank !== transaction.description && (
