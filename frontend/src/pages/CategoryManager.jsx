@@ -243,21 +243,32 @@ export default function CategoryManager() {
 
     const merchantName = newPattern.trim().toUpperCase();
 
-    // Check if mapping already exists
+    // Check if mapping already exists in the SAME category
     if (patterns[selectedCategory]?.includes(merchantName)) {
       setSaveMessage('Merchant already mapped in this category');
       setTimeout(() => setSaveMessage(''), 3000);
       return;
     }
 
+    // Check if merchant exists in a DIFFERENT category (will be moved)
+    let previousCategory = null;
+    for (const [catName, merchants] of Object.entries(patterns)) {
+      if (merchants.includes(merchantName) && catName !== selectedCategory) {
+        previousCategory = catName;
+        break;
+      }
+    }
+
     try {
-      // Insert mapping into database
+      // Use upsert to handle both new mappings and moving between categories
       const { error } = await supabase
         .from('merchant_mappings')
-        .insert({
+        .upsert({
           user_id: user.id,
           transaction_description: merchantName,
           category_name: selectedCategory,
+        }, {
+          onConflict: 'user_id,transaction_description'
         });
 
       if (error) throw error;
@@ -273,11 +284,19 @@ export default function CategoryManager() {
       await loadPatternsFromDB();
 
       setNewPattern('');
-      const message = updatedTransactions > 0
-        ? `Merchant mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
-        : 'Merchant mapping added successfully!';
+      let message;
+      if (previousCategory) {
+        message = `Moved "${merchantName}" from ${previousCategory} to ${selectedCategory}.`;
+        if (updatedTransactions > 0) {
+          message += ` Updated ${updatedTransactions} transaction${updatedTransactions !== 1 ? 's' : ''}.`;
+        }
+      } else {
+        message = updatedTransactions > 0
+          ? `Merchant mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
+          : 'Merchant mapping added successfully!';
+      }
       setSaveMessage(message);
-      setTimeout(() => setSaveMessage(''), 4000);
+      setTimeout(() => setSaveMessage(''), 5000);
     } catch (err) {
       setError(err.message);
       console.error('Error adding mapping:', err);
@@ -292,21 +311,32 @@ export default function CategoryManager() {
 
     const merchantName = newIncomePattern.trim().toUpperCase();
 
-    // Check if mapping already exists
+    // Check if mapping already exists in the SAME category
     if (patterns[selectedIncomeCategory]?.includes(merchantName)) {
       setSaveMessage('Merchant already mapped in this category');
       setTimeout(() => setSaveMessage(''), 3000);
       return;
     }
 
+    // Check if merchant exists in a DIFFERENT category (will be moved)
+    let previousCategory = null;
+    for (const [catName, merchants] of Object.entries(patterns)) {
+      if (merchants.includes(merchantName) && catName !== selectedIncomeCategory) {
+        previousCategory = catName;
+        break;
+      }
+    }
+
     try {
-      // Insert mapping into database
+      // Use upsert to handle both new mappings and moving between categories
       const { error } = await supabase
         .from('merchant_mappings')
-        .insert({
+        .upsert({
           user_id: user.id,
           transaction_description: merchantName,
           category_name: selectedIncomeCategory,
+        }, {
+          onConflict: 'user_id,transaction_description'
         });
 
       if (error) throw error;
@@ -322,11 +352,19 @@ export default function CategoryManager() {
       await loadPatternsFromDB();
 
       setNewIncomePattern('');
-      const message = updatedTransactions > 0
-        ? `Income mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
-        : 'Income merchant mapping added successfully!';
+      let message;
+      if (previousCategory) {
+        message = `Moved "${merchantName}" from ${previousCategory} to ${selectedIncomeCategory}.`;
+        if (updatedTransactions > 0) {
+          message += ` Updated ${updatedTransactions} transaction${updatedTransactions !== 1 ? 's' : ''}.`;
+        }
+      } else {
+        message = updatedTransactions > 0
+          ? `Income mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
+          : 'Income merchant mapping added successfully!';
+      }
       setSaveMessage(message);
-      setTimeout(() => setSaveMessage(''), 4000);
+      setTimeout(() => setSaveMessage(''), 5000);
     } catch (err) {
       setError(err.message);
       console.error('Error adding income mapping:', err);
