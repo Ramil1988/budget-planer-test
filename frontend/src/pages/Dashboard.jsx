@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -278,12 +278,13 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
 // Monthly Spending Bar Chart Component
 const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, formatCurrency }) => {
   const colors = useDarkModeColors();
-  const barHeight = 80;
+  const barHeight = 120;
   const maxAmount = Math.max(...dailyData, 1);
   const [year, month] = selectedMonth.split('-').map(Number);
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
   const todayDate = isCurrentMonth ? today.getDate() : -1;
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
     <Box>
@@ -296,20 +297,23 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
           '&::-webkit-scrollbar-thumb': { background: '#D4D4D8', borderRadius: '3px' },
         }}
       >
-        <Flex gap={1} minW={`${dailyData.length * 28}px`} align="flex-end" h={`${barHeight + 40}px`}>
+        <Flex gap={1} minW={`${dailyData.length * 36}px`} align="flex-end" h={`${barHeight + 50}px`}>
           {dailyData.map((amount, index) => {
             const dayNum = index + 1;
             const heightPercent = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
             const isToday = dayNum === todayDate;
             const isSelected = selectedDay === index;
             const hasSpending = amount > 0;
+            // Get day of week for this date
+            const dayOfWeek = new Date(year, month - 1, dayNum).getDay();
+            const dayName = dayNames[dayOfWeek];
 
             return (
               <VStack
                 key={dayNum}
                 gap={0.5}
                 flex="1"
-                minW="24px"
+                minW="32px"
                 align="center"
                 cursor={hasSpending ? 'pointer' : 'default'}
                 onClick={() => hasSpending && onDayClick(index)}
@@ -318,7 +322,7 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
               >
                 <Box
                   w="100%"
-                  maxW="20px"
+                  maxW="28px"
                   h={`${barHeight}px`}
                   bg={colors.rowStripedBg}
                   borderRadius="4px"
@@ -342,13 +346,22 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
                     transition="height 0.3s ease"
                   />
                 </Box>
-                <Text
-                  fontSize="9px"
-                  fontWeight={isToday || isSelected ? '700' : '500'}
-                  color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textMuted}
-                >
-                  {dayNum}
-                </Text>
+                <VStack gap={0} spacing={0}>
+                  <Text
+                    fontSize={{ base: '11px', md: '13px' }}
+                    fontWeight={isToday || isSelected ? '700' : '600'}
+                    color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textSecondary}
+                  >
+                    {dayNum}
+                  </Text>
+                  <Text
+                    fontSize={{ base: '9px', md: '11px' }}
+                    fontWeight="500"
+                    color={isToday ? colors.primary : colors.textMuted}
+                  >
+                    {dayName}
+                  </Text>
+                </VStack>
               </VStack>
             );
           })}
@@ -634,9 +647,47 @@ export default function Dashboard() {
   const [monthlyDailyTransactions, setMonthlyDailyTransactions] = useState([]); // Transactions by day for month
   const [upcomingPayments, setUpcomingPayments] = useState([]); // Upcoming recurring payments
   const [allRecurringPayments, setAllRecurringPayments] = useState([]); // All recurring payments for calendar
-  const [paymentsViewMode, setPaymentsViewMode] = useState('list'); // 'list' or 'calendar'
+  const [paymentsViewMode, setPaymentsViewMode] = useState('calendar'); // 'list' or 'calendar'
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null); // Selected date in calendar
   const [selectedCalendarPayments, setSelectedCalendarPayments] = useState([]); // Payments for selected date
+
+  // Refs for chart click-away
+  const dailySpendingRef = useRef(null);
+  const cashFlowRef = useRef(null);
+
+  // Click-away listener to deselect Daily Spending chart
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dailySpendingRef.current && !dailySpendingRef.current.contains(event.target)) {
+        setSelectedMonthDay(null);
+      }
+    };
+
+    if (selectedMonthDay !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [selectedMonthDay]);
+
+  // Click-away listener to deselect Cash-flow chart
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (cashFlowRef.current && !cashFlowRef.current.contains(event.target)) {
+        setSelectedDayIndex(null);
+      }
+    };
+
+    if (selectedDayIndex !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [selectedDayIndex]);
 
   useEffect(() => {
     if (user) {
@@ -1136,16 +1187,30 @@ export default function Dashboard() {
               border="1px solid" borderColor={colors.borderSubtle}
             >
               <Flex justify="space-between" align="center" mb={4}>
-                <HStack gap={2}>
-                  <Box
-                    w="8px"
-                    h="8px"
-                    borderRadius="full"
-                    bg="#F59E0B"
-                  />
-                  <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
-                    Upcoming Payments
-                  </Heading>
+                <HStack gap={3}>
+                  <HStack gap={2}>
+                    <Box
+                      w="8px"
+                      h="8px"
+                      borderRadius="full"
+                      bg="#F59E0B"
+                    />
+                    <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
+                      Upcoming Payments
+                    </Heading>
+                  </HStack>
+                  {upcomingPayments.filter(p => p.daysUntil >= 0 && p.type === 'expense').length > 0 && (
+                    <Box
+                      bg={colors.rowStripedBg}
+                      px={3}
+                      py={1}
+                      borderRadius="full"
+                    >
+                      <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
+                        {formatCurrency(upcomingPayments.filter(p => p.daysUntil >= 0 && p.type === 'expense').reduce((sum, p) => sum + Number(p.amount), 0))} left
+                      </Text>
+                    </Box>
+                  )}
                 </HStack>
                 <HStack gap={2}>
                   {/* View Toggle */}
@@ -1551,6 +1616,7 @@ export default function Dashboard() {
 
             {/* Cash-flow Chart */}
             <Box
+              ref={cashFlowRef}
               flex="1"
               p={{ base: 5, md: 6 }}
               borderRadius="16px"
@@ -1690,208 +1756,9 @@ export default function Dashboard() {
             </Box>
           </Flex>
 
-          {/* Budget Progress & Top Spending Row */}
-          <Flex gap={{ base: 5, md: 6 }} direction={{ base: 'column', lg: 'row' }}>
-
-            {/* Overall Budget Progress */}
-            <Box
-              flex="1"
-              p={{ base: 5, md: 6 }}
-              borderRadius="16px"
-              bg={colors.cardBg}
-              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid" borderColor={colors.borderSubtle}
-            >
-              <Flex justify="space-between" align="center" mb={5}>
-                <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
-                  Budget Overview
-                </Heading>
-                {budgetProgress.total > 0 && (
-                  <Box
-                    bg={budgetProgress.percent > 100 ? '#FEF2F2' : budgetProgress.percent > 80 ? '#FFFBEB' : '#ECFDF5'}
-                    px={3}
-                    py={1}
-                    borderRadius="full"
-                  >
-                    <Text
-                      fontSize="sm"
-                      fontWeight="700"
-                      color={budgetProgress.percent > 100 ? '#DC2626' : budgetProgress.percent > 80 ? '#D97706' : '#059669'}
-                    >
-                      {budgetProgress.percent.toFixed(0)}%
-                    </Text>
-                  </Box>
-                )}
-              </Flex>
-
-              {budgetProgress.total > 0 ? (
-                <VStack align="stretch" gap={4}>
-                  <Box>
-                    <Flex justify="space-between" mb={3}>
-                      <Text fontSize="sm" color={colors.textMuted}>
-                        Spent <Text as="span" fontWeight="700" color={colors.textPrimary}>{formatCurrency(budgetProgress.used)}</Text>
-                      </Text>
-                      <Text fontSize="sm" color={colors.textMuted}>
-                        of <Text as="span" fontWeight="700" color={colors.textPrimary}>{formatCurrency(budgetProgress.total)}</Text>
-                      </Text>
-                    </Flex>
-
-                    {/* Custom Progress Bar */}
-                    <Box h="10px" bg={colors.rowStripedBg} borderRadius="full" overflow="hidden">
-                      <Box
-                        h="100%"
-                        w={`${Math.min(budgetProgress.percent, 100)}%`}
-                        borderRadius="full"
-                        bg={
-                          budgetProgress.percent > 100
-                            ? 'linear-gradient(90deg, #FB7185 0%, #E11D48 100%)'
-                            : budgetProgress.percent > 80
-                              ? 'linear-gradient(90deg, #FBBF24 0%, #D97706 100%)'
-                              : 'linear-gradient(90deg, #34D399 0%, #059669 100%)'
-                        }
-                        transition="width 0.5s ease"
-                      />
-                    </Box>
-                  </Box>
-
-                  <Box
-                    p={3}
-                    borderRadius="10px"
-                    bg={budgetProgress.percent > 100 ? '#FEF2F2' : '#ECFDF5'}
-                  >
-                    <Text
-                      fontSize="sm"
-                      fontWeight="600"
-                      color={budgetProgress.percent > 100 ? '#DC2626' : '#059669'}
-                    >
-                      {budgetProgress.percent <= 100
-                        ? `${formatCurrency(budgetProgress.total - budgetProgress.used)} remaining this month`
-                        : `${formatCurrency(budgetProgress.used - budgetProgress.total)} over budget`
-                      }
-                    </Text>
-                  </Box>
-                </VStack>
-              ) : (
-                <Flex direction="column" align="center" justify="center" py={8}>
-                  <Box
-                    w="48px"
-                    h="48px"
-                    borderRadius="12px"
-                    bg={colors.rowStripedBg}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    mb={3}
-                  >
-                    <Text fontSize="xl">📊</Text>
-                  </Box>
-                  <Text color={colors.textMuted} mb={3} textAlign="center">No budget set for this month</Text>
-                  <Button
-                    as={RouterLink}
-                    to="/budget"
-                    size="sm"
-                    bg="#2563EB"
-                    color="white"
-                    borderRadius="10px"
-                    _hover={{ bg: '#1D4ED8' }}
-                  >
-                    Set Budget
-                  </Button>
-                </Flex>
-              )}
-            </Box>
-
-            {/* Top Spending */}
-            <Box
-              flex="1"
-              p={{ base: 5, md: 6 }}
-              borderRadius="16px"
-              bg={colors.cardBg}
-              boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-              border="1px solid" borderColor={colors.borderSubtle}
-            >
-              <Flex justify="space-between" align="center" mb={4}>
-                <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
-                  Top Spending
-                </Heading>
-                <Button
-                  as={RouterLink}
-                  to="/transactions"
-                  variant="ghost"
-                  size="sm"
-                  color="#2563EB"
-                  fontWeight="600"
-                  _hover={{ bg: '#EFF6FF' }}
-                >
-                  View All
-                </Button>
-              </Flex>
-
-              {categoryBudgets.length > 0 ? (
-                <VStack align="stretch" gap={0}>
-                  {categoryBudgets.slice(0, 6).map((cat, index) => (
-                    <Flex
-                      key={cat.id}
-                      align="center"
-                      py={3}
-                      borderBottomWidth="1px"
-                      borderColor={colors.borderSubtle}
-                      _last={{ borderBottomWidth: 0 }}
-                      _hover={{ bg: colors.rowHoverBg, mx: -3, px: 3, borderRadius: '8px' }}
-                      transition="all 0.15s"
-                      cursor="pointer"
-                    >
-                      {/* Rank */}
-                      <Flex
-                        w="28px"
-                        h="28px"
-                        borderRadius="full"
-                        bg={index < 3 ? 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)' : colors.borderSubtle}
-                        color={index < 3 ? 'white' : colors.textMuted}
-                        align="center"
-                        justify="center"
-                        fontSize="xs"
-                        fontWeight="700"
-                        mr={3}
-                        flexShrink={0}
-                      >
-                        {index + 1}
-                      </Flex>
-
-                      {/* Category name */}
-                      <Text
-                        flex="1"
-                        fontWeight="500"
-                        fontSize="sm"
-                        color={colors.textPrimary}
-                        noOfLines={1}
-                      >
-                        {cat.name}
-                      </Text>
-
-                      {/* Amount */}
-                      <Text
-                        fontWeight="700"
-                        fontSize="sm"
-                        color="#E11D48"
-                        fontFamily="'Plus Jakarta Sans', sans-serif"
-                        ml={2}
-                      >
-                        {formatCurrency(cat.spent)}
-                      </Text>
-                    </Flex>
-                  ))}
-                </VStack>
-              ) : (
-                <Flex justify="center" align="center" py={8}>
-                  <Text color={colors.textMuted}>No spending this month</Text>
-                </Flex>
-              )}
-            </Box>
-          </Flex>
-
           {/* Monthly Daily Spending Chart */}
           <Box
+            ref={dailySpendingRef}
             p={{ base: 5, md: 6 }}
             borderRadius="16px"
             bg={colors.cardBg}
@@ -1924,7 +1791,7 @@ export default function Dashboard() {
             )}
 
             {/* Transaction Details Section */}
-            <Box mt={3} p={3} borderRadius="10px" bg={colors.rowStripedBg}>
+            <Box mt={3} p={{ base: 3, md: 4 }} borderRadius="10px" bg={colors.rowStripedBg}>
               {selectedMonthDay !== null && monthlyDailyTransactions[selectedMonthDay]?.length > 0 ? (
                 <VStack align="stretch" gap={2}>
                   <Flex justify="space-between" align="center" mb={1}>
@@ -1936,13 +1803,14 @@ export default function Dashboard() {
                       {formatCurrency(monthlyDailySpending[selectedMonthDay])}
                     </Text>
                   </Flex>
-                  <Box maxH="120px" overflowY="auto">
+                  <Box maxH="120px" overflowY="auto" pr={2}>
                     {monthlyDailyTransactions[selectedMonthDay].map((tx, idx) => (
                       <Flex
                         key={tx.id || idx}
                         justify="space-between"
                         align="center"
                         py={1.5}
+                        pr={2}
                         borderBottomWidth={idx < monthlyDailyTransactions[selectedMonthDay].length - 1 ? '1px' : '0'}
                         borderColor={colors.borderColor}
                       >
@@ -1963,7 +1831,7 @@ export default function Dashboard() {
                             </Text>
                           </VStack>
                         </HStack>
-                        <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={2}>
+                        <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={3}>
                           {formatCurrency(tx.amount)}
                         </Text>
                       </Flex>
@@ -1976,119 +1844,18 @@ export default function Dashboard() {
                     {selectedMonthDay !== null ? 'No transactions' : 'Click a bar to see details'}
                   </Text>
                   <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
-                    Avg: {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0) / monthlyDailySpending.length || 0)}/day
+                    Avg: {(() => {
+                      const [year, month] = selectedMonth.split('-').map(Number);
+                      const today = new Date();
+                      const isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
+                      const daysElapsed = isCurrentMonth ? today.getDate() : monthlyDailySpending.length;
+                      const total = monthlyDailySpending.reduce((a, b) => a + b, 0);
+                      return formatCurrency(daysElapsed > 0 ? total / daysElapsed : 0);
+                    })()}/day
                   </Text>
                 </Flex>
               )}
             </Box>
-          </Box>
-
-          {/* Category Budgets */}
-          <Box
-            p={{ base: 5, md: 6 }}
-            borderRadius="16px"
-            bg={colors.cardBg}
-            boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
-            border="1px solid" borderColor={colors.borderSubtle}
-          >
-            <Flex justify="space-between" align="center" mb={5}>
-              <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary} letterSpacing="-0.01em">
-                Spending by Category
-              </Heading>
-              <Button
-                as={RouterLink}
-                to="/budget"
-                variant="ghost"
-                size="sm"
-                color="#2563EB"
-                fontWeight="600"
-                _hover={{ bg: '#EFF6FF' }}
-              >
-                Manage
-              </Button>
-            </Flex>
-
-            {categoryBudgets.length > 0 ? (
-              <VStack align="stretch" gap={3}>
-                {categoryBudgets.map((cat) => (
-                  <Box
-                    key={cat.id}
-                    p={4}
-                    bg={colors.rowStripedBg}
-                    borderRadius="12px"
-                    border="1px solid" borderColor={colors.borderSubtle}
-                    _hover={{ borderColor: colors.borderStrong }}
-                    transition="all 0.15s"
-                  >
-                    <Flex justify="space-between" align="center" mb={2}>
-                      <HStack gap={2}>
-                        <Box
-                          w="10px"
-                          h="10px"
-                          borderRadius="full"
-                          bg={getCategoryColor(cat.name)}
-                        />
-                        <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>{cat.name}</Text>
-                      </HStack>
-                      {cat.limit > 0 && (
-                        <Box
-                          px={2}
-                          py={0.5}
-                          borderRadius="full"
-                          bg={cat.percent > 100 ? colors.dangerBg : cat.percent > 80 ? colors.warningBg : colors.successBg}
-                        >
-                          <Text
-                            fontSize="xs"
-                            fontWeight="700"
-                            color={cat.percent > 100 ? colors.danger : cat.percent > 80 ? colors.warning : colors.success}
-                          >
-                            {cat.percent.toFixed(0)}%
-                          </Text>
-                        </Box>
-                      )}
-                    </Flex>
-
-                    <Flex justify="space-between" align="center" mb={2}>
-                      <Text fontSize="sm" color={colors.textMuted}>
-                        <Text as="span" fontWeight="600" color={colors.textPrimary}>{formatCurrency(cat.spent)}</Text>
-                        {cat.limit > 0 ? ` of ${formatCurrency(cat.limit)}` : ' (no limit)'}
-                      </Text>
-                      {cat.limit > 0 && (
-                        <Text
-                          fontSize="xs"
-                          fontWeight="600"
-                          color={cat.remaining >= 0 ? colors.success : colors.danger}
-                        >
-                          {cat.remaining >= 0 ? `${formatCurrency(cat.remaining)} left` : `${formatCurrency(Math.abs(cat.remaining))} over`}
-                        </Text>
-                      )}
-                    </Flex>
-
-                    {cat.limit > 0 && (
-                      <Box h="6px" bg={colors.borderColor} borderRadius="full" overflow="hidden">
-                        <Box
-                          h="100%"
-                          w={`${Math.min(cat.percent, 100)}%`}
-                          borderRadius="full"
-                          bg={
-                            cat.percent > 100
-                              ? 'linear-gradient(90deg, #FB7185 0%, #E11D48 100%)'
-                              : cat.percent > 80
-                                ? 'linear-gradient(90deg, #FBBF24 0%, #D97706 100%)'
-                                : 'linear-gradient(90deg, #34D399 0%, #059669 100%)'
-                          }
-                          transition="width 0.3s ease"
-                        />
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-              </VStack>
-            ) : (
-              <Flex justify="center" align="center" py={8}>
-                <Text color={colors.textMuted}>No spending this month</Text>
-              </Flex>
-            )}
           </Box>
 
           {/* Quick Actions */}
