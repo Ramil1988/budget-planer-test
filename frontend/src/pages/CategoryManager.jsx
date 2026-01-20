@@ -49,6 +49,9 @@ export default function CategoryManager() {
   const [activeTab, setActiveTab] = useState('expense');
   const [importLoading, setImportLoading] = useState(false);
   const [isDefaultModalOpen, setIsDefaultModalOpen] = useState(false);
+  const [updateExistingTransactions, setUpdateExistingTransactions] = useState(true);
+  const [updateExistingIncomeTransactions, setUpdateExistingIncomeTransactions] = useState(true);
+  const [recategorizeLoading, setRecategorizeLoading] = useState(false);
   const fileInputRef = useRef(null);
 
   // Load patterns from database on mount
@@ -98,6 +101,140 @@ export default function CategoryManager() {
     }
   };
 
+  // Update existing transactions that match merchant name to new category
+  const updateTransactionsByMerchant = async (merchantName, categoryName, transactionType = 'expense') => {
+    try {
+      // Get the category ID for the new category
+      const targetCategory = categories.find(c => c.name === categoryName && c.type === transactionType);
+      if (!targetCategory) {
+        console.error('Category not found:', categoryName);
+        return { updated: 0, error: 'Category not found' };
+      }
+
+      // Fetch transactions that match the merchant name (case-insensitive substring match)
+      const { data: transactions, error: fetchError } = await supabase
+        .from('transactions')
+        .select('id, description, category_id')
+        .eq('user_id', user.id)
+        .eq('type', transactionType)
+        .ilike('description', `%${merchantName}%`);
+
+      if (fetchError) throw fetchError;
+
+      // Filter out transactions that already have the correct category
+      const transactionsToUpdate = (transactions || []).filter(
+        t => t.category_id !== targetCategory.id
+      );
+
+      if (transactionsToUpdate.length === 0) {
+        return { updated: 0 };
+      }
+
+      // Update transactions in batches
+      const batchSize = 100;
+      let updatedCount = 0;
+      for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
+        const batchIds = transactionsToUpdate.slice(i, i + batchSize).map(t => t.id);
+        const { error: updateError } = await supabase
+          .from('transactions')
+          .update({ category_id: targetCategory.id })
+          .in('id', batchIds);
+
+        if (updateError) throw updateError;
+        updatedCount += batchIds.length;
+      }
+
+      return { updated: updatedCount };
+    } catch (err) {
+      console.error('Error updating transactions:', err);
+      return { updated: 0, error: err.message };
+    }
+  };
+
+  // Re-categorize all transactions based on current merchant mappings
+  const handleRecategorizeAll = async () => {
+    setRecategorizeLoading(true);
+    setError('');
+    try {
+      // Fetch all merchant mappings
+      const { data: mappings, error: mappingsError } = await supabase
+        .from('merchant_mappings')
+        .select('transaction_description, category_name')
+        .eq('user_id', user.id);
+
+      if (mappingsError) throw mappingsError;
+
+      // Build category lookup maps
+      const expenseCategoryMap = {};
+      const incomeCategoryMap = {};
+      categories.forEach(cat => {
+        if (cat.type === 'income') {
+          incomeCategoryMap[cat.name] = cat.id;
+        } else {
+          expenseCategoryMap[cat.name] = cat.id;
+        }
+      });
+
+      // Fetch all transactions
+      const { data: transactions, error: transError } = await supabase
+        .from('transactions')
+        .select('id, description, type, category_id')
+        .eq('user_id', user.id);
+
+      if (transError) throw transError;
+
+      // Categorize each transaction
+      let updateCount = 0;
+      const updates = [];
+
+      for (const transaction of transactions || []) {
+        const normalizedDesc = transaction.description.toUpperCase().trim().replace(/\s+/g, ' ');
+        const isIncome = transaction.type === 'income';
+        const categoryMap = isIncome ? incomeCategoryMap : expenseCategoryMap;
+
+        // Find matching mapping (first match wins)
+        let newCategoryId = null;
+        for (const mapping of mappings || []) {
+          if (normalizedDesc.includes(mapping.transaction_description)) {
+            const catId = categoryMap[mapping.category_name];
+            if (catId) {
+              newCategoryId = catId;
+              break;
+            }
+          }
+        }
+
+        // If found a new category and it's different from current
+        if (newCategoryId && newCategoryId !== transaction.category_id) {
+          updates.push({ id: transaction.id, category_id: newCategoryId });
+        }
+      }
+
+      // Update transactions in batches
+      const batchSize = 100;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        for (const update of batch) {
+          const { error: updateError } = await supabase
+            .from('transactions')
+            .update({ category_id: update.category_id })
+            .eq('id', update.id);
+
+          if (updateError) throw updateError;
+        }
+        updateCount += batch.length;
+      }
+
+      setSaveMessage(`Re-categorized ${updateCount} transaction${updateCount !== 1 ? 's' : ''} based on current mappings!`);
+      setTimeout(() => setSaveMessage(''), 5000);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error re-categorizing transactions:', err);
+    } finally {
+      setRecategorizeLoading(false);
+    }
+  };
+
   // Add new merchant mapping to selected category (expense)
   const handleAddPattern = async () => {
     if (!selectedCategory || !newPattern.trim()) {
@@ -125,12 +262,22 @@ export default function CategoryManager() {
 
       if (error) throw error;
 
+      // Update existing transactions if checkbox is checked
+      let updatedTransactions = 0;
+      if (updateExistingTransactions) {
+        const result = await updateTransactionsByMerchant(merchantName, selectedCategory, 'expense');
+        updatedTransactions = result.updated;
+      }
+
       // Reload mappings from database
       await loadPatternsFromDB();
 
       setNewPattern('');
-      setSaveMessage('Merchant mapping added successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      const message = updatedTransactions > 0
+        ? `Merchant mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
+        : 'Merchant mapping added successfully!';
+      setSaveMessage(message);
+      setTimeout(() => setSaveMessage(''), 4000);
     } catch (err) {
       setError(err.message);
       console.error('Error adding mapping:', err);
@@ -164,12 +311,22 @@ export default function CategoryManager() {
 
       if (error) throw error;
 
+      // Update existing transactions if checkbox is checked
+      let updatedTransactions = 0;
+      if (updateExistingIncomeTransactions) {
+        const result = await updateTransactionsByMerchant(merchantName, selectedIncomeCategory, 'income');
+        updatedTransactions = result.updated;
+      }
+
       // Reload mappings from database
       await loadPatternsFromDB();
 
       setNewIncomePattern('');
-      setSaveMessage('Income merchant mapping added successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      const message = updatedTransactions > 0
+        ? `Income mapping added! Updated ${updatedTransactions} existing transaction${updatedTransactions !== 1 ? 's' : ''}.`
+        : 'Income merchant mapping added successfully!';
+      setSaveMessage(message);
+      setTimeout(() => setSaveMessage(''), 4000);
     } catch (err) {
       setError(err.message);
       console.error('Error adding income mapping:', err);
@@ -506,6 +663,15 @@ export default function CategoryManager() {
             >
               Import Mappings from CSV
             </Button>
+            <Button
+              colorScheme="orange"
+              variant="solid"
+              onClick={handleRecategorizeAll}
+              loading={recategorizeLoading}
+              loadingText="Re-categorizing..."
+            >
+              Re-categorize All Transactions
+            </Button>
             <input
               type="file"
               ref={fileInputRef}
@@ -515,7 +681,7 @@ export default function CategoryManager() {
             />
           </HStack>
           <Text fontSize="xs" color={colors.textMuted} mt={2}>
-            CSV format: Name,Type (merchant name → category mapping)
+            CSV format: Name,Type (merchant name → category mapping). "Re-categorize All" applies all current mappings to existing transactions.
           </Text>
         </Box>
 
@@ -717,6 +883,39 @@ export default function CategoryManager() {
                     ))}
                   </select>
                 </Box>
+
+                {/* Update existing transactions checkbox */}
+                <HStack
+                  as="label"
+                  cursor="pointer"
+                  p={3}
+                  bg={colors.rowStripedBg}
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={updateExistingTransactions ? 'blue.400' : colors.borderColor}
+                  _hover={{ borderColor: 'blue.400' }}
+                  transition="all 0.2s"
+                >
+                  <input
+                    type="checkbox"
+                    checked={updateExistingTransactions}
+                    onChange={(e) => setUpdateExistingTransactions(e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#3B82F6',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <Box>
+                    <Text fontWeight="500" color={colors.textPrimary} fontSize="sm">
+                      Update existing transactions
+                    </Text>
+                    <Text fontSize="xs" color={colors.textMuted}>
+                      Automatically re-categorize transactions matching this merchant
+                    </Text>
+                  </Box>
+                </HStack>
 
                 {/* Add Button */}
                 <Button
@@ -925,6 +1124,39 @@ export default function CategoryManager() {
                     ))}
                   </select>
                 </Box>
+
+                {/* Update existing income transactions checkbox */}
+                <HStack
+                  as="label"
+                  cursor="pointer"
+                  p={3}
+                  bg={colors.rowStripedBg}
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={updateExistingIncomeTransactions ? 'green.400' : colors.borderColor}
+                  _hover={{ borderColor: 'green.400' }}
+                  transition="all 0.2s"
+                >
+                  <input
+                    type="checkbox"
+                    checked={updateExistingIncomeTransactions}
+                    onChange={(e) => setUpdateExistingIncomeTransactions(e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#22C55E',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <Box>
+                    <Text fontWeight="500" color={colors.textPrimary} fontSize="sm">
+                      Update existing transactions
+                    </Text>
+                    <Text fontSize="xs" color={colors.textMuted}>
+                      Automatically re-categorize income transactions matching this source
+                    </Text>
+                  </Box>
+                </HStack>
 
                 {/* Add Button */}
                 <Button

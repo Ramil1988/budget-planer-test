@@ -1,6 +1,6 @@
 # Technical Reference
 
-**Last Updated:** 2025-12-21
+**Last Updated:** 2026-01-20
 
 This document provides technical guidelines, code patterns, and quick references for developing BudgetWise.
 
@@ -616,6 +616,103 @@ function MyComponent() {
   const { width, height } = useWindowSize()
   return <div>Window: {width} x {height}</div>
 }
+```
+
+### Update Transactions by Merchant Mapping
+```jsx
+// Pattern: Update existing transactions when a merchant mapping changes
+const updateTransactionsByMerchant = async (merchantName, categoryName, transactionType = 'expense') => {
+  // 1. Get the category ID for the new category
+  const targetCategory = categories.find(c => c.name === categoryName && c.type === transactionType);
+  if (!targetCategory) return { updated: 0, error: 'Category not found' };
+
+  // 2. Fetch transactions matching merchant name (case-insensitive substring match)
+  const { data: transactions, error } = await supabase
+    .from('transactions')
+    .select('id, description, category_id')
+    .eq('user_id', user.id)
+    .eq('type', transactionType)
+    .ilike('description', `%${merchantName}%`);
+
+  // 3. Filter out already correctly categorized
+  const transactionsToUpdate = (transactions || []).filter(
+    t => t.category_id !== targetCategory.id
+  );
+
+  // 4. Update in batches
+  const batchSize = 100;
+  for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
+    const batchIds = transactionsToUpdate.slice(i, i + batchSize).map(t => t.id);
+    await supabase
+      .from('transactions')
+      .update({ category_id: targetCategory.id })
+      .in('id', batchIds);
+  }
+
+  return { updated: transactionsToUpdate.length };
+};
+
+// Usage: When adding a new merchant mapping
+if (updateExistingTransactionsCheckbox) {
+  const result = await updateTransactionsByMerchant(merchantName, selectedCategory, 'expense');
+  console.log(`Updated ${result.updated} transactions`);
+}
+```
+
+### Re-categorize All Transactions
+```jsx
+// Pattern: Apply all merchant mappings to re-categorize all transactions
+const handleRecategorizeAll = async () => {
+  // 1. Fetch all merchant mappings
+  const { data: mappings } = await supabase
+    .from('merchant_mappings')
+    .select('transaction_description, category_name')
+    .eq('user_id', user.id);
+
+  // 2. Build category lookup maps (name -> id)
+  const expenseCategoryMap = {};
+  const incomeCategoryMap = {};
+  categories.forEach(cat => {
+    if (cat.type === 'income') {
+      incomeCategoryMap[cat.name] = cat.id;
+    } else {
+      expenseCategoryMap[cat.name] = cat.id;
+    }
+  });
+
+  // 3. Fetch all transactions
+  const { data: transactions } = await supabase
+    .from('transactions')
+    .select('id, description, type, category_id')
+    .eq('user_id', user.id);
+
+  // 4. Match each transaction to mappings (first match wins)
+  const updates = [];
+  for (const transaction of transactions || []) {
+    const normalizedDesc = transaction.description.toUpperCase().trim();
+    const categoryMap = transaction.type === 'income' ? incomeCategoryMap : expenseCategoryMap;
+
+    for (const mapping of mappings || []) {
+      if (normalizedDesc.includes(mapping.transaction_description)) {
+        const newCategoryId = categoryMap[mapping.category_name];
+        if (newCategoryId && newCategoryId !== transaction.category_id) {
+          updates.push({ id: transaction.id, category_id: newCategoryId });
+        }
+        break; // First match wins
+      }
+    }
+  }
+
+  // 5. Update transactions
+  for (const update of updates) {
+    await supabase
+      .from('transactions')
+      .update({ category_id: update.category_id })
+      .eq('id', update.id);
+  }
+
+  return { updated: updates.length };
+};
 ```
 
 ---

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Re-categorize Existing Transactions (2026-01-20):**
+  - New checkbox "Update existing transactions" when adding merchant mappings (checked by default)
+  - Automatically updates existing transactions to new category when mapping is added
+  - New "Re-categorize All Transactions" button in Quick Actions section
+  - Applies all current merchant mappings to re-categorize all existing transactions
+  - Works for both expense and income transaction types
+  - Uses case-insensitive substring matching (same as import)
+
 - **Transaction Soft Delete & Trash (2026-01-18):**
   - Soft delete: Deleted transactions are now moved to trash instead of being permanently deleted
   - Active/Trash toggle: Switch between viewing active transactions and trash

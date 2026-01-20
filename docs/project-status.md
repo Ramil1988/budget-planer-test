@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated:** 2026-01-10
+**Last Updated:** 2026-01-20
 **Current Version:** 2.0.0
 **Status:** Active Development
 
@@ -82,6 +82,23 @@
   - [x] "Remove All" button on Transactions page
   - [x] Confirmation dialog with transaction count
   - [x] Warning message for irreversible action
+
+#### Phase 6: Category & Transaction Management Enhancements
+- [x] Transaction Soft Delete & Trash
+  - [x] Soft delete moves transactions to trash instead of permanent deletion
+  - [x] Active/Trash toggle to switch between views
+  - [x] Restore individual transactions from trash
+  - [x] Permanent delete from trash
+  - [x] Empty Trash bulk permanent delete
+- [x] Re-categorize Existing Transactions
+  - [x] "Update existing transactions" checkbox when adding merchant mappings
+  - [x] Automatically updates existing transactions to new category
+  - [x] "Re-categorize All Transactions" button in Quick Actions
+  - [x] Applies all merchant mappings to re-categorize all transactions
+  - [x] Works for both expense and income types
+- [x] Business Days Only for Recurring Payments
+  - [x] Toggle to skip weekends for recurring payments
+  - [x] Fixed infinite loop bug in projections
 
 ---
 
