@@ -485,9 +485,24 @@ const FinancialHealthScore = ({ totalAssets, totalLiabilities, liquidAssets, inv
         <Text fontSize="sm" fontWeight="700" color={colors.textMuted}>FINANCIAL HEALTH</Text>
         <Box
           position="relative"
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
-          onClick={() => setShowTooltip(!showTooltip)}
+          onMouseEnter={(e) => {
+            // Only use hover on devices with fine pointer (mouse)
+            if (window.matchMedia('(pointer: fine)').matches) {
+              setShowTooltip(true);
+            }
+          }}
+          onMouseLeave={(e) => {
+            // Only use hover on devices with fine pointer (mouse)
+            if (window.matchMedia('(pointer: fine)').matches) {
+              setShowTooltip(false);
+            }
+          }}
+          onClick={(e) => {
+            // On touch devices, use click to toggle
+            if (!window.matchMedia('(pointer: fine)').matches) {
+              setShowTooltip(!showTooltip);
+            }
+          }}
           cursor="pointer"
         >
           <Text fontSize="sm" color={colors.textMuted} _hover={{ color: colors.textSecondary }}>ⓘ</Text>
@@ -1519,6 +1534,10 @@ export default function AssetsLiabilities() {
   const [hoveredAssetCategory, setHoveredAssetCategory] = useState(null);
   const [othersExpanded, setOthersExpanded] = useState(false); // Whether "Other Assets" breakdown is expanded
 
+  // Section collapse state (collapsed by default)
+  const [assetsExpanded, setAssetsExpanded] = useState(false);
+  const [liabilitiesExpanded, setLiabilitiesExpanded] = useState(false);
+
   // Load data
   useEffect(() => {
     if (user) {
@@ -2180,107 +2199,155 @@ export default function AssetsLiabilities() {
 
         {/* Assets Section */}
         <Box>
-          <Flex bg="linear-gradient(135deg, #10B981 0%, #059669 100%)" borderRadius="16px 16px 0 0" p={4} justify="space-between" align="center">
+          <Flex
+            bg="linear-gradient(135deg, #10B981 0%, #059669 100%)"
+            borderRadius={assetsExpanded ? "16px 16px 0 0" : "16px"}
+            p={4}
+            justify="space-between"
+            align="center"
+            cursor="pointer"
+            onClick={() => setAssetsExpanded(!assetsExpanded)}
+            transition="border-radius 0.2s"
+          >
             <HStack>
+              <Text
+                fontSize="lg"
+                transition="transform 0.2s"
+                transform={assetsExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+              >
+                ▶
+              </Text>
               <Text fontSize="xl">📊</Text>
               <Heading size="lg" color="white">Assets</Heading>
               <Text color="whiteAlpha.800" fontSize="sm" ml={2}>({assets.length})</Text>
+              <Text color="white" fontSize="lg" fontWeight="bold" ml={4}>{formatCurrency(totalAssets)}</Text>
             </HStack>
-            <Button bg="white" color="green.700" _hover={{ bg: 'gray.100' }} onClick={() => { setEditingAsset(null); setAssetModalOpen(true); }}>
+            <Button
+              bg="white"
+              color="green.700"
+              _hover={{ bg: 'gray.100' }}
+              onClick={(e) => { e.stopPropagation(); setEditingAsset(null); setAssetModalOpen(true); }}
+            >
               + Add Asset
             </Button>
           </Flex>
-          <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
-            <Box p={4} pb={3} mb={3} borderBottom="1px" borderColor={colors.borderColor} display={{ base: 'none', md: 'block' }}>
-              <Flex gap={3}>
-                <HStack flex="1" minW="0">
-                  <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>CATEGORY</Text>
-                </HStack>
-                <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>NAME</Text>
-                <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>VALUE</Text>
-                <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>% OF TOTAL</Text>
-                <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>NOTE</Text>
-                <Box w="80px" textAlign="center">
-                  <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>ACTIONS</Text>
-                </Box>
-              </Flex>
+          {assetsExpanded && (
+            <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
+              <Box p={4} pb={3} mb={3} borderBottom="1px" borderColor={colors.borderColor} display={{ base: 'none', md: 'block' }}>
+                <Flex gap={3}>
+                  <HStack flex="1" minW="0">
+                    <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>CATEGORY</Text>
+                  </HStack>
+                  <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>NAME</Text>
+                  <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>VALUE</Text>
+                  <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>% OF TOTAL</Text>
+                  <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>NOTE</Text>
+                  <Box w="80px" textAlign="center">
+                    <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>ACTIONS</Text>
+                  </Box>
+                </Flex>
+              </Box>
+              <VStack align="stretch" gap={2}>
+                {assets.length === 0 ? (
+                  <Box textAlign="center" py={8}>
+                    <Text fontSize="3xl" mb={2}>🏦</Text>
+                    <Text color={colors.textMuted} fontSize="md">No assets yet. Click "Add Asset" to get started.</Text>
+                  </Box>
+                ) : (
+                  [...assets].sort((a, b) => parseFloat(b.amount || 0) - parseFloat(a.amount || 0)).map((asset) => (
+                    <AssetRow
+                      key={asset.id}
+                      asset={asset}
+                      category={assetCategories.find((c) => c.id === asset.category_id)}
+                      totalAssets={totalAssets}
+                      onEdit={(a) => { setEditingAsset(a); setAssetModalOpen(true); }}
+                      onDelete={(a) => { setItemToDelete({ ...a, type: 'asset', name: a.name }); setDeleteConfirmOpen(true); }}
+                      colors={colors}
+                    />
+                  ))
+                )}
+              </VStack>
             </Box>
-            <VStack align="stretch" gap={2}>
-              {assets.length === 0 ? (
-                <Box textAlign="center" py={8}>
-                  <Text fontSize="3xl" mb={2}>🏦</Text>
-                  <Text color={colors.textMuted} fontSize="md">No assets yet. Click "Add Asset" to get started.</Text>
-                </Box>
-              ) : (
-                [...assets].sort((a, b) => parseFloat(b.amount || 0) - parseFloat(a.amount || 0)).map((asset) => (
-                  <AssetRow
-                    key={asset.id}
-                    asset={asset}
-                    category={assetCategories.find((c) => c.id === asset.category_id)}
-                    totalAssets={totalAssets}
-                    onEdit={(a) => { setEditingAsset(a); setAssetModalOpen(true); }}
-                    onDelete={(a) => { setItemToDelete({ ...a, type: 'asset', name: a.name }); setDeleteConfirmOpen(true); }}
-                    colors={colors}
-                  />
-                ))
-              )}
-            </VStack>
-          </Box>
+          )}
         </Box>
 
         {/* Liabilities Section */}
         <Box>
-          <Flex bg="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)" borderRadius="16px 16px 0 0" p={4} justify="space-between" align="center">
+          <Flex
+            bg="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)"
+            borderRadius={liabilitiesExpanded ? "16px 16px 0 0" : "16px"}
+            p={4}
+            justify="space-between"
+            align="center"
+            cursor="pointer"
+            onClick={() => setLiabilitiesExpanded(!liabilitiesExpanded)}
+            transition="border-radius 0.2s"
+          >
             <HStack>
+              <Text
+                fontSize="lg"
+                transition="transform 0.2s"
+                transform={liabilitiesExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+              >
+                ▶
+              </Text>
               <Text fontSize="xl">💳</Text>
               <Heading size="lg" color="white">Debts & Liabilities</Heading>
               <Text color="whiteAlpha.800" fontSize="sm" ml={2}>({liabilities.length})</Text>
+              <Text color="white" fontSize="lg" fontWeight="bold" ml={4}>{formatCurrency(totalLiabilities)}</Text>
             </HStack>
-            <Button bg="white" color="red.700" _hover={{ bg: 'gray.100' }} onClick={() => { setEditingLiability(null); setLiabilityModalOpen(true); }}>
+            <Button
+              bg="white"
+              color="red.700"
+              _hover={{ bg: 'gray.100' }}
+              onClick={(e) => { e.stopPropagation(); setEditingLiability(null); setLiabilityModalOpen(true); }}
+            >
               + Add Debt
             </Button>
           </Flex>
-          <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
-            <Box p={4} pb={3} mb={3} borderBottom="1px" borderColor={colors.borderColor} display={{ base: 'none', md: 'block' }}>
-              <Flex gap={3}>
-                <HStack flex="1" minW="0">
-                  <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>TYPE</Text>
-                </HStack>
-                <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>CREDITOR</Text>
-                <Box flex="1" minW="0">
-                  <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>BALANCE</Text>
-                </Box>
-                <Box flex="1" minW="0">
-                  <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>PAYMENT</Text>
-                </Box>
-                <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>INTEREST</Text>
-                <Box w="80px" textAlign="center">
-                  <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>ACTIONS</Text>
-                </Box>
-              </Flex>
+          {liabilitiesExpanded && (
+            <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
+              <Box p={4} pb={3} mb={3} borderBottom="1px" borderColor={colors.borderColor} display={{ base: 'none', md: 'block' }}>
+                <Flex gap={3}>
+                  <HStack flex="1" minW="0">
+                    <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>TYPE</Text>
+                  </HStack>
+                  <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>CREDITOR</Text>
+                  <Box flex="1" minW="0">
+                    <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>BALANCE</Text>
+                  </Box>
+                  <Box flex="1" minW="0">
+                    <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>PAYMENT</Text>
+                  </Box>
+                  <Text flex="1" minW="0" fontSize="xs" fontWeight="700" color={colors.textMuted}>INTEREST</Text>
+                  <Box w="80px" textAlign="center">
+                    <Text fontSize="xs" fontWeight="700" color={colors.textMuted}>ACTIONS</Text>
+                  </Box>
+                </Flex>
+              </Box>
+              <VStack align="stretch" gap={2}>
+                {liabilities.length === 0 ? (
+                  <Box textAlign="center" py={8}>
+                    <Text fontSize="3xl" mb={2}>🎉</Text>
+                    <Text color={colors.textMuted} fontSize="md">No debts! You're debt-free!</Text>
+                  </Box>
+                ) : (
+                  [...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).map((liability) => (
+                    <LiabilityRow
+                      key={liability.id}
+                      liability={liability}
+                      type={liabilityTypes.find((t) => t.id === liability.type_id)}
+                      linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
+                      payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
+                      onEdit={(l) => { setEditingLiability(l); setLiabilityModalOpen(true); }}
+                      onDelete={(l) => { setItemToDelete({ ...l, type: 'liability', name: l.creditor }); setDeleteConfirmOpen(true); }}
+                      colors={colors}
+                    />
+                  ))
+                )}
+              </VStack>
             </Box>
-            <VStack align="stretch" gap={2}>
-              {liabilities.length === 0 ? (
-                <Box textAlign="center" py={8}>
-                  <Text fontSize="3xl" mb={2}>🎉</Text>
-                  <Text color={colors.textMuted} fontSize="md">No debts! You're debt-free!</Text>
-                </Box>
-              ) : (
-                [...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).map((liability) => (
-                  <LiabilityRow
-                    key={liability.id}
-                    liability={liability}
-                    type={liabilityTypes.find((t) => t.id === liability.type_id)}
-                    linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
-                    payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
-                    onEdit={(l) => { setEditingLiability(l); setLiabilityModalOpen(true); }}
-                    onDelete={(l) => { setItemToDelete({ ...l, type: 'liability', name: l.creditor }); setDeleteConfirmOpen(true); }}
-                    colors={colors}
-                  />
-                ))
-              )}
-            </VStack>
-          </Box>
+          )}
         </Box>
 
         {/* Debt Payoff Projections */}
