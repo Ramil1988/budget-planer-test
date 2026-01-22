@@ -747,7 +747,7 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
 
   const projection = calculatePayoff();
   const totalPaid = payments?.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0) || 0;
-  const recentPayments = payments?.slice(0, 3) || [];
+  const recentPayments = payments?.slice(0, 2) || [];
 
   return (
     <Box bg={colors.cardBg} borderRadius="12px" p={4} borderWidth="1px" borderColor={linkedCategory ? 'blue.200' : colors.borderSubtle}>
@@ -821,9 +821,9 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
                 <Text fontSize="xs" fontWeight="600" color="green.600">{formatCurrency(payment.amount)}</Text>
               </Flex>
             ))}
-            {payments?.length > 3 && (
+            {payments?.length > 2 && (
               <Text fontSize="xs" color={colors.textMuted} textAlign="center">
-                +{payments.length - 3} more payments
+                +{payments.length - 2} more payments
               </Text>
             )}
           </VStack>
@@ -2480,25 +2480,44 @@ export default function AssetsLiabilities() {
         {/* Liability Payoff Projections */}
         {liabilities.length > 0 && (
           <Box bg={colors.cardBg} borderRadius="20px" p={6} borderWidth="1px" borderColor={colors.borderSubtle}>
-            <Heading size="md" mb={4} color={colors.textPrimary}>📅 Liability Payoff Projections</Heading>
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
-              {[...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).map((liability) => {
-                const linkedRecurring = liability.linked_category_id
-                  ? recurringPayments?.find((rp) => rp.category_id === liability.linked_category_id && rp.is_active && rp.type === 'expense')
-                  : null;
-                return (
-                  <DebtPayoffCard
-                    key={liability.id}
-                    liability={liability}
-                    liabilityType={liabilityTypes.find((t) => t.id === liability.type_id)}
-                    linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
-                    linkedRecurring={linkedRecurring}
-                    payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
-                    colors={colors}
-                  />
-                );
-              })}
-            </SimpleGrid>
+            <HStack justify="space-between" mb={4}>
+              <Heading size="md" color={colors.textPrimary}>📅 Liability Payoff Projections</Heading>
+              {liabilities.length > 3 && (
+                <Text fontSize="sm" color={colors.textMuted}>
+                  Scroll for more →
+                </Text>
+              )}
+            </HStack>
+            <Box
+              overflowX="auto"
+              mx={-2}
+              px={2}
+              css={{
+                '&::-webkit-scrollbar': { height: '8px' },
+                '&::-webkit-scrollbar-track': { background: 'transparent' },
+                '&::-webkit-scrollbar-thumb': { background: colors.borderColor, borderRadius: '4px' },
+              }}
+            >
+              <Flex gap={4} pb={2} minW="min-content">
+                {[...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).map((liability) => {
+                  const linkedRecurring = liability.linked_category_id
+                    ? recurringPayments?.find((rp) => rp.category_id === liability.linked_category_id && rp.is_active && rp.type === 'expense')
+                    : null;
+                  return (
+                    <Box key={liability.id} minW={{ base: '280px', md: '300px' }} maxW={{ base: '280px', md: '300px' }}>
+                      <DebtPayoffCard
+                        liability={liability}
+                        liabilityType={liabilityTypes.find((t) => t.id === liability.type_id)}
+                        linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
+                        linkedRecurring={linkedRecurring}
+                        payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
+                        colors={colors}
+                      />
+                    </Box>
+                  );
+                })}
+              </Flex>
+            </Box>
           </Box>
         )}
 
