@@ -405,8 +405,8 @@ const getMetricDescriptions = (totalAssets, totalLiabilities, liquidAssets, inve
     'Emergency Fund': {
       what: 'How many months you can survive on savings',
       calculation: `${formatTooltipCurrency(liquidAssets)} ÷ ${formatTooltipCurrency(monthlyExpenses)}/mo = ${monthsCovered.toFixed(1)} months`,
-      scoring: `${monthsCovered.toFixed(1)} months × 5 pts = ${getPoints('Emergency Fund')} pts (max 30)`,
-      tip: monthsCovered >= 6 ? 'Excellent emergency fund!' : 'Build up 6 months of expenses in cash/savings',
+      scoring: `${monthsCovered.toFixed(1)} months × 2.5 pts = ${getPoints('Emergency Fund')} pts (max 30)`,
+      tip: monthsCovered >= 12 ? 'Excellent emergency fund!' : 'Build up 12 months of expenses in cash/savings',
     },
     'Investments': {
       what: 'How much of your wealth is invested for growth',
@@ -438,9 +438,9 @@ const FinancialHealthScore = ({ totalAssets, totalLiabilities, liquidAssets, inv
     score += debtScore;
     breakdown.push({ label: 'Low Debt Ratio', points: debtScore, max: 30 });
 
-    // 2. Emergency Fund Coverage (30 points max)
+    // 2. Emergency Fund Coverage (30 points max) - target 12 months
     const monthsCovered = monthlyExpenses > 0 ? liquidAssets / monthlyExpenses : 0;
-    const emergencyScore = Math.min(30, Math.round(monthsCovered * 5));
+    const emergencyScore = Math.min(30, Math.round(monthsCovered * 2.5));
     score += emergencyScore;
     breakdown.push({ label: 'Emergency Fund', points: emergencyScore, max: 30 });
 
@@ -620,7 +620,7 @@ const FinancialHealthScore = ({ totalAssets, totalLiabilities, liquidAssets, inv
             <Text fontSize="lg" fontWeight="700" color={scoreColor}>{getScoreLabel()}</Text>
           </HStack>
           {breakdown.map((item, i) => (
-            <Flex key={i} justify="space-between" align="center">
+            <Flex key={i} justify="space-between" align="center" gap={3}>
               <Text fontSize="xs" color={colors.textSecondary}>{item.label}</Text>
               <HStack gap={2}>
                 <Box w="60px" h="8px" bg={colors.rowStripedBg} borderRadius="full" overflow="hidden" border="1px solid" borderColor={colors.borderColor}>
@@ -641,13 +641,13 @@ const FinancialHealthScore = ({ totalAssets, totalLiabilities, liquidAssets, inv
 // Emergency Fund Indicator
 const EmergencyFundIndicator = ({ liquidAssets, monthlyExpenses, colors }) => {
   const monthsCovered = monthlyExpenses > 0 ? liquidAssets / monthlyExpenses : 0;
-  const target = 6;
+  const target = 12;
   const progress = Math.min((monthsCovered / target) * 100, 100);
 
   const getStatus = () => {
-    if (monthsCovered >= 6) return { label: 'Excellent', color: '#10B981', icon: '✅' };
-    if (monthsCovered >= 3) return { label: 'Good', color: '#3B82F6', icon: '👍' };
-    if (monthsCovered >= 1) return { label: 'Building', color: '#F59E0B', icon: '🔨' };
+    if (monthsCovered >= 12) return { label: 'Excellent', color: '#10B981', icon: '✅' };
+    if (monthsCovered >= 6) return { label: 'Good', color: '#3B82F6', icon: '👍' };
+    if (monthsCovered >= 3) return { label: 'Building', color: '#F59E0B', icon: '🔨' };
     return { label: 'Critical', color: '#EF4444', icon: '⚠️' };
   };
 
@@ -672,7 +672,7 @@ const EmergencyFundIndicator = ({ liquidAssets, monthlyExpenses, colors }) => {
 
       <Flex justify="space-between">
         <Text fontSize="xs" color={colors.textMuted}>Available: {formatCurrency(liquidAssets)}</Text>
-        <Text fontSize="xs" color={colors.textMuted}>Target: 6 months</Text>
+        <Text fontSize="xs" color={colors.textMuted}>Target: 12 months</Text>
       </Flex>
     </Box>
   );
@@ -2306,7 +2306,6 @@ export default function AssetsLiabilities() {
                   </Text>
                   <Text fontSize="xl">📊</Text>
                   <Heading size={{ base: 'md', md: 'lg' }} color="white">Assets</Heading>
-                  <Text color="whiteAlpha.800" fontSize="sm">({assets.length})</Text>
                 </HStack>
                 <Button
                   bg="white"
@@ -2425,7 +2424,6 @@ export default function AssetsLiabilities() {
                   </Text>
                   <Text fontSize="xl">💳</Text>
                   <Heading size={{ base: 'md', md: 'lg' }} color="white">Liabilities</Heading>
-                  <Text color="whiteAlpha.800" fontSize="sm">({liabilities.length})</Text>
                 </HStack>
                 <Button
                   bg="white"
