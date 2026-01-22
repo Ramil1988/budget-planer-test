@@ -2294,26 +2294,20 @@ export default function AssetsLiabilities() {
             onClick={() => setAssetsExpanded(!assetsExpanded)}
             transition="border-radius 0.2s"
           >
-            <Flex justify="space-between" align="center">
-              <HStack gap={2}>
-                <Text
-                  fontSize="lg"
-                  transition="transform 0.2s"
-                  transform={assetsExpanded ? "rotate(90deg)" : "rotate(0deg)"}
-                >
-                  ▶
-                </Text>
-                <Text fontSize="xl">📊</Text>
-                <Heading size={{ base: 'md', md: 'lg' }} color="white">Assets</Heading>
-              </HStack>
-              <HStack gap={3}>
-                <Text
-                  color="white"
-                  fontSize={{ base: 'md', md: 'lg' }}
-                  fontWeight="bold"
-                >
-                  {formatCurrency(totalAssets)}
-                </Text>
+            <Box position="relative">
+              <Flex justify="space-between" align="center">
+                <HStack gap={2}>
+                  <Text
+                    fontSize="lg"
+                    transition="transform 0.2s"
+                    transform={assetsExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                  >
+                    ▶
+                  </Text>
+                  <Text fontSize="xl">📊</Text>
+                  <Heading size={{ base: 'md', md: 'lg' }} color="white">Assets</Heading>
+                  <Text color="whiteAlpha.800" fontSize="sm">({assets.length})</Text>
+                </HStack>
                 <Button
                   bg="white"
                   color="green.700"
@@ -2330,8 +2324,20 @@ export default function AssetsLiabilities() {
                 >
                   +
                 </Button>
-              </HStack>
-            </Flex>
+              </Flex>
+              <Text
+                color="white"
+                fontSize={{ base: 'md', md: 'lg' }}
+                fontWeight="bold"
+                position="absolute"
+                left="50%"
+                top="50%"
+                transform="translate(-50%, -50%)"
+                pointerEvents="none"
+              >
+                {formatCurrency(totalAssets)}
+              </Text>
+            </Box>
           </Box>
           {assetsExpanded && (
             <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
@@ -2407,26 +2413,20 @@ export default function AssetsLiabilities() {
             onClick={() => setLiabilitiesExpanded(!liabilitiesExpanded)}
             transition="border-radius 0.2s"
           >
-            <Flex justify="space-between" align="center">
-              <HStack gap={2}>
-                <Text
-                  fontSize="lg"
-                  transition="transform 0.2s"
-                  transform={liabilitiesExpanded ? "rotate(90deg)" : "rotate(0deg)"}
-                >
-                  ▶
-                </Text>
-                <Text fontSize="xl">💳</Text>
-                <Heading size={{ base: 'md', md: 'lg' }} color="white">Liabilities</Heading>
-              </HStack>
-              <HStack gap={3}>
-                <Text
-                  color="white"
-                  fontSize={{ base: 'md', md: 'lg' }}
-                  fontWeight="bold"
-                >
-                  {formatCurrency(totalLiabilities)}
-                </Text>
+            <Box position="relative">
+              <Flex justify="space-between" align="center">
+                <HStack gap={2}>
+                  <Text
+                    fontSize="lg"
+                    transition="transform 0.2s"
+                    transform={liabilitiesExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                  >
+                    ▶
+                  </Text>
+                  <Text fontSize="xl">💳</Text>
+                  <Heading size={{ base: 'md', md: 'lg' }} color="white">Liabilities</Heading>
+                  <Text color="whiteAlpha.800" fontSize="sm">({liabilities.length})</Text>
+                </HStack>
                 <Button
                   bg="white"
                   color="red.700"
@@ -2443,8 +2443,20 @@ export default function AssetsLiabilities() {
                 >
                   +
                 </Button>
-              </HStack>
-            </Flex>
+              </Flex>
+              <Text
+                color="white"
+                fontSize={{ base: 'md', md: 'lg' }}
+                fontWeight="bold"
+                position="absolute"
+                left="50%"
+                top="50%"
+                transform="translate(-50%, -50%)"
+                pointerEvents="none"
+              >
+                {formatCurrency(totalLiabilities)}
+              </Text>
+            </Box>
           </Box>
           {liabilitiesExpanded && (
             <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
