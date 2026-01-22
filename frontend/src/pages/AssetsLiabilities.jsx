@@ -1621,6 +1621,10 @@ export default function AssetsLiabilities() {
   const [assetsExpanded, setAssetsExpanded] = useState(false);
   const [liabilitiesExpanded, setLiabilitiesExpanded] = useState(false);
 
+  // Show all assets state (when false, only show first 2)
+  const [showAllAssets, setShowAllAssets] = useState(false);
+  const INITIAL_ASSETS_DISPLAY = 2;
+
   // Load data
   useEffect(() => {
     if (user) {
@@ -2353,22 +2357,39 @@ export default function AssetsLiabilities() {
                   </Box>
                 ) : (
                   <>
-                    {[...assets].sort((a, b) => parseFloat(b.amount || 0) - parseFloat(a.amount || 0)).slice(0, 2).map((asset) => (
-                      <AssetRow
-                        key={asset.id}
-                        asset={asset}
-                        category={assetCategories.find((c) => c.id === asset.category_id)}
-                        totalAssets={totalAssets}
-                        onEdit={(a) => { setEditingAsset(a); setAssetModalOpen(true); }}
-                        onDelete={(a) => { setItemToDelete({ ...a, type: 'asset', name: a.name }); setDeleteConfirmOpen(true); }}
-                        colors={colors}
-                      />
-                    ))}
-                    {assets.length > 2 && (
-                      <Text fontSize="sm" color={colors.textMuted} textAlign="center" py={2}>
-                        +{assets.length - 2} more assets
-                      </Text>
-                    )}
+                    {(() => {
+                      const sortedAssets = [...assets].sort((a, b) => parseFloat(b.amount || 0) - parseFloat(a.amount || 0));
+                      const displayedAssets = showAllAssets ? sortedAssets : sortedAssets.slice(0, INITIAL_ASSETS_DISPLAY);
+                      const hiddenCount = sortedAssets.length - INITIAL_ASSETS_DISPLAY;
+                      return (
+                        <>
+                          {displayedAssets.map((asset) => (
+                            <AssetRow
+                              key={asset.id}
+                              asset={asset}
+                              category={assetCategories.find((c) => c.id === asset.category_id)}
+                              totalAssets={totalAssets}
+                              onEdit={(a) => { setEditingAsset(a); setAssetModalOpen(true); }}
+                              onDelete={(a) => { setItemToDelete({ ...a, type: 'asset', name: a.name }); setDeleteConfirmOpen(true); }}
+                              colors={colors}
+                            />
+                          ))}
+                          {hiddenCount > 0 && (
+                            <Box textAlign="center" py={3}>
+                              <Text
+                                fontSize="sm"
+                                color={colors.textMuted}
+                                cursor="pointer"
+                                _hover={{ color: 'green.500', textDecoration: 'underline' }}
+                                onClick={() => setShowAllAssets(!showAllAssets)}
+                              >
+                                {showAllAssets ? 'Show less' : `+${hiddenCount} more assets`}
+                              </Text>
+                            </Box>
+                          )}
+                        </>
+                      );
+                    })()}
                   </>
                 )}
               </VStack>
