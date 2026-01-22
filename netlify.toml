@@ -5,6 +5,14 @@
   # Build command: install dependencies for functions and frontend, then build
   command = "cd netlify/functions && npm install && cd ../../frontend && npm install && npm run build"
 
+[dev]
+  # Local development settings
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  dir = "frontend"
+  autoLaunch = false
+
   # Publish directory is where Vite outputs the built files
   publish = "frontend/dist"
 

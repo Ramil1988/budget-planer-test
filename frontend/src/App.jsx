@@ -16,7 +16,7 @@ import AddTransaction from './pages/AddTransaction'
 import Budget from './pages/Budget'
 import RecurringPayments from './pages/RecurringPayments'
 import Reports from './pages/Reports'
-import Settings from './pages/Settings'
+import AssetsLiabilities from './pages/AssetsLiabilities'
 
 function App() {
   return (
@@ -97,10 +97,10 @@ function App() {
           }
         />
         <Route
-          path="/settings"
+          path="/assets-liabilities"
           element={
             <ProtectedRoute>
-              <Settings />
+              <AssetsLiabilities />
             </ProtectedRoute>
           }
         />

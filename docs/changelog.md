@@ -8,6 +8,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Assets & Liabilities UX Improvements (2026-01-21):**
+  - **Auto-save Snapshots:** Snapshots are now automatically saved when you add, edit, or delete any asset or liability
+    - No need to manually click "Save Snapshot" — today's snapshot updates automatically with each change
+    - Multiple edits on the same day update the same snapshot (upsert by date)
+    - Manual "Save Snapshot" button still available for backdating snapshots to specific dates
+  - **Improved Emergency Fund Calculation:**
+    - Monthly expenses now uses your **Budget plan** amount (from Budget page) as the primary source
+    - Falls back to average from actual transactions only if no budget is set
+    - When using transactions, divides by actual months with data (not hardcoded 6)
+  - **Expanded Emergency Fund Assets:** Now includes Cash + Savings + TFSA + RRSP (was only Cash + Savings)
+    - Label changed from "Liquid" to "Available" to reflect broader asset inclusion
+  - **Asset Allocation Chart Grouping:**
+    - Categories below 5% are now grouped into "Other Assets" to prevent tiny visual artifacts
+    - Click "Other Assets" in the legend to expand and see individual breakdown
+    - Shows each small category with amount and percentage
+    - Matches the Dashboard chart grouping pattern
+  - **Snapshot Management Modal:**
+    - New "Manage" button next to snapshot count opens management modal
+    - Scrollable table handles 100+ snapshots with sticky header
+    - Shows DATE, ASSETS, LIABILITIES, NET WORTH for each snapshot
+    - Delete any snapshot with the Delete button
+    - Footer shows total snapshot count
+
+- **Link Liabilities to Spending Categories (2026-01-21):**
+  - **Auto-reduce Balance:** Link liabilities (Mortgage, Autocredit, Government Loan) to spending categories
+  - When you make payments in the linked category, the liability balance automatically decreases
+  - Database triggers handle insert/update/delete of transactions linked to liabilities
+  - **Auto-fill Monthly Payment:** When linking a category, the monthly payment is auto-filled from recurring payments
+  - **Category Dropdown Enhancement:** Shows recurring payment amount next to each category (e.g., "Autocredit ($500/mo)")
+  - **Visual Indicators:** Linked liabilities show blue border and linked category name with 🔗 icon
+  - **Payment History:** Debt Payoff Cards show recent payments made via linked category
+  - **Total Paid Tracking:** See total amount paid via linked category in liability rows
+  - **Migration:** `005_link_liabilities_to_categories.sql` adds `linked_category_id` column and triggers
+
+- **Enhanced Assets & Liabilities Page (2026-01-21):**
+  - **Asset Allocation Donut Chart:** Interactive SVG donut chart showing asset breakdown by category with hover effects and legend
+  - **Financial Health Score (0-100):** Circular gauge with scoring algorithm based on:
+    - Debt-to-Asset Ratio (30 points max)
+    - Emergency Fund coverage (30 points max)
+    - Investment Allocation (20 points max)
+    - Positive Net Worth (20 points max)
+  - **Emergency Fund Indicator:** Shows months of expenses covered by liquid assets with status labels (Excellent/Good/Building/Critical)
+  - **Debt Payoff Projections:** Cards for each liability showing payoff date, time to payoff, total interest, with warnings for insufficient payments
+  - **Net Worth Trend Line Chart:** SVG line chart with gradient fill showing historical net worth from snapshots with hover tooltips
+  - **Modal-based Forms:** Replaced inline editing with proper modal dialogs for adding/editing assets and liabilities
+  - **Delete Confirmation Dialog:** Safety dialog before deleting any asset or liability
+  - **Enhanced Rows:** Asset rows now show percentage of total assets; liability rows show payoff progress bars
+  - **Key Metrics Cards:** Home Equity, Investments, Liquid Assets with percentage of total calculations
+  - **Auto-calculated Monthly Expenses:** Emergency fund months calculated from average of last 6 months of expense transactions
+
+- **Assets & Liabilities Tracker (2026-01-21):**
+  - Comprehensive net worth management system with full CRUD operations
+  - Track all assets by category (Real Estate, Cash, Savings, RRSP, TFSA, Vehicles, Investments, Other)
+  - Track all liabilities (Mortgages, Car Loans, Student Loans, Credit Cards, Personal Loans, Line of Credit, Other Debt)
+  - Five summary cards: Total Assets, Total Liabilities, Net Worth (Equity), Debt-to-Assets Ratio, Equity Change
+  - Key metrics dashboard: Home Equity, Liquid Assets, Investments, Total Debt
+  - Inline editing: Click any row to edit asset/liability details
+  - Historical snapshots: Save net worth snapshots for trend analysis
+  - Date comparison: Compare current net worth vs previous snapshots
+  - Auto-seeding: New users automatically receive 8 asset categories and 7 liability types
+  - Database tables: `assets`, `liabilities`, `asset_categories`, `liability_types`, `net_worth_snapshots`
+  - Database migrations: `003_assets_liabilities.sql` and `004_auto_seed_assets_liabilities.sql`
+  - Navigation: Added "Assets" link to Header (desktop) and "Assets & Liabilities" to mobile menu
+  - Page route: `/assets-liabilities` (protected)
+  - Full dark mode support with gradient headers (green for assets, red for liabilities)
+  - Responsive design with mobile-optimized card layout
+  - Documentation: `docs/assets-liabilities-feature.md` and `backend/database/migrations/README.md`
+
 - **Inline Category Editing on Transactions Page (2026-01-20):**
   - Click on any category name (shown in blue) to change it directly
   - Dropdown shows all categories matching the transaction type (expense/income)

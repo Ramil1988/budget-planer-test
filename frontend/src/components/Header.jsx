@@ -126,7 +126,7 @@ function Header() {
               <NavLink to="/transactions">Transactions</NavLink>
               <NavLink to="/import">Import</NavLink>
               <NavLink to="/categories">Categories</NavLink>
-              <NavLink to="/settings">Settings</NavLink>
+              <NavLink to="/assets-liabilities">Assets</NavLink>
             </>
           )}
         </HStack>
@@ -266,8 +266,8 @@ function Header() {
                 <MobileNavLink to="/categories" active={isActive('/categories')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Categories
                 </MobileNavLink>
-                <MobileNavLink to="/settings" active={isActive('/settings')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Settings
+                <MobileNavLink to="/assets-liabilities" active={isActive('/assets-liabilities')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
+                  Assets & Liabilities
                 </MobileNavLink>
                 <Box pt={3} borderTop="1px solid" borderColor={borderColor} mt={2}>
                   <Button

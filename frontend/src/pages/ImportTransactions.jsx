@@ -20,7 +20,13 @@ import { useAutoSync } from '../contexts/AutoSyncContext';
 import PageContainer from '../components/PageContainer';
 import { fetchTransactionsFromGoogleSheets, parseCSVFile, validateTransactions, extractSheetId } from '../lib/importUtils';
 import { supabase } from '../lib/supabaseClient';
-import { showNotification, checkBudgetAndNotify, getNotificationPermission } from '../lib/notifications';
+import {
+  showNotification,
+  checkBudgetAndNotify,
+  getNotificationPermission,
+  isNotificationSupported,
+  requestNotificationPermission,
+} from '../lib/notifications';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
 
 export default function ImportTransactions() {
@@ -48,6 +54,10 @@ export default function ImportTransactions() {
   // Webhook setup state
   const [copiedField, setCopiedField] = useState(null);
 
+  // Notification settings state
+  const [notificationStatus, setNotificationStatus] = useState('checking');
+  const [requestingPermission, setRequestingPermission] = useState(false);
+
   // Sheet configuration state
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetName, setSheetName] = useState('Expenses');
@@ -70,6 +80,56 @@ export default function ImportTransactions() {
       loadSavedSettings();
     }
   }, [user]);
+
+  // Check notification status on mount
+  useEffect(() => {
+    checkNotificationStatus();
+  }, []);
+
+  const checkNotificationStatus = () => {
+    if (!isNotificationSupported()) {
+      setNotificationStatus('unsupported');
+    } else {
+      setNotificationStatus(getNotificationPermission());
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    setRequestingPermission(true);
+    try {
+      const permission = await requestNotificationPermission();
+      setNotificationStatus(permission);
+
+      if (permission === 'granted') {
+        showNotification('Notifications Enabled!', {
+          body: 'You will now receive budget alerts and transaction notifications.',
+        });
+      }
+    } catch (err) {
+      console.error('Error requesting notification permission:', err);
+    } finally {
+      setRequestingPermission(false);
+    }
+  };
+
+  const handleTestNotification = () => {
+    showNotification('Test Notification', {
+      body: 'This is a test notification from BudgetWise!',
+    });
+  };
+
+  const getStatusBadge = () => {
+    switch (notificationStatus) {
+      case 'granted':
+        return <Badge colorPalette="green">Enabled</Badge>;
+      case 'denied':
+        return <Badge colorPalette="red">Blocked</Badge>;
+      case 'unsupported':
+        return <Badge colorPalette="gray">Not Supported</Badge>;
+      default:
+        return <Badge colorPalette="yellow">Not Enabled</Badge>;
+    }
+  };
 
   const loadSavedSettings = async () => {
     setSettingsLoading(true);
@@ -530,11 +590,26 @@ export default function ImportTransactions() {
     <PageContainer>
       <VStack gap={8} align="stretch" w="100%">
           <Box>
-            <Heading size="2xl" color={colors.textPrimary}>Import Transactions</Heading>
+            <Heading size="2xl" color={colors.textPrimary}>Import & Settings</Heading>
             <Text color={colors.textSecondary} mt={2}>
               Connect your Google Sheet for automatic syncing or import from CSV
             </Text>
           </Box>
+
+        {/* Account Info */}
+        <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
+          <Heading size="lg" mb={4} color={colors.textPrimary}>
+            Account Information
+          </Heading>
+          <VStack align="start" gap={2}>
+            <Text color={colors.textPrimary}>
+              <strong>Email:</strong> {user?.email}
+            </Text>
+            <Text color={colors.textPrimary}>
+              <strong>User ID:</strong> {user?.id}
+            </Text>
+          </VStack>
+        </Box>
 
         {/* Messages */}
         {error && (
@@ -1205,6 +1280,67 @@ function testConnection() {
             </Button>
           </>
         )}
+
+        {/* Push Notifications Section */}
+        <Box p={6} borderWidth="1px" borderColor={colors.borderColor} borderRadius="lg" bg={colors.cardBg}>
+          <Heading size="lg" mb={4} color={colors.textPrimary}>
+            Push Notifications
+          </Heading>
+          <VStack align="stretch" gap={4}>
+            <HStack justify="space-between">
+              <Text color={colors.textPrimary}>Status:</Text>
+              {getStatusBadge()}
+            </HStack>
+
+            {notificationStatus === 'unsupported' && (
+              <Box p={4} bg={colors.warningBg} borderRadius="md" borderColor={colors.warningBorder} borderWidth="1px">
+                <Text color={colors.warning} fontSize="sm">
+                  Push notifications are not supported in this browser. For the best experience, add this app to your home screen on iOS 16.4+ or use Chrome on Android.
+                </Text>
+              </Box>
+            )}
+
+            {notificationStatus === 'denied' && (
+              <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
+                <Text color={colors.danger} fontSize="sm">
+                  Notifications are blocked. To enable them, go to your browser settings and allow notifications for this site.
+                </Text>
+              </Box>
+            )}
+
+            {notificationStatus === 'default' && (
+              <Button
+                colorPalette="blue"
+                onClick={handleEnableNotifications}
+                loading={requestingPermission}
+                loadingText="Requesting..."
+              >
+                Enable Notifications
+              </Button>
+            )}
+
+            {notificationStatus === 'granted' && (
+              <VStack align="stretch" gap={3}>
+                <Text color={colors.textSecondary} fontSize="sm">
+                  You will receive notifications for:
+                </Text>
+                <VStack align="start" gap={1} pl={4}>
+                  <Text fontSize="sm" color={colors.textPrimary}>• New transactions added</Text>
+                  <Text fontSize="sm" color={colors.textPrimary}>• Budget limit warnings (80%, 90%, 100%)</Text>
+                </VStack>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestNotification}
+                  mt={2}
+                >
+                  Send Test Notification
+                </Button>
+              </VStack>
+            )}
+          </VStack>
+        </Box>
+
         </VStack>
       </PageContainer>
   );
