@@ -2352,17 +2352,24 @@ export default function AssetsLiabilities() {
                     <Text color={colors.textMuted} fontSize="md">No assets yet. Click "Add Asset" to get started.</Text>
                   </Box>
                 ) : (
-                  [...assets].sort((a, b) => parseFloat(b.amount || 0) - parseFloat(a.amount || 0)).map((asset) => (
-                    <AssetRow
-                      key={asset.id}
-                      asset={asset}
-                      category={assetCategories.find((c) => c.id === asset.category_id)}
-                      totalAssets={totalAssets}
-                      onEdit={(a) => { setEditingAsset(a); setAssetModalOpen(true); }}
-                      onDelete={(a) => { setItemToDelete({ ...a, type: 'asset', name: a.name }); setDeleteConfirmOpen(true); }}
-                      colors={colors}
-                    />
-                  ))
+                  <>
+                    {[...assets].sort((a, b) => parseFloat(b.amount || 0) - parseFloat(a.amount || 0)).slice(0, 2).map((asset) => (
+                      <AssetRow
+                        key={asset.id}
+                        asset={asset}
+                        category={assetCategories.find((c) => c.id === asset.category_id)}
+                        totalAssets={totalAssets}
+                        onEdit={(a) => { setEditingAsset(a); setAssetModalOpen(true); }}
+                        onDelete={(a) => { setItemToDelete({ ...a, type: 'asset', name: a.name }); setDeleteConfirmOpen(true); }}
+                        colors={colors}
+                      />
+                    ))}
+                    {assets.length > 2 && (
+                      <Text fontSize="sm" color={colors.textMuted} textAlign="center" py={2}>
+                        +{assets.length - 2} more assets
+                      </Text>
+                    )}
+                  </>
                 )}
               </VStack>
             </Box>
@@ -2445,18 +2452,25 @@ export default function AssetsLiabilities() {
                     <Text color={colors.textMuted} fontSize="md">No debts! You're debt-free!</Text>
                   </Box>
                 ) : (
-                  [...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).map((liability) => (
-                    <LiabilityRow
-                      key={liability.id}
-                      liability={liability}
-                      type={liabilityTypes.find((t) => t.id === liability.type_id)}
-                      linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
-                      payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
-                      onEdit={(l) => { setEditingLiability(l); setLiabilityModalOpen(true); }}
-                      onDelete={(l) => { setItemToDelete({ ...l, type: 'liability', name: l.creditor }); setDeleteConfirmOpen(true); }}
-                      colors={colors}
-                    />
-                  ))
+                  <>
+                    {[...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).slice(0, 2).map((liability) => (
+                      <LiabilityRow
+                        key={liability.id}
+                        liability={liability}
+                        type={liabilityTypes.find((t) => t.id === liability.type_id)}
+                        linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
+                        payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
+                        onEdit={(l) => { setEditingLiability(l); setLiabilityModalOpen(true); }}
+                        onDelete={(l) => { setItemToDelete({ ...l, type: 'liability', name: l.creditor }); setDeleteConfirmOpen(true); }}
+                        colors={colors}
+                      />
+                    ))}
+                    {liabilities.length > 2 && (
+                      <Text fontSize="sm" color={colors.textMuted} textAlign="center" py={2}>
+                        +{liabilities.length - 2} more liabilities
+                      </Text>
+                    )}
+                  </>
                 )}
               </VStack>
             </Box>
