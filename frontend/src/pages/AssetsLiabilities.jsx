@@ -56,7 +56,7 @@ const defaultLiabilityTypes = [
   { name: 'Credit Card', icon: '💳' },
   { name: 'Personal Loan', icon: '💰' },
   { name: 'Line of Credit', icon: '📝' },
-  { name: 'Other Debt', icon: '💸' },
+  { name: 'Other Liability', icon: '💸' },
 ];
 
 // Asset category colors for charts
@@ -1069,7 +1069,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
           <Dialog.Content maxW="500px" w="90%" borderRadius="20px" bg={colors.cardBg} overflow="hidden">
             <Dialog.Header bg="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)" color="white" p={5}>
               <Flex justify="space-between" align="center">
-                <Dialog.Title fontSize="lg" fontWeight="700">{liability ? 'Edit Liability' : 'Add New Debt'}</Dialog.Title>
+                <Dialog.Title fontSize="lg" fontWeight="700">{liability ? 'Edit Liability' : 'Add New Liability'}</Dialog.Title>
                 <Dialog.CloseTrigger asChild>
                   <CloseButton color="white" _hover={{ bg: 'whiteAlpha.200' }} />
                 </Dialog.CloseTrigger>
@@ -1078,7 +1078,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
             <Dialog.Body p={5}>
               <VStack gap={4}>
                 <Box w="100%">
-                  <Text fontSize="sm" fontWeight="600" mb={2} color={colors.textSecondary}>Debt Type</Text>
+                  <Text fontSize="sm" fontWeight="600" mb={2} color={colors.textSecondary}>Liability Type</Text>
                   <Box
                     as="select"
                     value={formData.type_id}
@@ -1294,7 +1294,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
             <Dialog.Footer p={5} borderTop="1px" borderColor={colors.borderSubtle}>
               <HStack justify="flex-end" gap={3}>
                 <Button variant="ghost" onClick={onClose} color={colors.textSecondary}>Cancel</Button>
-                <Button colorScheme="red" onClick={handleSave} loading={saving}>{liability ? 'Save Changes' : 'Add Debt'}</Button>
+                <Button colorScheme="red" onClick={handleSave} loading={saving}>{liability ? 'Save Changes' : 'Add Liability'}</Button>
               </HStack>
             </Dialog.Footer>
           </Dialog.Content>
@@ -1401,7 +1401,8 @@ const AssetRow = ({ asset, category, totalAssets, onEdit, onDelete, colors }) =>
       cursor="pointer"
       onClick={() => onEdit(asset)}
     >
-      <Flex gap={3} alignItems="center">
+      {/* Desktop layout */}
+      <Flex gap={3} alignItems="center" display={{ base: 'none', md: 'flex' }}>
         <HStack flex="1" minW="0">
           <Text fontSize="lg">{category?.icon}</Text>
           <Text fontSize="sm" fontWeight="600" color={colors.textSecondary} noOfLines={1}>{category?.name}</Text>
@@ -1421,6 +1422,36 @@ const AssetRow = ({ asset, category, totalAssets, onEdit, onDelete, colors }) =>
           </Button>
         </Box>
       </Flex>
+
+      {/* Mobile layout */}
+      <Box display={{ base: 'block', md: 'none' }}>
+        <Flex justify="space-between" align="flex-start" mb={2}>
+          <HStack gap={2} flex="1" minW="0">
+            <Text fontSize="xl">{category?.icon}</Text>
+            <Box flex="1" minW="0">
+              <Text fontSize="md" fontWeight="700" color={colors.textPrimary} noOfLines={2}>{asset.name}</Text>
+              <Text fontSize="xs" color={colors.textMuted}>{category?.name}</Text>
+            </Box>
+          </HStack>
+          <Button
+            size="xs"
+            variant="ghost"
+            colorPalette="red"
+            onClick={(e) => { e.stopPropagation(); onDelete(asset); }}
+          >
+            Delete
+          </Button>
+        </Flex>
+        <Flex justify="space-between" align="center">
+          <HStack gap={3}>
+            <Text fontSize="lg" fontWeight="800" color={colors.success}>{formatCurrency(asset.amount)}</Text>
+            <Text fontSize="sm" color={colors.textMuted} fontWeight="600">({percentOfTotal.toFixed(1)}%)</Text>
+          </HStack>
+        </Flex>
+        {asset.note && (
+          <Text fontSize="xs" color={colors.textSecondary} mt={2} noOfLines={2}>{asset.note}</Text>
+        )}
+      </Box>
     </Box>
   );
 };
@@ -1447,7 +1478,8 @@ const LiabilityRow = ({ liability, type, linkedCategory, payments, onEdit, onDel
       cursor="pointer"
       onClick={() => onEdit(liability)}
     >
-      <Flex gap={3} alignItems="center">
+      {/* Desktop layout */}
+      <Flex gap={3} alignItems="center" display={{ base: 'none', md: 'flex' }}>
         <HStack flex="1" minW="0">
           <Text fontSize="lg">{type?.icon}</Text>
           <VStack align="start" gap={0}>
@@ -1492,6 +1524,57 @@ const LiabilityRow = ({ liability, type, linkedCategory, payments, onEdit, onDel
           </Button>
         </Box>
       </Flex>
+
+      {/* Mobile layout */}
+      <Box display={{ base: 'block', md: 'none' }}>
+        <Flex justify="space-between" align="flex-start" mb={2}>
+          <HStack gap={2} flex="1" minW="0">
+            <Text fontSize="xl">{type?.icon}</Text>
+            <Box flex="1" minW="0">
+              <Text fontSize="md" fontWeight="700" color={colors.textPrimary} noOfLines={2}>{liability.creditor}</Text>
+              <HStack gap={1}>
+                <Text fontSize="xs" color={colors.textMuted}>{type?.name}</Text>
+                {linkedCategory && (
+                  <>
+                    <Text fontSize="xs" color="blue.500">🔗</Text>
+                    <Text fontSize="xs" color="blue.500" fontWeight="500" noOfLines={1}>{linkedCategory.name}</Text>
+                  </>
+                )}
+              </HStack>
+            </Box>
+          </HStack>
+          <Button
+            size="xs"
+            variant="ghost"
+            colorPalette="red"
+            onClick={(e) => { e.stopPropagation(); onDelete(liability); }}
+          >
+            Delete
+          </Button>
+        </Flex>
+        <Flex justify="space-between" align="center" flexWrap="wrap" gap={2}>
+          <Box>
+            <Text fontSize="lg" fontWeight="800" color={colors.danger}>{formatCurrency(liability.outstanding_balance)}</Text>
+            {liability.original_balance > 0 && progress > 0 && (
+              <HStack gap={2} mt={1}>
+                <Box w="60px" h="6px" bg={colors.rowStripedBg} borderRadius="full" overflow="hidden" border="1px solid" borderColor={colors.borderColor}>
+                  <Box h="100%" w={`${progress}%`} bg="green.500" borderRadius="full" />
+                </Box>
+                <Text fontSize="xs" fontWeight="600" color="green.500">{progress.toFixed(0)}%</Text>
+              </HStack>
+            )}
+          </Box>
+          <HStack gap={3} flexWrap="wrap">
+            <Text fontSize="sm" color={colors.textSecondary}>{formatCurrency(liability.monthly_payment)}/mo</Text>
+            <Text fontSize="sm" color={colors.textMuted}>{liability.interest_rate}% APR</Text>
+          </HStack>
+        </Flex>
+        {linkedCategory && totalPaid > 0 && (
+          <Text fontSize="xs" color="green.500" fontWeight="500" mt={2}>
+            {formatCurrency(totalPaid)} paid ({paymentCount} payments)
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 };
@@ -2199,38 +2282,59 @@ export default function AssetsLiabilities() {
 
         {/* Assets Section */}
         <Box>
-          <Flex
+          <Box
             bg="linear-gradient(135deg, #10B981 0%, #059669 100%)"
             borderRadius={assetsExpanded ? "16px 16px 0 0" : "16px"}
             p={4}
-            justify="space-between"
-            align="center"
             cursor="pointer"
             onClick={() => setAssetsExpanded(!assetsExpanded)}
             transition="border-radius 0.2s"
           >
-            <HStack>
+            <Box position="relative">
+              <Flex justify="space-between" align="center">
+                <HStack gap={2}>
+                  <Text
+                    fontSize="lg"
+                    transition="transform 0.2s"
+                    transform={assetsExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                  >
+                    ▶
+                  </Text>
+                  <Text fontSize="xl">📊</Text>
+                  <Heading size={{ base: 'md', md: 'lg' }} color="white">Assets</Heading>
+                  <Text color="whiteAlpha.800" fontSize="sm">({assets.length})</Text>
+                </HStack>
+                <Button
+                  bg="white"
+                  color="green.700"
+                  size="sm"
+                  _hover={{ bg: 'gray.100' }}
+                  onClick={(e) => { e.stopPropagation(); setEditingAsset(null); setAssetModalOpen(true); }}
+                  borderRadius="full"
+                  w="32px"
+                  h="32px"
+                  minW="32px"
+                  p={0}
+                  fontWeight="bold"
+                  fontSize="xl"
+                >
+                  +
+                </Button>
+              </Flex>
               <Text
-                fontSize="lg"
-                transition="transform 0.2s"
-                transform={assetsExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                color="white"
+                fontSize={{ base: 'md', md: 'lg' }}
+                fontWeight="bold"
+                position="absolute"
+                left="50%"
+                top="50%"
+                transform="translate(-50%, -50%)"
+                pointerEvents="none"
               >
-                ▶
+                {formatCurrency(totalAssets)}
               </Text>
-              <Text fontSize="xl">📊</Text>
-              <Heading size="lg" color="white">Assets</Heading>
-              <Text color="whiteAlpha.800" fontSize="sm" ml={2}>({assets.length})</Text>
-              <Text color="white" fontSize="lg" fontWeight="bold" ml={4}>{formatCurrency(totalAssets)}</Text>
-            </HStack>
-            <Button
-              bg="white"
-              color="green.700"
-              _hover={{ bg: 'gray.100' }}
-              onClick={(e) => { e.stopPropagation(); setEditingAsset(null); setAssetModalOpen(true); }}
-            >
-              + Add Asset
-            </Button>
-          </Flex>
+            </Box>
+          </Box>
           {assetsExpanded && (
             <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
               <Box p={4} pb={3} mb={3} borderBottom="1px" borderColor={colors.borderColor} display={{ base: 'none', md: 'block' }}>
@@ -2273,38 +2377,59 @@ export default function AssetsLiabilities() {
 
         {/* Liabilities Section */}
         <Box>
-          <Flex
+          <Box
             bg="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)"
             borderRadius={liabilitiesExpanded ? "16px 16px 0 0" : "16px"}
             p={4}
-            justify="space-between"
-            align="center"
             cursor="pointer"
             onClick={() => setLiabilitiesExpanded(!liabilitiesExpanded)}
             transition="border-radius 0.2s"
           >
-            <HStack>
+            <Box position="relative">
+              <Flex justify="space-between" align="center">
+                <HStack gap={2}>
+                  <Text
+                    fontSize="lg"
+                    transition="transform 0.2s"
+                    transform={liabilitiesExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                  >
+                    ▶
+                  </Text>
+                  <Text fontSize="xl">💳</Text>
+                  <Heading size={{ base: 'md', md: 'lg' }} color="white">Liabilities</Heading>
+                  <Text color="whiteAlpha.800" fontSize="sm">({liabilities.length})</Text>
+                </HStack>
+                <Button
+                  bg="white"
+                  color="red.700"
+                  size="sm"
+                  _hover={{ bg: 'gray.100' }}
+                  onClick={(e) => { e.stopPropagation(); setEditingLiability(null); setLiabilityModalOpen(true); }}
+                  borderRadius="full"
+                  w="32px"
+                  h="32px"
+                  minW="32px"
+                  p={0}
+                  fontWeight="bold"
+                  fontSize="xl"
+                >
+                  +
+                </Button>
+              </Flex>
               <Text
-                fontSize="lg"
-                transition="transform 0.2s"
-                transform={liabilitiesExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                color="white"
+                fontSize={{ base: 'md', md: 'lg' }}
+                fontWeight="bold"
+                position="absolute"
+                left="50%"
+                top="50%"
+                transform="translate(-50%, -50%)"
+                pointerEvents="none"
               >
-                ▶
+                {formatCurrency(totalLiabilities)}
               </Text>
-              <Text fontSize="xl">💳</Text>
-              <Heading size="lg" color="white">Debts & Liabilities</Heading>
-              <Text color="whiteAlpha.800" fontSize="sm" ml={2}>({liabilities.length})</Text>
-              <Text color="white" fontSize="lg" fontWeight="bold" ml={4}>{formatCurrency(totalLiabilities)}</Text>
-            </HStack>
-            <Button
-              bg="white"
-              color="red.700"
-              _hover={{ bg: 'gray.100' }}
-              onClick={(e) => { e.stopPropagation(); setEditingLiability(null); setLiabilityModalOpen(true); }}
-            >
-              + Add Debt
-            </Button>
-          </Flex>
+            </Box>
+          </Box>
           {liabilitiesExpanded && (
             <Box bg={colors.cardBg} borderRadius="0 0 16px 16px" p={4} borderWidth="1px" borderColor={colors.borderColor} borderTop="none">
               <Box p={4} pb={3} mb={3} borderBottom="1px" borderColor={colors.borderColor} display={{ base: 'none', md: 'block' }}>
@@ -2350,10 +2475,10 @@ export default function AssetsLiabilities() {
           )}
         </Box>
 
-        {/* Debt Payoff Projections */}
+        {/* Liability Payoff Projections */}
         {liabilities.length > 0 && (
           <Box bg={colors.cardBg} borderRadius="20px" p={6} borderWidth="1px" borderColor={colors.borderSubtle}>
-            <Heading size="md" mb={4} color={colors.textPrimary}>📅 Debt Payoff Projections</Heading>
+            <Heading size="md" mb={4} color={colors.textPrimary}>📅 Liability Payoff Projections</Heading>
             <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
               {[...liabilities].sort((a, b) => parseFloat(b.outstanding_balance || 0) - parseFloat(a.outstanding_balance || 0)).map((liability) => {
                 const linkedRecurring = liability.linked_category_id
@@ -2380,7 +2505,7 @@ export default function AssetsLiabilities() {
           <HStack justify="space-between" mb={4}>
             <Heading size="md" color={colors.textPrimary}>📈 Net Worth Trend</Heading>
             <HStack gap={3}>
-              <Text fontSize="sm" color={colors.textMuted}>{snapshots.length} snapshots</Text>
+              <Text fontSize="sm" color={colors.textMuted} display={{ base: 'none', md: 'block' }}>{snapshots.length} snapshots</Text>
               {snapshots.length > 0 && (
                 <Button
                   size="sm"
