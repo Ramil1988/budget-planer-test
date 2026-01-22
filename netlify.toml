@@ -4,6 +4,10 @@
 [build]
   # Build command: install dependencies for functions and frontend, then build
   command = "cd netlify/functions && npm install && cd ../../frontend && npm install && npm run build"
+  # Publish directory is where Vite outputs the built files
+  publish = "frontend/dist"
+  # Serverless functions directory
+  functions = "netlify/functions"
 
 [dev]
   # Local development settings
@@ -12,12 +16,6 @@
   port = 8888
   dir = "frontend"
   autoLaunch = false
-
-  # Publish directory is where Vite outputs the built files
-  publish = "frontend/dist"
-
-  # Serverless functions directory
-  functions = "netlify/functions"
 
 [build.environment]
   # Node.js version to use during build
