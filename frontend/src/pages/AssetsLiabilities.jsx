@@ -747,7 +747,7 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
 
   const projection = calculatePayoff();
   const totalPaid = payments?.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0) || 0;
-  const recentPayments = payments?.slice(0, 3) || [];
+  const recentPayments = payments?.slice(0, 2) || [];
 
   return (
     <Box bg={colors.cardBg} borderRadius="12px" p={4} borderWidth="1px" borderColor={linkedCategory ? 'blue.200' : colors.borderSubtle}>
@@ -821,9 +821,9 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
                 <Text fontSize="xs" fontWeight="600" color="green.600">{formatCurrency(payment.amount)}</Text>
               </Flex>
             ))}
-            {payments?.length > 3 && (
+            {payments?.length > 2 && (
               <Text fontSize="xs" color={colors.textMuted} textAlign="center">
-                +{payments.length - 3} more payments
+                +{payments.length - 2} more payments
               </Text>
             )}
           </VStack>
