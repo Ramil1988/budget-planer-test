@@ -201,6 +201,7 @@ export default function Budget() {
   const [previousMonthLimits, setPreviousMonthLimits] = useState({}); // Previous month's budget limits for comparison
   const [setupSortBy, setSetupSortBy] = useState('amount'); // 'amount' or 'name'
   const [committedLimits, setCommittedLimits] = useState({}); // Used for sorting - only updates on blur
+  const [categorySearch, setCategorySearch] = useState(''); // Search filter for categories
 
   useEffect(() => {
     if (user) {
@@ -951,22 +952,43 @@ export default function Budget() {
 
                 {/* Category Cards Grid */}
                 <Box>
-                  <Text
-                    fontSize="sm"
-                    fontWeight="600"
-                    textTransform="uppercase"
-                    letterSpacing="0.05em"
-                    color={colors.textMuted}
+                  <Flex
+                    justify="space-between"
+                    align="center"
                     mb={4}
+                    gap={4}
+                    direction={{ base: 'column', sm: 'row' }}
                   >
-                    By Category
-                  </Text>
+                    <Text
+                      fontSize="sm"
+                      fontWeight="600"
+                      textTransform="uppercase"
+                      letterSpacing="0.05em"
+                      color={colors.textMuted}
+                    >
+                      By Category
+                    </Text>
+                    <Input
+                      placeholder="Search categories..."
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      size="sm"
+                      w={{ base: '100%', sm: '200px' }}
+                      bg={colors.cardBg}
+                      borderColor={colors.borderColor}
+                      color={colors.textPrimary}
+                      borderRadius="8px"
+                      _placeholder={{ color: colors.textMuted }}
+                    />
+                  </Flex>
                   <Box
                     display="grid"
                     gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
                     gap={4}
                   >
-                    {budgetData.map((item, index) => (
+                    {budgetData
+                      .filter(item => item.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                      .map((item, index) => (
                       <BudgetCard
                         key={item.id}
                         item={item}
@@ -976,6 +998,11 @@ export default function Budget() {
                         colors={colors}
                       />
                     ))}
+                    {categorySearch && budgetData.filter(item => item.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                      <Box gridColumn="1 / -1" textAlign="center" py={8}>
+                        <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
+                      </Box>
+                    )}
                   </Box>
                 </Box>
                 </>
@@ -1090,12 +1117,41 @@ export default function Budget() {
                     })()}
 
                     {/* Categories with upcoming payments */}
+                    <Flex
+                      justify="space-between"
+                      align="center"
+                      mb={4}
+                      gap={4}
+                      direction={{ base: 'column', sm: 'row' }}
+                    >
+                      <Text
+                        fontSize="sm"
+                        fontWeight="600"
+                        textTransform="uppercase"
+                        letterSpacing="0.05em"
+                        color={colors.textMuted}
+                      >
+                        By Category
+                      </Text>
+                      <Input
+                        placeholder="Search categories..."
+                        value={categorySearch}
+                        onChange={(e) => setCategorySearch(e.target.value)}
+                        size="sm"
+                        w={{ base: '100%', sm: '200px' }}
+                        bg={colors.cardBg}
+                        borderColor={colors.borderColor}
+                        color={colors.textPrimary}
+                        borderRadius="8px"
+                        _placeholder={{ color: colors.textMuted }}
+                      />
+                    </Flex>
                     <Box
                       display="grid"
                       gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
                       gap={3}
                     >
-                      {forecastData.filter(f => f.limit > 0).map((item, index) => (
+                      {forecastData.filter(f => f.limit > 0 && f.name.toLowerCase().includes(categorySearch.toLowerCase())).map((item, index) => (
                         <Box
                           key={item.id}
                           p={4}
@@ -1232,6 +1288,11 @@ export default function Budget() {
                           )}
                         </Box>
                       ))}
+                      {categorySearch && forecastData.filter(f => f.limit > 0 && f.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                        <Box gridColumn="1 / -1" textAlign="center" py={8}>
+                          <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
+                        </Box>
+                      )}
                     </Box>
                   </Box>
                 )}
@@ -1331,25 +1392,39 @@ export default function Budget() {
                   >
                     Set Category Limits
                   </Text>
-                  <HStack gap={2}>
-                    <Text fontSize="xs" color={colors.textMuted}>Sort by:</Text>
-                    <select
-                      value={setupSortBy}
-                      onChange={(e) => setSetupSortBy(e.target.value)}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '13px',
-                        fontWeight: '500',
-                        borderRadius: '8px',
-                        border: `1px solid ${colors.borderColor}`,
-                        backgroundColor: colors.cardBg,
-                        color: colors.textPrimary,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <option value="amount">Amount (Highest)</option>
-                      <option value="name">Name (A-Z)</option>
-                    </select>
+                  <HStack gap={3} flexWrap="wrap">
+                    <Input
+                      placeholder="Search categories..."
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      size="sm"
+                      w={{ base: '100%', sm: '180px' }}
+                      bg={colors.cardBg}
+                      borderColor={colors.borderColor}
+                      color={colors.textPrimary}
+                      borderRadius="8px"
+                      _placeholder={{ color: colors.textMuted }}
+                    />
+                    <HStack gap={2}>
+                      <Text fontSize="xs" color={colors.textMuted}>Sort:</Text>
+                      <select
+                        value={setupSortBy}
+                        onChange={(e) => setSetupSortBy(e.target.value)}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          borderRadius: '8px',
+                          border: `1px solid ${colors.borderColor}`,
+                          backgroundColor: colors.cardBg,
+                          color: colors.textPrimary,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="amount">Amount (Highest)</option>
+                        <option value="name">Name (A-Z)</option>
+                      </select>
+                    </HStack>
                   </HStack>
                 </Flex>
                 <Box
@@ -1359,6 +1434,7 @@ export default function Budget() {
                 >
                   {categories
                     .slice() // Clone to avoid mutating original
+                    .filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase()))
                     .sort((a, b) => {
                       if (setupSortBy === 'amount') {
                         // Use committedLimits for sorting to prevent re-sorting while typing
@@ -1433,6 +1509,11 @@ export default function Budget() {
                         </Box>
                       );
                     })}
+                    {categorySearch && categories.filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                      <Box gridColumn="1 / -1" textAlign="center" py={8}>
+                        <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
+                      </Box>
+                    )}
                 </Box>
               </Box>
 

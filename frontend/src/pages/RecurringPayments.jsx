@@ -69,6 +69,7 @@ export default function RecurringPayments() {
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('expense');
   const [showInactive, setShowInactive] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null); // Category filter
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -238,10 +239,19 @@ export default function RecurringPayments() {
     }, 3000);
   };
 
+  // Get unique categories for the current tab (for filter chips)
+  const availableCategories = [...new Set(
+    recurringPayments
+      .filter(p => p.type === activeTab && (showInactive || p.is_active) && p.categories?.name)
+      .map(p => p.categories.name)
+  )].sort();
+
   // Filter payments
   const filteredPayments = recurringPayments.filter(p => {
     if (p.type !== activeTab) return false;
     if (!showInactive && !p.is_active) return false;
+    // Category filter
+    if (selectedCategory && p.categories?.name !== selectedCategory) return false;
     return true;
   });
 
@@ -356,7 +366,7 @@ export default function RecurringPayments() {
             size={{ base: 'md', md: 'lg' }}
             variant={activeTab === 'expense' ? 'solid' : 'outline'}
             colorPalette="red"
-            onClick={() => setActiveTab('expense')}
+            onClick={() => { setActiveTab('expense'); setSelectedCategory(null); }}
             fontSize={{ base: 'sm', md: 'md' }}
             px={{ base: 3, md: 4 }}
           >
@@ -366,7 +376,7 @@ export default function RecurringPayments() {
             size={{ base: 'md', md: 'lg' }}
             variant={activeTab === 'income' ? 'solid' : 'outline'}
             colorPalette="green"
-            onClick={() => setActiveTab('income')}
+            onClick={() => { setActiveTab('income'); setSelectedCategory(null); }}
             fontSize={{ base: 'sm', md: 'md' }}
             px={{ base: 3, md: 4 }}
           >
@@ -383,6 +393,54 @@ export default function RecurringPayments() {
           </Button>
         </Flex>
 
+        {/* Category Filter Chips */}
+        {availableCategories.length > 0 && (
+          <Flex gap={2} wrap="wrap" align="center">
+            <Text fontSize="sm" color={colors.textMuted} fontWeight="500">
+              Filter:
+            </Text>
+            {selectedCategory && (
+              <Badge
+                px={3}
+                py={1}
+                borderRadius="full"
+                cursor="pointer"
+                bg={colors.textMuted}
+                color="white"
+                fontSize="xs"
+                fontWeight="600"
+                onClick={() => setSelectedCategory(null)}
+                _hover={{ opacity: 0.8 }}
+              >
+                Clear ✕
+              </Badge>
+            )}
+            {availableCategories.map((catName) => (
+              <Badge
+                key={catName}
+                px={3}
+                py={1}
+                borderRadius="full"
+                cursor="pointer"
+                bg={selectedCategory === catName ? getCategoryColor(catName) : colors.rowStripedBg}
+                color={selectedCategory === catName ? 'white' : colors.textSecondary}
+                border="1px solid"
+                borderColor={selectedCategory === catName ? getCategoryColor(catName) : colors.borderColor}
+                fontSize="xs"
+                fontWeight="500"
+                onClick={() => setSelectedCategory(selectedCategory === catName ? null : catName)}
+                _hover={{
+                  bg: selectedCategory === catName ? getCategoryColor(catName) : colors.primaryBg,
+                  borderColor: getCategoryColor(catName),
+                }}
+                transition="all 0.15s"
+              >
+                {catName}
+              </Badge>
+            ))}
+          </Flex>
+        )}
+
         {/* Recurring Payments List */}
         {filteredPayments.length === 0 ? (
           <Box
@@ -393,12 +451,25 @@ export default function RecurringPayments() {
             border="1px solid" borderColor={colors.borderSubtle}
             textAlign="center"
           >
-            <Text fontSize="lg" color={colors.textMuted} mb={4}>
-              No {activeTab} recurring payments yet
-            </Text>
-            <Button onClick={openCreateModal} colorPalette="blue">
-              Add your first {activeTab}
-            </Button>
+            {selectedCategory ? (
+              <VStack gap={3}>
+                <Text fontSize="lg" color={colors.textMuted}>
+                  No {activeTab} payments in "{selectedCategory}"
+                </Text>
+                <Button size="sm" variant="outline" onClick={() => setSelectedCategory(null)}>
+                  Clear filter
+                </Button>
+              </VStack>
+            ) : (
+              <>
+                <Text fontSize="lg" color={colors.textMuted} mb={4}>
+                  No {activeTab} recurring payments yet
+                </Text>
+                <Button onClick={openCreateModal} colorPalette="blue">
+                  Add your first {activeTab}
+                </Button>
+              </>
+            )}
           </Box>
         ) : (
           <VStack gap={{ base: 2, md: 3 }} align="stretch">

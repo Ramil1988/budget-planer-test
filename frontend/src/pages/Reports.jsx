@@ -543,7 +543,7 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
           const isOtherHovered = hoveredCategory && !isHovered;
           const isOthersCategory = cat.name === 'Others';
           return (
-            <Box key={cat.name}>
+            <Box key={cat.name} position={isOthersCategory ? 'relative' : undefined}>
               <Flex
                 justify="space-between"
                 align="center"
@@ -583,11 +583,18 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
                   pl={{ base: 4, md: 6 }}
                   pr={{ base: 1, md: 2 }}
                   py={2}
-                  mt={1}
-                  bg={themeColors.rowStripedBg}
+                  position="absolute"
+                  top="100%"
+                  left={0}
+                  right={0}
+                  zIndex={10}
+                  bg={themeColors.cardBg}
                   borderRadius="6px"
-                  maxH={{ base: '120px', md: '150px' }}
+                  maxH={{ base: '150px', md: '200px' }}
                   overflowY="auto"
+                  boxShadow="lg"
+                  border="1px solid"
+                  borderColor={themeColors.borderColor}
                 >
                   {cat.otherCategories.map((otherCat, otherIndex) => (
                     <Flex

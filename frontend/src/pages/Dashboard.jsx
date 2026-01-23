@@ -1515,7 +1515,7 @@ export default function Dashboard() {
                         const isOtherHovered = hoveredCategory && !isHovered;
                         const isOthersCategory = cat.name === 'Others';
                         return (
-                          <Box key={cat.id}>
+                          <Box key={cat.id} position={isOthersCategory ? 'relative' : undefined}>
                             <Flex
                               align="center"
                               justify="space-between"
@@ -1567,11 +1567,18 @@ export default function Dashboard() {
                                 pl={{ base: 4, md: 6 }}
                                 pr={{ base: 1, md: 2 }}
                                 py={2}
-                                mt={1}
-                                bg={colors.rowStripedBg}
+                                position="absolute"
+                                top="100%"
+                                left={0}
+                                right={0}
+                                zIndex={10}
+                                bg={colors.cardBg}
                                 borderRadius="6px"
-                                maxH={{ base: '120px', md: '150px' }}
+                                maxH={{ base: '150px', md: '200px' }}
                                 overflowY="auto"
+                                boxShadow="lg"
+                                border="1px solid"
+                                borderColor={colors.borderColor}
                               >
                                 {cat.otherCategories.map((otherCat) => (
                                   <Flex

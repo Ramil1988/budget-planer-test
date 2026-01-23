@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -20,6 +20,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
+import MerchantAutocomplete from '../components/MerchantAutocomplete';
+import CategoryAutocomplete from '../components/CategoryAutocomplete';
 
 // Default categories to seed for new users
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -625,13 +627,24 @@ export default function CategoryManager() {
   const incomeCategoryNames = incomeCategories.map(c => c.name).sort();
 
   // Get all existing patterns across all categories for autocomplete
-  const allExistingPatterns = [
+  const allExistingPatterns = useMemo(() => [
     ...new Set(
       Object.values(patterns)
         .flat()
         .sort()
     )
-  ];
+  ], [patterns]);
+
+  // Create a map of merchant -> category for showing in autocomplete
+  const merchantCategoryMap = useMemo(() => {
+    const map = {};
+    for (const [categoryName, merchants] of Object.entries(patterns)) {
+      for (const merchant of merchants) {
+        map[merchant] = categoryName;
+      }
+    }
+    return map;
+  }, [patterns]);
 
   if (loading) {
     return (
@@ -848,15 +861,15 @@ export default function CategoryManager() {
               <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
                 <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Add New Expense Category</Text>
                 <HStack gap={2}>
-                  <Input
+                  <CategoryAutocomplete
                     placeholder="Category name"
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+                    categories={categories}
                     bg={colors.cardBg}
                     borderColor={colors.borderColor}
                     color={colors.textPrimary}
-                    flex={1}
                   />
                   <Button colorScheme="red" onClick={handleAddCategory}>
                     Add
@@ -886,7 +899,7 @@ export default function CategoryManager() {
                   <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
                     Merchant Name
                   </Text>
-                  <Input
+                  <MerchantAutocomplete
                     placeholder="e.g., GLOBAL PET FOODS, PC-ENERGIE NB POWER, AMAZON.CA"
                     value={newPattern}
                     onChange={(e) => {
@@ -902,7 +915,16 @@ export default function CategoryManager() {
                         }
                       }
                     }}
+                    onSelect={(merchant) => {
+                      // Auto-populate category when selecting from dropdown
+                      const category = merchantCategoryMap[merchant];
+                      if (category) {
+                        setSelectedCategory(category);
+                      }
+                    }}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
+                    merchants={allExistingPatterns}
+                    merchantCategoryMap={merchantCategoryMap}
                     size="lg"
                     bg={colors.rowStripedBg}
                     borderColor={colors.borderColor}
@@ -912,13 +934,7 @@ export default function CategoryManager() {
                     fontSize="md"
                     h="56px"
                     borderRadius="12px"
-                    list="merchant-suggestions"
                   />
-                  <datalist id="merchant-suggestions">
-                    {allExistingPatterns.map((pattern) => (
-                      <option key={pattern} value={pattern} />
-                    ))}
-                  </datalist>
                   <Text fontSize="xs" color={colors.textMuted} mt={1}>
                     Enter the exact merchant name as it appears in your bank statements
                   </Text>
@@ -1089,15 +1105,15 @@ export default function CategoryManager() {
               <Box p={4} bg={colors.rowStripedBg} borderRadius="md">
                 <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Add New Income Category</Text>
                 <HStack gap={2}>
-                  <Input
+                  <CategoryAutocomplete
                     placeholder="e.g., Salary, Freelance, Dividends, Cashback"
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+                    categories={categories}
                     bg={colors.cardBg}
                     borderColor={colors.borderColor}
                     color={colors.textPrimary}
-                    flex={1}
                   />
                   <Button colorScheme="green" onClick={handleAddCategory}>
                     Add
@@ -1127,7 +1143,7 @@ export default function CategoryManager() {
                   <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
                     Income Source Name
                   </Text>
-                  <Input
+                  <MerchantAutocomplete
                     placeholder="e.g., CASHBACK / REMISES, SALARY DEPOSIT, INTEREST"
                     value={newIncomePattern}
                     onChange={(e) => {
@@ -1143,7 +1159,16 @@ export default function CategoryManager() {
                         }
                       }
                     }}
+                    onSelect={(merchant) => {
+                      // Auto-populate category when selecting from dropdown
+                      const category = merchantCategoryMap[merchant];
+                      if (category && incomeCategoryNames.includes(category)) {
+                        setSelectedIncomeCategory(category);
+                      }
+                    }}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddIncomePattern()}
+                    merchants={allExistingPatterns}
+                    merchantCategoryMap={merchantCategoryMap}
                     size="lg"
                     bg={colors.rowStripedBg}
                     borderColor={colors.borderColor}
@@ -1153,13 +1178,7 @@ export default function CategoryManager() {
                     fontSize="md"
                     h="56px"
                     borderRadius="12px"
-                    list="income-merchant-suggestions"
                   />
-                  <datalist id="income-merchant-suggestions">
-                    {allExistingPatterns.map((pattern) => (
-                      <option key={pattern} value={pattern} />
-                    ))}
-                  </datalist>
                   <Text fontSize="xs" color={colors.textMuted} mt={1}>
                     Enter the exact income source name as it appears in your bank statements
                   </Text>
