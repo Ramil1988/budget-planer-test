@@ -86,6 +86,7 @@ export default function RecurringPayments() {
     end_date: '',
     notes: '',
     business_days_only: false,
+    last_business_day_of_month: false,
   });
 
   // Load data on mount
@@ -142,6 +143,7 @@ export default function RecurringPayments() {
         notes: formData.notes.trim() || null,
         is_active: true,
         business_days_only: formData.business_days_only,
+        last_business_day_of_month: formData.last_business_day_of_month,
       };
 
       if (editingPayment) {
@@ -210,6 +212,7 @@ export default function RecurringPayments() {
       end_date: '',
       notes: '',
       business_days_only: false,
+      last_business_day_of_month: false,
     });
     setIsModalOpen(true);
   };
@@ -226,6 +229,7 @@ export default function RecurringPayments() {
       end_date: payment.end_date || '',
       notes: payment.notes || '',
       business_days_only: payment.business_days_only || false,
+      last_business_day_of_month: payment.last_business_day_of_month || false,
     });
     setIsModalOpen(true);
   };
@@ -474,7 +478,7 @@ export default function RecurringPayments() {
         ) : (
           <VStack gap={{ base: 2, md: 3 }} align="stretch">
             {filteredPayments.map((payment) => {
-              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date, payment.business_days_only || false);
+              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date, payment.business_days_only || false, payment.last_business_day_of_month || false);
               const daysUntil = nextDate ? Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
 
               return (
@@ -529,6 +533,11 @@ export default function RecurringPayments() {
                             {payment.business_days_only && (
                               <Badge colorPalette="blue" variant="subtle" fontSize="10px">
                                 Weekdays
+                              </Badge>
+                            )}
+                            {payment.last_business_day_of_month && (
+                              <Badge colorPalette="purple" variant="subtle" fontSize="10px">
+                                Last biz day
                               </Badge>
                             )}
                             {payment.end_date && (
@@ -629,6 +638,11 @@ export default function RecurringPayments() {
                           {payment.business_days_only && (
                             <Badge colorPalette="blue" variant="subtle" size="sm">
                               Weekdays
+                            </Badge>
+                          )}
+                          {payment.last_business_day_of_month && (
+                            <Badge colorPalette="purple" variant="subtle" size="sm">
+                              Last biz day
                             </Badge>
                           )}
                           {payment.end_date && (
@@ -955,6 +969,52 @@ export default function RecurringPayments() {
                         </Box>
                       </Flex>
                     </Box>
+
+                    {/* Last Business Day of Month - only show for monthly/quarterly/yearly */}
+                    {['monthly', 'quarterly', 'yearly'].includes(formData.frequency) && (
+                      <Box>
+                        <Flex
+                          align="center"
+                          gap={3}
+                          p={3}
+                          borderRadius="10px"
+                          bg={formData.last_business_day_of_month ? 'purple.50' : colors.rowStripedBg}
+                          border="1px solid"
+                          borderColor={formData.last_business_day_of_month ? 'purple.300' : colors.borderColor}
+                          cursor="pointer"
+                          onClick={() => setFormData({ ...formData, last_business_day_of_month: !formData.last_business_day_of_month })}
+                          transition="all 0.2s"
+                          _hover={{ borderColor: 'purple.300' }}
+                        >
+                          <Box
+                            w="20px"
+                            h="20px"
+                            borderRadius="4px"
+                            border="2px solid"
+                            borderColor={formData.last_business_day_of_month ? 'purple.500' : colors.borderColor}
+                            bg={formData.last_business_day_of_month ? 'purple.500' : 'transparent'}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            flexShrink={0}
+                          >
+                            {formData.last_business_day_of_month && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </Box>
+                          <Box flex="1">
+                            <Text fontWeight="600" fontSize="sm" color={formData.last_business_day_of_month ? 'purple.800' : colors.textPrimary}>
+                              Last business day of month
+                            </Text>
+                            <Text fontSize="xs" color={formData.last_business_day_of_month ? 'purple.600' : colors.textMuted}>
+                              Always schedule on the last weekday (Mon-Fri) of each month
+                            </Text>
+                          </Box>
+                        </Flex>
+                      </Box>
+                    )}
 
                     {/* Notes */}
                     <Box>

@@ -259,7 +259,8 @@ export default function Budget() {
         forecastStart,
         endOfMonth,
         payment.end_date,
-        payment.business_days_only || false
+        payment.business_days_only || false,
+        payment.last_business_day_of_month || false
       );
 
       const totalAmount = dates.length * Number(payment.amount);

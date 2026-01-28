@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Last Business Day of Month for Recurring Payments (2026-01-28):**
+  - **New Scheduling Option:** Added "Last business day of month" option for recurring payments
+  - Allows payments (like salary) to be scheduled on the last weekday (Mon-Fri) of each month
+  - Solves the issue of setting day 31 for months like February that have fewer days
+  - Option only appears for monthly, quarterly, and yearly frequencies
+  - Purple badge "Last biz day" shown on payment cards when enabled
+  - **Migration:** `006_add_last_business_day_of_month.sql` adds the new column
+
 - **Assets & Liabilities UX Improvements (2026-01-21):**
   - **Auto-save Snapshots:** Snapshots are now automatically saved when you add, edit, or delete any asset or liability
     - No need to manually click "Save Snapshot" — today's snapshot updates automatically with each change

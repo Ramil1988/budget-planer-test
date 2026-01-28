@@ -89,6 +89,8 @@ CREATE TABLE recurring_payments (
   end_date DATE,
   is_active BOOLEAN DEFAULT true,
   notes TEXT,
+  business_days_only BOOLEAN DEFAULT false,              -- Adjust weekend dates to nearest weekday
+  last_business_day_of_month BOOLEAN DEFAULT false,      -- Schedule on last business day of each month
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

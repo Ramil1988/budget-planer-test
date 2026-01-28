@@ -37,6 +37,29 @@ function adjustToBusinessDay(date) {
 }
 
 /**
+ * Get the last business day (Mon-Fri) of a specific month
+ * @param {number} year - Full year (e.g., 2026)
+ * @param {number} month - Month (0-11, JavaScript month index)
+ * @returns {Date} - Last business day of the month
+ */
+function getLastBusinessDayOfMonth(year, month) {
+  // Get the last day of the month (day 0 of next month)
+  const lastDay = new Date(year, month + 1, 0);
+  const dayOfWeek = lastDay.getDay();
+
+  // Move back from weekend to Friday
+  if (dayOfWeek === 0) {
+    // Sunday -> Friday (subtract 2)
+    lastDay.setDate(lastDay.getDate() - 2);
+  } else if (dayOfWeek === 6) {
+    // Saturday -> Friday (subtract 1)
+    lastDay.setDate(lastDay.getDate() - 1);
+  }
+
+  return lastDay;
+}
+
+/**
  * Parse a date string or Date object into a local-time Date at midnight
  * This avoids timezone issues where "2026-01-02" parsed as UTC becomes Jan 1 in local time
  * @param {Date|string} date - Date to parse
@@ -66,12 +89,47 @@ function parseLocalDate(date) {
  * @param {Date|string} fromDate - Calculate next date from this date (default: today)
  * @param {Date|string|null} endDate - Optional end date (null = no end)
  * @param {boolean} businessDaysOnly - If true, adjust weekend dates to nearest business day
+ * @param {boolean} lastBusinessDayOfMonth - If true, always use last business day of month (overrides start day)
  * @returns {Date|null} - Next payment date or null if ended
  */
-export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), endDate = null, businessDaysOnly = false) {
+export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false) {
   const start = parseLocalDate(startDate);
   const from = parseLocalDate(fromDate);
   const end = endDate ? parseLocalDate(endDate) : null;
+
+  const config = FREQUENCY_CONFIG[frequency];
+  if (!config) return null;
+
+  // Handle "last business day of month" for month-based frequencies
+  if (lastBusinessDayOfMonth && config.months) {
+    // Calculate the target month based on elapsed periods
+    const monthsDiff = (from.getFullYear() - start.getFullYear()) * 12 +
+                       (from.getMonth() - start.getMonth());
+    const periodsElapsed = Math.floor(monthsDiff / config.months);
+
+    // Get the target year/month for the current period
+    let targetYear = start.getFullYear();
+    let targetMonth = start.getMonth() + periodsElapsed * config.months;
+
+    // Normalize year/month
+    targetYear += Math.floor(targetMonth / 12);
+    targetMonth = targetMonth % 12;
+
+    let nextDate = getLastBusinessDayOfMonth(targetYear, targetMonth);
+
+    // If this date is in the past, move to next period
+    if (nextDate < from) {
+      targetMonth += config.months;
+      targetYear += Math.floor(targetMonth / 12);
+      targetMonth = targetMonth % 12;
+      nextDate = getLastBusinessDayOfMonth(targetYear, targetMonth);
+    }
+
+    // Check end date
+    if (end && nextDate > end) return null;
+
+    return nextDate;
+  }
 
   // If start date is in the future, that's the next payment
   if (start >= from) {
@@ -79,9 +137,6 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
     const result = new Date(start);
     return businessDaysOnly ? adjustToBusinessDay(result) : result;
   }
-
-  const config = FREQUENCY_CONFIG[frequency];
-  if (!config) return null;
 
   let nextDate = new Date(start);
 
@@ -136,9 +191,10 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
  * @param {Date|string} rangeEnd - End of range to check
  * @param {Date|string|null} endDate - Optional recurring payment end date
  * @param {boolean} businessDaysOnly - If true, adjust weekend dates to nearest business day
+ * @param {boolean} lastBusinessDayOfMonth - If true, always use last business day of month
  * @returns {Date[]} - Array of payment dates within the range
  */
-export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false) {
+export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false) {
   const dates = [];
   const start = parseLocalDate(startDate);
   const rStart = parseLocalDate(rangeStart);
@@ -146,16 +202,20 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
   rEnd.setHours(23, 59, 59, 999); // End of day for range end
   const end = endDate ? parseLocalDate(endDate) : null;
 
+  // For lastBusinessDayOfMonth, dates are already calculated correctly, no need for post-adjustment
+  const skipBusinessDayAdjustment = lastBusinessDayOfMonth;
+
   // IMPORTANT: Get dates WITHOUT business day adjustment first to ensure proper loop advancement.
   // If we adjust to business days inside the loop, weekend dates get pulled back to Friday,
   // but then the next iteration starts from Saturday again, causing infinite loops.
   // We collect the raw scheduled dates first, then adjust at the end.
-  let currentDate = getNextPaymentDate(startDate, frequency, rStart, endDate, false);
+  // Exception: lastBusinessDayOfMonth already calculates correct dates internally.
+  let currentDate = getNextPaymentDate(startDate, frequency, rStart, endDate, false, lastBusinessDayOfMonth);
 
   // If no next date (ended), return empty
   if (!currentDate) return dates;
 
-  // Collect all dates in range (unadjusted)
+  // Collect all dates in range (unadjusted or already correctly adjusted for lastBusinessDayOfMonth)
   const rawDates = [];
   let lastDateKey = null;
 
@@ -172,10 +232,10 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
 
     rawDates.push(new Date(currentDate));
 
-    // Get next date (from day after current unadjusted date)
+    // Get next date (from day after current date)
     const nextDay = new Date(currentDate);
     nextDay.setDate(nextDay.getDate() + 1);
-    currentDate = getNextPaymentDate(startDate, frequency, nextDay, endDate, false);
+    currentDate = getNextPaymentDate(startDate, frequency, nextDay, endDate, false, lastBusinessDayOfMonth);
 
     // Safety: prevent infinite loops (max ~1 year of daily payments)
     if (rawDates.length > 366) {
@@ -192,7 +252,7 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
 
   for (const date of rawDates) {
     let finalDate = date;
-    if (businessDaysOnly) {
+    if (businessDaysOnly && !skipBusinessDayAdjustment) {
       finalDate = adjustToBusinessDay(date);
     }
 
@@ -232,7 +292,8 @@ export function getUpcomingPayments(recurringPayments, daysAhead = 30) {
       today,
       endRange,
       payment.end_date,
-      payment.business_days_only || false
+      payment.business_days_only || false,
+      payment.last_business_day_of_month || false
     );
 
     for (const date of dates) {
@@ -274,7 +335,8 @@ export function getMonthlyProjection(recurringPayments, month) {
       startDate,
       endDate,
       payment.end_date,
-      payment.business_days_only || false
+      payment.business_days_only || false,
+      payment.last_business_day_of_month || false
     );
 
     for (const date of dates) {

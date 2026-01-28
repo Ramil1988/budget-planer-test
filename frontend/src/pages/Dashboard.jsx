@@ -372,11 +372,9 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
 };
 
 // Mini Calendar Component for Upcoming Payments
-const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurrency }) => {
+const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurrency, viewMonth, viewYear, onMonthChange }) => {
   const colors = useDarkModeColors();
   const today = new Date();
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [viewYear, setViewYear] = useState(today.getFullYear());
 
   // Get first day of month and total days
   const firstDayOfMonth = new Date(viewYear, viewMonth, 1).getDay();
@@ -396,7 +394,8 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
       monthStart,
       monthEnd,
       payment.end_date,
-      payment.business_days_only || false
+      payment.business_days_only || false,
+      payment.last_business_day_of_month || false
     );
     dates.forEach(date => {
       const key = date.getDate();
@@ -413,19 +412,17 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
 
   const goToPrevMonth = () => {
     if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear(viewYear - 1);
+      onMonthChange(11, viewYear - 1);
     } else {
-      setViewMonth(viewMonth - 1);
+      onMonthChange(viewMonth - 1, viewYear);
     }
   };
 
   const goToNextMonth = () => {
     if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear(viewYear + 1);
+      onMonthChange(0, viewYear + 1);
     } else {
-      setViewMonth(viewMonth + 1);
+      onMonthChange(viewMonth + 1, viewYear);
     }
   };
 
@@ -650,6 +647,8 @@ export default function Dashboard() {
   const [paymentsViewMode, setPaymentsViewMode] = useState('calendar'); // 'list' or 'calendar'
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null); // Selected date in calendar
   const [selectedCalendarPayments, setSelectedCalendarPayments] = useState([]); // Payments for selected date
+  const [calendarViewMonth, setCalendarViewMonth] = useState(new Date().getMonth()); // Calendar displayed month (0-11)
+  const [calendarViewYear, setCalendarViewYear] = useState(new Date().getFullYear()); // Calendar displayed year
 
   // Refs for chart click-away
   const dailySpendingRef = useRef(null);
@@ -921,7 +920,12 @@ export default function Dashboard() {
         setAllRecurringPayments(recurringResult.data);
         // Filter active ones for upcoming list
         const activePayments = recurringResult.data.filter(p => p.is_active);
-        const upcoming = getUpcomingPayments(activePayments, 14);
+        // Ensure we cover at least the rest of the current month for the "left" calculation
+        const now = new Date();
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const daysUntilEndOfMonth = Math.ceil((endOfMonth - now) / (1000 * 60 * 60 * 24));
+        const daysAhead = Math.max(daysUntilEndOfMonth + 1, 14);
+        const upcoming = getUpcomingPayments(activePayments, daysAhead);
         setUpcomingPayments(upcoming);
       }
 
@@ -1199,18 +1203,55 @@ export default function Dashboard() {
                       Upcoming Payments
                     </Heading>
                   </HStack>
-                  {upcomingPayments.filter(p => p.daysUntil >= 0 && p.type === 'expense').length > 0 && (
-                    <Box
-                      bg={colors.rowStripedBg}
-                      px={3}
-                      py={1}
-                      borderRadius="full"
-                    >
-                      <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
-                        {formatCurrency(upcomingPayments.filter(p => p.daysUntil >= 0 && p.type === 'expense').reduce((sum, p) => sum + Number(p.amount), 0))} left
-                      </Text>
-                    </Box>
-                  )}
+                  {(() => {
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const isCurrentMonth = calendarViewMonth === now.getMonth() && calendarViewYear === now.getFullYear();
+                    const isPastMonth = calendarViewYear < now.getFullYear() ||
+                      (calendarViewYear === now.getFullYear() && calendarViewMonth < now.getMonth());
+
+                    // Don't show "left" for past months
+                    if (isPastMonth) return null;
+
+                    // Calculate payments for the displayed month
+                    const monthStart = new Date(calendarViewYear, calendarViewMonth, 1);
+                    const monthEnd = new Date(calendarViewYear, calendarViewMonth + 1, 0);
+
+                    let total = 0;
+                    allRecurringPayments.forEach(payment => {
+                      if (!payment.is_active || payment.type !== 'expense') return;
+                      const dates = getPaymentDatesInRange(
+                        payment.start_date,
+                        payment.frequency,
+                        monthStart,
+                        monthEnd,
+                        payment.end_date,
+                        payment.business_days_only || false,
+                        payment.last_business_day_of_month || false
+                      );
+                      dates.forEach(date => {
+                        // For current month, only count dates >= today
+                        // For future months, count all dates
+                        if (!isCurrentMonth || date >= today) {
+                          total += Number(payment.amount);
+                        }
+                      });
+                    });
+
+                    if (total === 0) return null;
+                    return (
+                      <Box
+                        bg={colors.rowStripedBg}
+                        px={3}
+                        py={1}
+                        borderRadius="full"
+                      >
+                        <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
+                          {formatCurrency(total)} left
+                        </Text>
+                      </Box>
+                    );
+                  })()}
                 </HStack>
                 <HStack gap={2}>
                   {/* View Toggle */}
@@ -1354,6 +1395,12 @@ export default function Dashboard() {
                       }}
                       selectedDate={selectedCalendarDate}
                       formatCurrency={formatCurrency}
+                      viewMonth={calendarViewMonth}
+                      viewYear={calendarViewYear}
+                      onMonthChange={(month, year) => {
+                        setCalendarViewMonth(month);
+                        setCalendarViewYear(year);
+                      }}
                     />
                   </Box>
 
@@ -1715,7 +1762,7 @@ export default function Dashboard() {
                         {weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex] >= 0 ? '+' : ''}{formatCurrency(weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex])}
                       </Text>
                     </Flex>
-                    <Box maxH="150px" overflowY="auto">
+                    <Box maxH="150px" overflowY="auto" pr={3}>
                       {dailyTransactions[selectedDayIndex].map((tx, idx) => (
                         <Flex
                           key={tx.id || idx}

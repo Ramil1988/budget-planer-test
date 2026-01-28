@@ -101,9 +101,9 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 </Flex>
                 {/* Month label */}
                 <Text
-                  fontSize={{ base: '9px', md: '11px' }}
-                  color={isHovered ? colors.textPrimary : colors.textMuted}
-                  fontWeight={isHovered ? "700" : "500"}
+                  fontSize={{ base: '10px', md: '12px' }}
+                  color={isHovered ? colors.textPrimary : colors.textSecondary}
+                  fontWeight={isHovered ? "700" : "600"}
                   transition="all 0.2s ease"
                   mt={1}
                   flexShrink={0}
@@ -149,9 +149,9 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 {incomeCategories.length > 0 && (
                   <VStack gap={0} align="stretch" pl={3}>
                     {incomeCategories.map((cat) => (
-                      <Flex key={cat.name} justify="space-between" fontSize="10px" color={colors.textMuted} py={0.5}>
+                      <Flex key={cat.name} justify="space-between" fontSize="11px" color={colors.textSecondary} py={0.5}>
                         <Text noOfLines={1} maxW={{ base: '70px', md: '90px' }} fontStyle={cat.isOthers ? 'italic' : 'normal'}>{cat.name}</Text>
-                        <Text fontStyle={cat.isOthers ? 'italic' : 'normal'}>{formatCurrency(cat.amount)}</Text>
+                        <Text fontWeight="500" fontStyle={cat.isOthers ? 'italic' : 'normal'}>{formatCurrency(cat.amount)}</Text>
                       </Flex>
                     ))}
                   </VStack>
@@ -172,9 +172,9 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 {expenseCategories.length > 0 && (
                   <VStack gap={0} align="stretch" pl={3}>
                     {expenseCategories.map((cat) => (
-                      <Flex key={cat.name} justify="space-between" fontSize="10px" color={colors.textMuted} py={0.5}>
+                      <Flex key={cat.name} justify="space-between" fontSize="11px" color={colors.textSecondary} py={0.5}>
                         <Text noOfLines={1} maxW={{ base: '70px', md: '90px' }} fontStyle={cat.isOthers ? 'italic' : 'normal'}>{cat.name}</Text>
-                        <Text fontStyle={cat.isOthers ? 'italic' : 'normal'}>{formatCurrency(cat.amount)}</Text>
+                        <Text fontWeight="500" fontStyle={cat.isOthers ? 'italic' : 'normal'}>{formatCurrency(cat.amount)}</Text>
                       </Flex>
                     ))}
                   </VStack>
@@ -185,9 +185,9 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
             {/* Balance */}
             <Box h="1px" bg={colors.borderColor} mb={2} mt={{ base: 2, md: 'auto' }} />
             <Flex justify="space-between">
-              <Text fontSize="xs" color={colors.textSecondary}>Balance:</Text>
+              <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Balance:</Text>
               <Text
-                fontSize="xs"
+                fontSize="sm"
                 fontWeight="700"
                 color={hoveredData.balance >= 0 ? 'green.500' : 'red.500'}
               >
@@ -287,8 +287,9 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth, colo
               x={paddingLeft - 10}
               y={label.y + 4}
               textAnchor="end"
-              fontSize="11"
-              fill="#9CA3AF"
+              fontSize="12"
+              fontWeight="500"
+              fill="#6B7280"
             >
               {formatShort(label.value)}
             </text>
@@ -361,9 +362,9 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth, colo
                 x={p.x}
                 y={height - paddingBottom + 20}
                 textAnchor="middle"
-                fontSize="11"
-                fontWeight={isHovered ? '600' : '400'}
-                fill={isHovered ? '#1F2937' : '#9CA3AF'}
+                fontSize="12"
+                fontWeight={isHovered ? '600' : '500'}
+                fill={isHovered ? '#1F2937' : '#6B7280'}
               >
                 {p.month}
               </text>
@@ -516,19 +517,19 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
         >
           {hoveredCat ? (
             <>
-              <Text fontSize="xs" color={themeColors.textMuted} fontWeight="500" noOfLines={1} maxW="80px">
+              <Text fontSize="xs" color={themeColors.textSecondary} fontWeight="600" noOfLines={1} maxW="80px">
                 {hoveredCat.name}
               </Text>
               <Text fontSize="lg" fontWeight="800" color={themeColors.textPrimary}>
                 {formatCurrency(hoveredCat.amount)}
               </Text>
-              <Text fontSize="xs" color={themeColors.textMuted}>
+              <Text fontSize="sm" fontWeight="600" color={themeColors.textSecondary}>
                 {total > 0 ? ((hoveredCat.amount / total) * 100).toFixed(0) : 0}%
               </Text>
             </>
           ) : (
             <>
-              <Text fontSize="xs" color={themeColors.textMuted}>Total Spent</Text>
+              <Text fontSize="xs" color={themeColors.textSecondary} fontWeight="500">Total Spent</Text>
               <Text fontSize="xl" fontWeight="800" color={themeColors.textPrimary}>
                 {formatCurrency(total)}
               </Text>
@@ -570,7 +571,7 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
                 </HStack>
                 <HStack gap={2}>
                   <Text fontWeight="600" color={themeColors.textPrimary}>{formatCurrency(cat.amount)}</Text>
-                  <Text fontSize="xs" color={themeColors.textMuted}>
+                  <Text fontSize="sm" fontWeight="500" color={themeColors.textSecondary}>
                     {total > 0 ? ((cat.amount / total) * 100).toFixed(0) : 0}%
                   </Text>
                 </HStack>
@@ -659,7 +660,7 @@ const SummaryCard = ({ title, value, subtitle, color, bgGradient, icon }) => (
       {value}
     </Text>
     {subtitle && (
-      <Text fontSize="xs" opacity={0.7} mt={1}>
+      <Text fontSize="sm" fontWeight="500" opacity={0.9} mt={1}>
         {subtitle}
       </Text>
     )}
@@ -801,10 +802,10 @@ export default function Reports() {
   };
 
   // Calculate additional metrics
-  const avgMonthlyExpense = totals.expenses / 12;
-  const avgMonthlyIncome = totals.income / 12;
-  const savingsRate = totals.income > 0 ? ((totals.balance / totals.income) * 100).toFixed(1) : 0;
   const monthsWithData = monthlyData.filter(m => m.income > 0 || m.expenses > 0).length;
+  const avgMonthlyExpense = monthsWithData > 0 ? totals.expenses / monthsWithData : 0;
+  const avgMonthlyIncome = monthsWithData > 0 ? totals.income / monthsWithData : 0;
+  const savingsRate = totals.income > 0 ? ((totals.balance / totals.income) * 100).toFixed(1) : 0;
 
   if (loading) {
     return (
@@ -903,11 +904,11 @@ export default function Reports() {
               <HStack gap={4}>
                 <HStack gap={1}>
                   <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #34D399 0%, #059669 100%)" />
-                  <Text fontSize="xs" color={colors.textMuted}>Income</Text>
+                  <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Income</Text>
                 </HStack>
                 <HStack gap={1}>
                   <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)" />
-                  <Text fontSize="xs" color={colors.textMuted}>Expenses</Text>
+                  <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Expenses</Text>
                 </HStack>
               </HStack>
             </Flex>
