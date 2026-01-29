@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
 import { getPaymentDatesInRange } from '../lib/recurringUtils';
+import BudgetRecommendations from '../components/BudgetRecommendations';
 
 // Circular Progress Ring Component
 const ProgressRing = ({ percent, size = 120, strokeWidth = 8, color = '#3B82F6' }) => {
@@ -202,6 +203,7 @@ export default function Budget() {
   const [setupSortBy, setSetupSortBy] = useState('amount'); // 'amount' or 'name'
   const [committedLimits, setCommittedLimits] = useState({}); // Used for sorting - only updates on blur
   const [categorySearch, setCategorySearch] = useState(''); // Search filter for categories
+  const [recommendationsKey, setRecommendationsKey] = useState(0); // Key to force refresh recommendations
 
   useEffect(() => {
     if (user) {
@@ -674,6 +676,114 @@ export default function Budget() {
     setCategoryTransactions([]);
   };
 
+  // Apply a budget suggestion from recommendations
+  const applyBudgetSuggestion = async (categoryId, newLimit) => {
+    try {
+      // Apply to NEXT month (suggestions are based on historical data)
+      const today = new Date();
+      const nextMonth = today.getMonth() + 2; // getMonth() is 0-indexed, +2 for next month
+      const nextYear = nextMonth > 12 ? today.getFullYear() + 1 : today.getFullYear();
+      const adjustedMonth = nextMonth > 12 ? nextMonth - 12 : nextMonth;
+
+      const startDate = `${nextYear}-${String(adjustedMonth).padStart(2, '0')}-01`;
+      const followingMonthStart = adjustedMonth === 12
+        ? `${nextYear + 1}-01-01`
+        : `${nextYear}-${String(adjustedMonth + 1).padStart(2, '0')}-01`;
+
+      // Check if budget exists for next month
+      const { data: existingBudget } = await supabase
+        .from('budgets')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('month', startDate)
+        .lt('month', followingMonthStart)
+        .maybeSingle();
+
+      let budgetId;
+
+      if (existingBudget) {
+        budgetId = existingBudget.id;
+      } else {
+        // Create new budget for this month
+        const { data: newBudget, error: insertError } = await supabase
+          .from('budgets')
+          .insert({
+            user_id: user.id,
+            month: startDate,
+            total: newLimit,
+          })
+          .select('id')
+          .single();
+        if (insertError) throw insertError;
+        budgetId = newBudget.id;
+      }
+
+      // Check if budget_category exists for this category
+      const { data: existingBudgetCat } = await supabase
+        .from('budget_categories')
+        .select('id')
+        .eq('budget_id', budgetId)
+        .eq('category_id', categoryId)
+        .maybeSingle();
+
+      if (existingBudgetCat) {
+        // Update existing
+        const { error: updateError } = await supabase
+          .from('budget_categories')
+          .update({ limit_amount: newLimit })
+          .eq('id', existingBudgetCat.id);
+        if (updateError) throw updateError;
+      } else {
+        // Insert new
+        const { error: insertError } = await supabase
+          .from('budget_categories')
+          .insert({
+            budget_id: budgetId,
+            category_id: categoryId,
+            limit_amount: newLimit,
+          });
+        if (insertError) throw insertError;
+      }
+
+      // Update total in budgets table
+      const { data: allBudgetCats } = await supabase
+        .from('budget_categories')
+        .select('limit_amount')
+        .eq('budget_id', budgetId);
+
+      const newTotal = (allBudgetCats || []).reduce((sum, bc) => sum + Number(bc.limit_amount || 0), 0);
+
+      await supabase
+        .from('budgets')
+        .update({ total: newTotal })
+        .eq('id', budgetId);
+
+      // Update local state
+      setBudgetLimits(prev => ({
+        ...prev,
+        [categoryId]: newLimit,
+      }));
+      setCommittedLimits(prev => ({
+        ...prev,
+        [categoryId]: newLimit,
+      }));
+
+      // Reload budget data
+      await loadBudget();
+
+      setSuccess('Budget updated successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Failed to apply budget suggestion:', err);
+      setError('Failed to apply suggestion: ' + err.message);
+    }
+  };
+
+  // Refresh recommendations after budget changes
+  const refreshRecommendations = () => {
+    setRecommendationsKey(prev => prev + 1);
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -771,14 +881,16 @@ export default function Budget() {
           onValueChange={(e) => setActiveTab(e.value)}
           variant="enclosed"
         >
-          <Tabs.List>
-            <Tabs.Trigger value="tracking" px={6} py={3}>
-              Budget Tracking
-            </Tabs.Trigger>
-            <Tabs.Trigger value="setup" px={6} py={3}>
-              Budget Setup
-            </Tabs.Trigger>
-          </Tabs.List>
+          <Flex justify="center">
+            <Tabs.List>
+              <Tabs.Trigger value="tracking" px={6} py={3}>
+                Budget Tracking
+              </Tabs.Trigger>
+              <Tabs.Trigger value="setup" px={6} py={3}>
+                Budget Setup
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Flex>
 
           {/* Tracking Tab */}
           <Tabs.Content value="tracking" pt={4}>
@@ -829,6 +941,15 @@ export default function Budget() {
                     </Button>
                   </Flex>
                 )}
+
+                {/* Budget Recommendations */}
+                <BudgetRecommendations
+                  key={recommendationsKey}
+                  budgetId={null}
+                  selectedMonth={selectedMonth}
+                  onApplySuggestion={applyBudgetSuggestion}
+                  onRefresh={refreshRecommendations}
+                />
 
                 {/* Current View */}
                 {viewMode === 'current' && (

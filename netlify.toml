@@ -11,10 +11,9 @@
 
 [dev]
   # Local development settings
-  command = "npm run dev"
+  command = "cd frontend && pnpm run dev"
   targetPort = 5173
   port = 8888
-  dir = "frontend"
   autoLaunch = false
 
 [build.environment]

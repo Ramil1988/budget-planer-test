@@ -68,4 +68,13 @@ export default defineConfig({
     })
   ],
   base: '/',
+  server: {
+    proxy: {
+      // Proxy Netlify functions to the functions server during development
+      '/.netlify/functions': {
+        target: 'http://localhost:9999',
+        changeOrigin: true,
+      },
+    },
+  },
 })

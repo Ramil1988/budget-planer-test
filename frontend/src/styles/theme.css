@@ -79,6 +79,12 @@ body {
   margin: 0;
 }
 
+/* Global Layout - Prevent horizontal overflow */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 /* Typography Overrides */
 h1, h2, h3, h4, h5, h6,
 [class*="chakra-heading"] {

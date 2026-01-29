@@ -20,9 +20,9 @@ import AssetsLiabilities from './pages/AssetsLiabilities'
 
 function App() {
   return (
-    <Flex direction="column" minH="100vh">
+    <Flex direction="column" minH="100vh" overflowX="hidden" w="100%">
       <Header />
-      <Box as="main" flex="1" w="100%">
+      <Box as="main" flex="1" w="100%" overflowX="hidden">
         <Routes>
         {/* Public routes */}
         <Route path="/" element={<Home />} />

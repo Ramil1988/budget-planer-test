@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated:** 2026-01-20
+**Last Updated:** 2026-01-28
 **Current Version:** 2.0.0
 **Status:** Active Development
 
@@ -99,6 +99,22 @@
 - [x] Business Days Only for Recurring Payments
   - [x] Toggle to skip weekends for recurring payments
   - [x] Fixed infinite loop bug in projections
+- [x] Smart Budget Suggestions (Full Feature)
+  - [x] **Backend Analysis Engine** (`budget-recommendations.js` - 668 lines)
+    - [x] 6-month historical spending analysis per category
+    - [x] Statistical calculations: average, std dev, min, max, trend detection
+    - [x] 6 recommendation types: Underfunded, Overfunded, High Variance, No Budget, Trending Up, Potential Savings
+    - [x] Recurring payments awareness (excludes from savings calculations)
+  - [x] **Frontend Component** (`BudgetRecommendations.jsx` - 886 lines)
+    - [x] Three-level collapsible structure (main, adjust budget, potential savings)
+    - [x] Priority grouping with colored indicators (High/Medium/Low)
+    - [x] Compact card design with inline Apply buttons
+    - [x] Suggestions apply to next month's budget
+    - [x] Quick stats badges and summary bar
+  - [x] **Persistent Dismissals** (`dismissed-suggestions.js` + migration 007)
+    - [x] Dismissals saved to database, persist across sessions
+    - [x] Per-month tracking (dismissed in Jan doesn't affect Feb)
+    - [x] Auto-cleanup function for old dismissals
 
 ---
 

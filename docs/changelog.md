@@ -7,7 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Smart Budget Suggestions UI Redesign (2026-01-28):**
+  - **Collapsible Sections:** Three-level collapse structure
+    - Main panel collapses/expands the entire component
+    - "Adjust Budget" section collapses independently (expanded by default)
+    - "Potential Savings" section collapses independently (collapsed by default)
+  - **Priority Grouping:** Recommendations grouped by priority (High → Medium → Low) with colored emoji indicators (🔴🟡🟢)
+  - **Compact Card Design:** Reduced card size by ~40% with streamlined layout
+    - Inline Apply button within budget comparison row (subtle ghost style)
+    - Color-coded left border indicates priority level
+    - Removed verbose full-width green buttons
+  - **Applies to Next Month:** Budget suggestions now apply to next month's budget instead of current month
+    - Section description updated: "Apply to next month's budget"
+    - Apply All changed to: "Apply all for next month"
+  - **Visual Improvements:**
+    - Quick stats badges in header ("3 adjust" / "2 save")
+    - Summary bar showing total over budget and potential savings
+    - Section headers with icons and counts
+    - Subtle hover effects on Apply buttons
+
 ### Added
+- **Smart Budget Suggestions - AI-Powered Analysis Engine (2026-01-28):**
+  - **Overview:** Intelligent budget optimization system that analyzes 6 months of spending history to detect budget misalignments and savings opportunities
+  - **Backend API:** New `/.netlify/functions/budget-recommendations` serverless function (668 lines)
+  - **Statistical Analysis:**
+    - Calculates per-category: average, standard deviation, min, max
+    - Trend detection: compares last 3 months vs prior 3 months
+    - Considers recurring payments when calculating savings potential
+  - **6 Recommendation Types:**
+    - 📈 **Underfunded** (High Priority): avg spending > budget × 1.2 → suggests increase
+    - 📉 **Overfunded** (Low Priority): avg spending < budget × 0.5 → suggests reduction
+    - 📊 **High Variance** (Medium Priority): std dev > avg × 0.5 → suggests buffer
+    - ⚠️ **No Budget** (Medium Priority): has spending but no budget set
+    - 🔺 **Trending Up** (Medium Priority): recent 3mo > prior 3mo by 15%+
+    - 💰 **Potential Savings**: discretionary categories (no recurring) with budget remaining
+  - **Response Data:** Returns recommendations, savings opportunities, and summary stats (total overspending, potential savings, categories analyzed)
+
+- **Persistent Dismissed Suggestions (2026-01-28):**
+  - **Problem Solved:** Previously, dismissing a budget suggestion only lasted until page refresh
+  - **New Behavior:** Dismissed suggestions are now saved to the database and persist across sessions
+  - **Per-Month Tracking:** Dismissals are tracked per-month, so a suggestion dismissed in January won't affect February
+  - **Database Table:** New `dismissed_suggestions` table stores user dismissals with RLS security
+  - **API Endpoint:** New `/.netlify/functions/dismissed-suggestions` handles GET/POST/DELETE
+  - **Auto-cleanup:** Old dismissals (>6 months) can be cleaned up via `cleanup_old_dismissed_suggestions()` function
+  - **Migration:** `007_dismissed_suggestions.sql` creates the table and policies
+
 - **Last Business Day of Month for Recurring Payments (2026-01-28):**
   - **New Scheduling Option:** Added "Last business day of month" option for recurring payments
   - Allows payments (like salary) to be scheduled on the last weekday (Mon-Fri) of each month

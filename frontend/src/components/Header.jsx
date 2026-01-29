@@ -79,7 +79,7 @@ function Header() {
         w="100%"
         maxW="1200px"
         mx="auto"
-        px={8}
+        px={{ base: 4, md: 8 }}
         py={3}
         align="center"
         justify="space-between"
@@ -116,7 +116,7 @@ function Header() {
         </Flex>
 
         {/* Desktop Navigation */}
-        <HStack as="nav" gap={1} display={{ base: 'none', md: 'flex' }}>
+        <HStack as="nav" gap={1} display={{ base: 'none', lg: 'flex' }} flexShrink={1} overflow="hidden">
           {user && (
             <>
               <NavLink to="/dashboard">Dashboard</NavLink>
@@ -132,7 +132,7 @@ function Header() {
         </HStack>
 
         {/* Desktop Auth Button + Dark Mode Toggle */}
-        <HStack gap={3} display={{ base: 'none', md: 'flex' }}>
+        <HStack gap={3} display={{ base: 'none', lg: 'flex' }}>
           <ColorModeButton />
           {!user && (
             <Button
@@ -172,7 +172,7 @@ function Header() {
         </HStack>
 
         {/* Mobile: Dark Mode + Menu Button */}
-        <HStack gap={1} display={{ base: 'flex', md: 'none' }}>
+        <HStack gap={1} display={{ base: 'flex', lg: 'none' }}>
           <ColorModeButton />
           <IconButton
             onClick={onToggle}
@@ -218,13 +218,13 @@ function Header() {
       {/* Mobile Navigation */}
       {open && (
         <Box
-          display={{ base: 'block', md: 'none' }}
+          display={{ base: 'block', lg: 'none' }}
           bg={mobileBg}
           borderTop="1px solid"
           borderColor={borderColor}
           shadow="lg"
         >
-          <Stack maxW="1200px" mx="auto" px={8} py={4} gap={1}>
+          <Stack maxW="1200px" mx="auto" px={{ base: 4, md: 8 }} py={4} gap={1}>
             {!user && (
               <Box>
                 <Button
