@@ -452,8 +452,8 @@ export default function BudgetRecommendations({
   const { session } = useAuth();
 
   // State
-  const [isMainOpen, setIsMainOpen] = useState(true);
-  const [isAdjustOpen, setIsAdjustOpen] = useState(true);
+  const [isMainOpen, setIsMainOpen] = useState(false); // Collapsed by default
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false); // Collapsed by default
   const [isSavingsOpen, setIsSavingsOpen] = useState(false); // Collapsed by default
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

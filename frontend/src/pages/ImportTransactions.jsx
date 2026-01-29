@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -74,12 +74,27 @@ export default function ImportTransactions() {
   const [importStats, setImportStats] = useState(null);
   const [showAll, setShowAll] = useState(false);
 
+  // Custom dropdown state for sync interval
+  const [syncIntervalDropdownOpen, setSyncIntervalDropdownOpen] = useState(false);
+  const syncIntervalDropdownRef = useRef(null);
+
   // Load saved settings on mount
   useEffect(() => {
     if (user) {
       loadSavedSettings();
     }
   }, [user]);
+
+  // Handle click outside to close sync interval dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (syncIntervalDropdownRef.current && !syncIntervalDropdownRef.current.contains(event.target)) {
+        setSyncIntervalDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check notification status on mount
   useEffect(() => {
@@ -750,26 +765,104 @@ export default function ImportTransactions() {
                     {/* Sync Interval */}
                     <Box>
                       <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Sync Interval</Text>
-                      <select
-                        value={syncInterval}
-                        onChange={(e) => updateSyncInterval(Number(e.target.value))}
-                        disabled={!autoSyncEnabled}
-                        style={{
-                          padding: '12px',
-                          fontSize: '16px',
-                          borderRadius: '8px',
-                          border: `1px solid ${colors.borderColor}`,
-                          backgroundColor: autoSyncEnabled ? colors.cardBg : colors.rowStripedBg,
-                          color: colors.textPrimary,
-                          width: '200px',
-                        }}
-                      >
-                        <option value={1}>Every 1 minute</option>
-                        <option value={5}>Every 5 minutes</option>
-                        <option value={15}>Every 15 minutes</option>
-                        <option value={30}>Every 30 minutes</option>
-                        <option value={60}>Every hour</option>
-                      </select>
+                      <Box ref={syncIntervalDropdownRef} position="relative" w="200px">
+                        {/* Dropdown Trigger */}
+                        <Box
+                          onClick={() => autoSyncEnabled && setSyncIntervalDropdownOpen(!syncIntervalDropdownOpen)}
+                          cursor={autoSyncEnabled ? 'pointer' : 'not-allowed'}
+                          p={3}
+                          h="48px"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          borderRadius="8px"
+                          borderWidth="1px"
+                          borderColor={syncIntervalDropdownOpen ? 'blue.500' : colors.borderColor}
+                          bg={autoSyncEnabled ? colors.cardBg : colors.rowStripedBg}
+                          opacity={autoSyncEnabled ? 1 : 0.6}
+                          _hover={autoSyncEnabled ? { borderColor: 'blue.400' } : {}}
+                          transition="all 0.2s"
+                        >
+                          <Text
+                            color={colors.textPrimary}
+                            fontSize="md"
+                            noOfLines={1}
+                          >
+                            {syncInterval === 1 ? 'Every 1 minute' :
+                             syncInterval === 5 ? 'Every 5 minutes' :
+                             syncInterval === 15 ? 'Every 15 minutes' :
+                             syncInterval === 30 ? 'Every 30 minutes' :
+                             syncInterval === 60 ? 'Every hour' : `Every ${syncInterval} minutes`}
+                          </Text>
+                          <Box
+                            as="span"
+                            transform={syncIntervalDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                            transition="transform 0.2s"
+                            color={colors.textSecondary}
+                          >
+                            ▼
+                          </Box>
+                        </Box>
+
+                        {/* Dropdown List */}
+                        {syncIntervalDropdownOpen && autoSyncEnabled && (
+                          <Box
+                            position="absolute"
+                            top="100%"
+                            left={0}
+                            right={0}
+                            zIndex={1000}
+                            mt={1}
+                            bg={colors.cardBg}
+                            borderWidth="1px"
+                            borderColor={colors.borderColor}
+                            borderRadius="12px"
+                            boxShadow="lg"
+                            maxH={{ base: '280px', md: '320px' }}
+                            overflowY="auto"
+                          >
+                            <VStack gap={0} align="stretch" p={1}>
+                              {[
+                                { value: 1, label: 'Every 1 minute' },
+                                { value: 5, label: 'Every 5 minutes' },
+                                { value: 15, label: 'Every 15 minutes' },
+                                { value: 30, label: 'Every 30 minutes' },
+                                { value: 60, label: 'Every hour' },
+                              ].map((option) => {
+                                const isSelected = option.value === syncInterval;
+                                return (
+                                  <HStack
+                                    key={option.value}
+                                    px={3}
+                                    py={2.5}
+                                    cursor="pointer"
+                                    bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                    _hover={{ bg: colors.rowStripedBg }}
+                                    borderRadius="8px"
+                                    onClick={() => {
+                                      updateSyncInterval(option.value);
+                                      setSyncIntervalDropdownOpen(false);
+                                    }}
+                                    justify="space-between"
+                                    transition="background 0.1s"
+                                  >
+                                    <Text
+                                      color={colors.textPrimary}
+                                      fontSize="sm"
+                                      fontWeight={isSelected ? '600' : '400'}
+                                    >
+                                      {option.label}
+                                    </Text>
+                                    {isSelected && (
+                                      <Text color="blue.500" fontSize="sm">✓</Text>
+                                    )}
+                                  </HStack>
+                                );
+                              })}
+                            </VStack>
+                          </Box>
+                        )}
+                      </Box>
                     </Box>
 
                     {/* Sync Status */}
@@ -963,6 +1056,10 @@ export default function ImportTransactions() {
                           colorScheme={copiedField === 'fullScript' ? 'green' : 'purple'}
                           size="md"
                           width="100%"
+                          whiteSpace="normal"
+                          py={3}
+                          h="auto"
+                          fontSize={{ base: 'sm', md: 'md' }}
                           onClick={() => {
                             const fullScript = `/**
  * BudgetWise Webhook Sync Script

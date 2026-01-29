@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -36,11 +36,26 @@ export default function AddTransaction() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Custom dropdown state
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef(null);
+
   useEffect(() => {
     if (user) {
       loadCategories();
     }
   }, [user]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadCategories = async () => {
     setLoading(true);
@@ -176,12 +191,28 @@ export default function AddTransaction() {
     <Box w="100%" h="100%" bg={colors.pageBg} p={6}>
       <Box w="100%" maxW="800px" mx="auto">
         <VStack gap={6} align="stretch" w="100%">
-          <Box>
-            <Heading size="xl" color={colors.textPrimary}>Add Transaction</Heading>
-            <Text color={colors.textSecondary} mt={1}>
-              Record a new income or expense
-            </Text>
-          </Box>
+          <Flex justify="space-between" align="flex-start">
+            <Box>
+              <Heading size="xl" color={colors.textPrimary}>Add Transaction</Heading>
+              <Text color={colors.textSecondary} mt={1}>
+                Record a new income or expense
+              </Text>
+            </Box>
+            <Button
+              variant="ghost"
+              onClick={() => navigate(-1)}
+              color={colors.textSecondary}
+              _hover={{ bg: colors.rowStripedBg, color: colors.textPrimary }}
+              fontSize="2xl"
+              fontWeight="300"
+              p={2}
+              minW="auto"
+              h="auto"
+              borderRadius="full"
+            >
+              ×
+            </Button>
+          </Flex>
 
         {/* Success Message */}
         {success && (
@@ -261,26 +292,93 @@ export default function AddTransaction() {
             <Box>
               <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Category</Text>
               {filteredCategories.length > 0 ? (
-                <select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    fontSize: '16px',
-                    borderRadius: '8px',
-                    border: `1px solid ${colors.borderColor}`,
-                    backgroundColor: colors.cardBg,
-                    color: colors.textPrimary,
-                  }}
-                >
-                  <option value="">Select a category</option>
-                  {filteredCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                <Box ref={categoryDropdownRef} position="relative" w="100%">
+                  {/* Dropdown Trigger */}
+                  <Box
+                    onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                    cursor="pointer"
+                    p={3}
+                    h="48px"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    borderRadius="8px"
+                    borderWidth="1px"
+                    borderColor={categoryDropdownOpen ? 'blue.500' : colors.borderColor}
+                    bg={colors.cardBg}
+                    _hover={{ borderColor: 'blue.400' }}
+                    transition="all 0.2s"
+                  >
+                    <Text
+                      color={categoryId ? colors.textPrimary : colors.textMuted}
+                      fontSize="md"
+                      noOfLines={1}
+                    >
+                      {categoryId ? filteredCategories.find(c => c.id === categoryId)?.name : 'Select a category'}
+                    </Text>
+                    <Box
+                      as="span"
+                      transform={categoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                      transition="transform 0.2s"
+                      color={colors.textSecondary}
+                    >
+                      ▼
+                    </Box>
+                  </Box>
+
+                  {/* Dropdown List */}
+                  {categoryDropdownOpen && (
+                    <Box
+                      position="absolute"
+                      top="100%"
+                      left={0}
+                      right={0}
+                      zIndex={1000}
+                      mt={1}
+                      bg={colors.cardBg}
+                      borderWidth="1px"
+                      borderColor={colors.borderColor}
+                      borderRadius="12px"
+                      boxShadow="lg"
+                      maxH={{ base: '280px', md: '320px' }}
+                      overflowY="auto"
+                    >
+                      <VStack gap={0} align="stretch" p={1}>
+                        {filteredCategories.map((cat) => {
+                          const isSelected = cat.id === categoryId;
+                          return (
+                            <HStack
+                              key={cat.id}
+                              px={3}
+                              py={2.5}
+                              cursor="pointer"
+                              bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                              _hover={{ bg: colors.rowStripedBg }}
+                              borderRadius="8px"
+                              onClick={() => {
+                                setCategoryId(cat.id);
+                                setCategoryDropdownOpen(false);
+                              }}
+                              justify="space-between"
+                              transition="background 0.1s"
+                            >
+                              <Text
+                                color={colors.textPrimary}
+                                fontSize="sm"
+                                fontWeight={isSelected ? '600' : '400'}
+                              >
+                                {cat.name}
+                              </Text>
+                              {isSelected && (
+                                <Text color="blue.500" fontSize="sm">✓</Text>
+                              )}
+                            </HStack>
+                          );
+                        })}
+                      </VStack>
+                    </Box>
+                  )}
+                </Box>
               ) : (
                 <Box p={4} bg={colors.warningBg} borderRadius="md" borderColor={colors.warningBorder} borderWidth="1px">
                   <Text color={colors.warning}>

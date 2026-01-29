@@ -22,6 +22,7 @@ import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
 import MerchantAutocomplete from '../components/MerchantAutocomplete';
 import CategoryAutocomplete from '../components/CategoryAutocomplete';
+import CategorySelect from '../components/CategorySelect';
 
 // Default categories to seed for new users
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -56,12 +57,27 @@ export default function CategoryManager() {
   const [recategorizeLoading, setRecategorizeLoading] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Custom dropdown state
+  const [incomeCategoryDropdownOpen, setIncomeCategoryDropdownOpen] = useState(false);
+  const incomeCategoryDropdownRef = useRef(null);
+
   // Load patterns from database on mount
   useEffect(() => {
     if (user) {
       loadPatternsFromDB();
     }
   }, [user]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (incomeCategoryDropdownRef.current && !incomeCategoryDropdownRef.current.contains(event.target)) {
+        setIncomeCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadPatternsFromDB = async () => {
     setLoading(true);
@@ -945,29 +961,12 @@ export default function CategoryManager() {
                   <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
                     Assign to Category
                   </Text>
-                  <select
+                  <CategorySelect
                     value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    style={{
-                      padding: '16px 14px',
-                      fontSize: '16px',
-                      borderRadius: '12px',
-                      border: `1px solid ${colors.borderColor}`,
-                      backgroundColor: colors.rowStripedBg,
-                      color: colors.textPrimary,
-                      height: '56px',
-                      width: '100%',
-                      cursor: 'pointer',
-                      outline: 'none',
-                    }}
-                  >
-                    <option value="">Select a category...</option>
-                    {expenseCategoryNames.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedCategory}
+                    categories={expenseCategoryNames}
+                    placeholder="Select a category..."
+                  />
                 </Box>
 
                 {/* Update existing transactions checkbox */}
@@ -1189,29 +1188,93 @@ export default function CategoryManager() {
                   <Text fontWeight="600" mb={2} color={colors.textSecondary} fontSize="sm">
                     Assign to Income Category
                   </Text>
-                  <select
-                    value={selectedIncomeCategory}
-                    onChange={(e) => setSelectedIncomeCategory(e.target.value)}
-                    style={{
-                      padding: '16px 14px',
-                      fontSize: '16px',
-                      borderRadius: '12px',
-                      border: `1px solid ${colors.borderColor}`,
-                      backgroundColor: colors.rowStripedBg,
-                      color: colors.textPrimary,
-                      height: '56px',
-                      width: '100%',
-                      cursor: 'pointer',
-                      outline: 'none',
-                    }}
-                  >
-                    <option value="">Select an income category...</option>
-                    {incomeCategoryNames.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                  <Box ref={incomeCategoryDropdownRef} position="relative" w="100%">
+                    {/* Dropdown Trigger */}
+                    <Box
+                      onClick={() => setIncomeCategoryDropdownOpen(!incomeCategoryDropdownOpen)}
+                      cursor="pointer"
+                      px={4}
+                      h="56px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      borderRadius="12px"
+                      borderWidth="1px"
+                      borderColor={incomeCategoryDropdownOpen ? 'green.500' : colors.borderColor}
+                      bg={colors.rowStripedBg}
+                      _hover={{ borderColor: 'green.400' }}
+                      transition="all 0.2s"
+                    >
+                      <Text
+                        color={selectedIncomeCategory ? colors.textPrimary : colors.textMuted}
+                        fontSize="md"
+                        noOfLines={1}
+                      >
+                        {selectedIncomeCategory || 'Select an income category...'}
+                      </Text>
+                      <Box
+                        as="span"
+                        transform={incomeCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                        transition="transform 0.2s"
+                        color={colors.textSecondary}
+                      >
+                        ▼
+                      </Box>
+                    </Box>
+
+                    {/* Dropdown List */}
+                    {incomeCategoryDropdownOpen && (
+                      <Box
+                        position="absolute"
+                        top="100%"
+                        left={0}
+                        right={0}
+                        zIndex={1000}
+                        mt={1}
+                        bg={colors.cardBg}
+                        borderWidth="1px"
+                        borderColor={colors.borderColor}
+                        borderRadius="12px"
+                        boxShadow="lg"
+                        maxH={{ base: '280px', md: '320px' }}
+                        overflowY="auto"
+                      >
+                        <VStack gap={0} align="stretch" p={1}>
+                          {incomeCategoryNames.map((cat) => {
+                            const isSelected = cat === selectedIncomeCategory;
+                            return (
+                              <HStack
+                                key={cat}
+                                px={3}
+                                py={2.5}
+                                cursor="pointer"
+                                bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                _hover={{ bg: colors.rowStripedBg }}
+                                borderRadius="8px"
+                                onClick={() => {
+                                  setSelectedIncomeCategory(cat);
+                                  setIncomeCategoryDropdownOpen(false);
+                                }}
+                                justify="space-between"
+                                transition="background 0.1s"
+                              >
+                                <Text
+                                  color={colors.textPrimary}
+                                  fontSize="sm"
+                                  fontWeight={isSelected ? '600' : '400'}
+                                >
+                                  {cat}
+                                </Text>
+                                {isSelected && (
+                                  <Text color="green.500" fontSize="sm">✓</Text>
+                                )}
+                              </HStack>
+                            );
+                          })}
+                        </VStack>
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
 
                 {/* Update existing income transactions checkbox */}

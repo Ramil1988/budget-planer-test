@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -91,12 +91,32 @@ export default function RecurringPayments() {
     last_business_day_of_month: false,
   });
 
+  // Custom dropdown state
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [frequencyDropdownOpen, setFrequencyDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef(null);
+  const frequencyDropdownRef = useRef(null);
+
   // Load data on mount
   useEffect(() => {
     if (user) {
       loadData();
     }
   }, [user]);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+      if (frequencyDropdownRef.current && !frequencyDropdownRef.current.contains(event.target)) {
+        setFrequencyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -884,53 +904,189 @@ export default function RecurringPayments() {
                     {/* Category */}
                     <Box>
                       <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Category</Text>
-                      <select
-                        value={formData.category_id}
-                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                        style={{
-                          padding: '10px 14px',
-                          fontSize: '14px',
-                          borderRadius: '8px',
-                          border: `1px solid ${colors.borderColor}`,
-                          backgroundColor: colors.cardBg,
-                          color: colors.textPrimary,
-                          width: '100%',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <option value="">Select category...</option>
-                        {filteredCategories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </option>
-                        ))}
-                      </select>
+                      <Box ref={categoryDropdownRef} position="relative" w="100%">
+                        {/* Dropdown Trigger */}
+                        <Box
+                          onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                          cursor="pointer"
+                          px={3}
+                          py={2.5}
+                          h="42px"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          borderRadius="8px"
+                          borderWidth="1px"
+                          borderColor={categoryDropdownOpen ? 'blue.500' : colors.borderColor}
+                          bg={colors.cardBg}
+                          _hover={{ borderColor: 'blue.400' }}
+                          transition="all 0.2s"
+                        >
+                          <Text
+                            color={formData.category_id ? colors.textPrimary : colors.textMuted}
+                            fontSize="sm"
+                            noOfLines={1}
+                          >
+                            {formData.category_id ? filteredCategories.find(c => c.id === formData.category_id)?.name : 'Select category...'}
+                          </Text>
+                          <Box
+                            as="span"
+                            transform={categoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                            transition="transform 0.2s"
+                            color={colors.textSecondary}
+                            fontSize="xs"
+                          >
+                            ▼
+                          </Box>
+                        </Box>
+
+                        {/* Dropdown List */}
+                        {categoryDropdownOpen && (
+                          <Box
+                            position="absolute"
+                            top="100%"
+                            left={0}
+                            right={0}
+                            zIndex={1000}
+                            mt={1}
+                            bg={colors.cardBg}
+                            borderWidth="1px"
+                            borderColor={colors.borderColor}
+                            borderRadius="12px"
+                            boxShadow="lg"
+                            maxH={{ base: '280px', md: '320px' }}
+                            overflowY="auto"
+                          >
+                            <VStack gap={0} align="stretch" p={1}>
+                              {filteredCategories.map((cat) => {
+                                const isSelected = cat.id === formData.category_id;
+                                return (
+                                  <HStack
+                                    key={cat.id}
+                                    px={3}
+                                    py={2.5}
+                                    cursor="pointer"
+                                    bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                    _hover={{ bg: colors.rowStripedBg }}
+                                    borderRadius="8px"
+                                    onClick={() => {
+                                      setFormData({ ...formData, category_id: cat.id });
+                                      setCategoryDropdownOpen(false);
+                                    }}
+                                    justify="space-between"
+                                    transition="background 0.1s"
+                                  >
+                                    <Text
+                                      color={colors.textPrimary}
+                                      fontSize="sm"
+                                      fontWeight={isSelected ? '600' : '400'}
+                                    >
+                                      {cat.name}
+                                    </Text>
+                                    {isSelected && (
+                                      <Text color="blue.500" fontSize="sm">✓</Text>
+                                    )}
+                                  </HStack>
+                                );
+                              })}
+                            </VStack>
+                          </Box>
+                        )}
+                      </Box>
                     </Box>
 
                     {/* Frequency */}
                     <Box>
                       <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Frequency *</Text>
-                      <select
-                        value={formData.frequency}
-                        onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                        style={{
-                          padding: '10px 14px',
-                          fontSize: '14px',
-                          borderRadius: '8px',
-                          border: `1px solid ${colors.borderColor}`,
-                          backgroundColor: colors.cardBg,
-                          color: colors.textPrimary,
-                          width: '100%',
-                          cursor: 'pointer',
-                        }}
-                        required
-                      >
-                        {Object.entries(FREQUENCY_CONFIG).map(([key, config]) => (
-                          <option key={key} value={key}>
-                            {config.label}
-                          </option>
-                        ))}
-                      </select>
+                      <Box ref={frequencyDropdownRef} position="relative" w="100%">
+                        {/* Dropdown Trigger */}
+                        <Box
+                          onClick={() => setFrequencyDropdownOpen(!frequencyDropdownOpen)}
+                          cursor="pointer"
+                          px={3}
+                          py={2.5}
+                          h="42px"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          borderRadius="8px"
+                          borderWidth="1px"
+                          borderColor={frequencyDropdownOpen ? 'blue.500' : colors.borderColor}
+                          bg={colors.cardBg}
+                          _hover={{ borderColor: 'blue.400' }}
+                          transition="all 0.2s"
+                        >
+                          <Text
+                            color={colors.textPrimary}
+                            fontSize="sm"
+                            noOfLines={1}
+                          >
+                            {FREQUENCY_CONFIG[formData.frequency]?.label || formData.frequency}
+                          </Text>
+                          <Box
+                            as="span"
+                            transform={frequencyDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                            transition="transform 0.2s"
+                            color={colors.textSecondary}
+                            fontSize="xs"
+                          >
+                            ▼
+                          </Box>
+                        </Box>
+
+                        {/* Dropdown List */}
+                        {frequencyDropdownOpen && (
+                          <Box
+                            position="absolute"
+                            top="100%"
+                            left={0}
+                            right={0}
+                            zIndex={1000}
+                            mt={1}
+                            bg={colors.cardBg}
+                            borderWidth="1px"
+                            borderColor={colors.borderColor}
+                            borderRadius="12px"
+                            boxShadow="lg"
+                            maxH={{ base: '280px', md: '320px' }}
+                            overflowY="auto"
+                          >
+                            <VStack gap={0} align="stretch" p={1}>
+                              {Object.entries(FREQUENCY_CONFIG).map(([key, config]) => {
+                                const isSelected = key === formData.frequency;
+                                return (
+                                  <HStack
+                                    key={key}
+                                    px={3}
+                                    py={2.5}
+                                    cursor="pointer"
+                                    bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                    _hover={{ bg: colors.rowStripedBg }}
+                                    borderRadius="8px"
+                                    onClick={() => {
+                                      setFormData({ ...formData, frequency: key });
+                                      setFrequencyDropdownOpen(false);
+                                    }}
+                                    justify="space-between"
+                                    transition="background 0.1s"
+                                  >
+                                    <Text
+                                      color={colors.textPrimary}
+                                      fontSize="sm"
+                                      fontWeight={isSelected ? '600' : '400'}
+                                    >
+                                      {config.label}
+                                    </Text>
+                                    {isSelected && (
+                                      <Text color="blue.500" fontSize="sm">✓</Text>
+                                    )}
+                                  </HStack>
+                                );
+                              })}
+                            </VStack>
+                          </Box>
+                        )}
+                      </Box>
                     </Box>
 
                     {/* Dates */}

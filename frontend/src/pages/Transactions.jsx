@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -66,6 +66,12 @@ export default function Transactions() {
   const [editingTransactionId, setEditingTransactionId] = useState(null);
   const [updatingCategory, setUpdatingCategory] = useState(false);
 
+  // Custom dropdown state
+  const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
+  const [categoryEditDropdownOpen, setCategoryEditDropdownOpen] = useState(false);
+  const periodDropdownRef = useRef(null);
+  const categoryEditDropdownRef = useRef(null);
+
   useEffect(() => {
     if (user) {
       loadTransactions();
@@ -73,6 +79,20 @@ export default function Transactions() {
       loadCategories();
     }
   }, [user]);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target)) {
+        setPeriodDropdownOpen(false);
+      }
+      if (categoryEditDropdownRef.current && !categoryEditDropdownRef.current.contains(event.target)) {
+        setCategoryEditDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadCategories = async () => {
     try {
@@ -661,23 +681,99 @@ export default function Transactions() {
                   minW={{ base: '100%', sm: '200px' }}
                 />
                 {!customFiltersApplied && (
-                  <select
-                    value={selectedPeriod}
-                    onChange={(e) => setSelectedPeriod(e.target.value)}
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '14px',
-                      borderRadius: '6px',
-                      border: `1px solid ${colors.borderColor}`,
-                      backgroundColor: colors.cardBg,
-                      color: colors.textPrimary,
-                      minWidth: '130px',
-                    }}
-                  >
-                    <option value="current">This month</option>
-                    <option value="last-month">Last month</option>
-                    <option value="all">All time</option>
-                  </select>
+                  <Box ref={periodDropdownRef} position="relative" minW="130px">
+                    {/* Dropdown Trigger */}
+                    <Box
+                      onClick={() => setPeriodDropdownOpen(!periodDropdownOpen)}
+                      cursor="pointer"
+                      px={3}
+                      py={2}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      borderRadius="6px"
+                      borderWidth="1px"
+                      borderColor={periodDropdownOpen ? 'blue.500' : colors.borderColor}
+                      bg={colors.cardBg}
+                      _hover={{ borderColor: 'blue.400' }}
+                      transition="all 0.2s"
+                    >
+                      <Text
+                        color={colors.textPrimary}
+                        fontSize="sm"
+                        noOfLines={1}
+                      >
+                        {selectedPeriod === 'current' ? 'This month' :
+                         selectedPeriod === 'last-month' ? 'Last month' : 'All time'}
+                      </Text>
+                      <Box
+                        as="span"
+                        transform={periodDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                        transition="transform 0.2s"
+                        color={colors.textSecondary}
+                        fontSize="xs"
+                        ml={2}
+                      >
+                        ▼
+                      </Box>
+                    </Box>
+
+                    {/* Dropdown List */}
+                    {periodDropdownOpen && (
+                      <Box
+                        position="absolute"
+                        top="100%"
+                        left={0}
+                        right={0}
+                        zIndex={1000}
+                        mt={1}
+                        bg={colors.cardBg}
+                        borderWidth="1px"
+                        borderColor={colors.borderColor}
+                        borderRadius="12px"
+                        boxShadow="lg"
+                        overflowY="auto"
+                      >
+                        <VStack gap={0} align="stretch" p={1}>
+                          {[
+                            { value: 'current', label: 'This month' },
+                            { value: 'last-month', label: 'Last month' },
+                            { value: 'all', label: 'All time' },
+                          ].map((option) => {
+                            const isSelected = option.value === selectedPeriod;
+                            return (
+                              <HStack
+                                key={option.value}
+                                px={3}
+                                py={2.5}
+                                cursor="pointer"
+                                bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                _hover={{ bg: colors.rowStripedBg }}
+                                borderRadius="8px"
+                                onClick={() => {
+                                  setSelectedPeriod(option.value);
+                                  setPeriodDropdownOpen(false);
+                                }}
+                                justify="space-between"
+                                transition="background 0.1s"
+                              >
+                                <Text
+                                  color={colors.textPrimary}
+                                  fontSize="sm"
+                                  fontWeight={isSelected ? '600' : '400'}
+                                >
+                                  {option.label}
+                                </Text>
+                                {isSelected && (
+                                  <Text color="blue.500" fontSize="sm">✓</Text>
+                                )}
+                              </HStack>
+                            );
+                          })}
+                        </VStack>
+                      </Box>
+                    )}
+                  </Box>
                 )}
                 <Button
                   variant={showCustomFilters || customFiltersApplied ? 'solid' : 'outline'}
@@ -824,28 +920,97 @@ export default function Transactions() {
                     <Box flex="1">
                       {editingTransactionId === transaction.id ? (
                         <HStack gap={2} mb={1}>
-                          <select
-                            value={transaction.category_id || ''}
-                            onChange={(e) => updateTransactionCategory(transaction.id, e.target.value, transaction.type)}
-                            disabled={updatingCategory}
-                            style={{
-                              padding: '4px 8px',
-                              fontSize: '13px',
-                              borderRadius: '6px',
-                              border: `1px solid ${colors.borderColor}`,
-                              backgroundColor: colors.inputBg,
-                              color: colors.textPrimary,
-                              cursor: updatingCategory ? 'wait' : 'pointer',
-                              flex: 1,
-                              maxWidth: '160px',
-                            }}
-                            autoFocus
-                          >
-                            {categories.filter(c => c.type === transaction.type).map(cat => (
-                              <option key={cat.id} value={cat.id}>{cat.name}</option>
-                            ))}
-                          </select>
-                          <Button size="xs" variant="ghost" onClick={() => setEditingTransactionId(null)}>✕</Button>
+                          <Box ref={categoryEditDropdownRef} position="relative" flex={1} maxW="160px">
+                            {/* Dropdown Trigger */}
+                            <Box
+                              onClick={() => !updatingCategory && setCategoryEditDropdownOpen(!categoryEditDropdownOpen)}
+                              cursor={updatingCategory ? 'wait' : 'pointer'}
+                              px={2}
+                              py={1}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="space-between"
+                              borderRadius="6px"
+                              borderWidth="1px"
+                              borderColor={categoryEditDropdownOpen ? 'blue.500' : colors.borderColor}
+                              bg={colors.inputBg}
+                              opacity={updatingCategory ? 0.6 : 1}
+                              _hover={!updatingCategory ? { borderColor: 'blue.400' } : {}}
+                              transition="all 0.2s"
+                            >
+                              <Text
+                                color={colors.textPrimary}
+                                fontSize="xs"
+                                noOfLines={1}
+                              >
+                                {categories.find(c => c.id === transaction.category_id)?.name || 'Select'}
+                              </Text>
+                              <Box
+                                as="span"
+                                transform={categoryEditDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                                transition="transform 0.2s"
+                                color={colors.textSecondary}
+                                fontSize="xs"
+                                ml={1}
+                              >
+                                ▼
+                              </Box>
+                            </Box>
+
+                            {/* Dropdown List */}
+                            {categoryEditDropdownOpen && !updatingCategory && (
+                              <Box
+                                position="absolute"
+                                top="100%"
+                                left={0}
+                                zIndex={1000}
+                                mt={1}
+                                bg={colors.cardBg}
+                                borderWidth="1px"
+                                borderColor={colors.borderColor}
+                                borderRadius="12px"
+                                boxShadow="lg"
+                                maxH="200px"
+                                minW="140px"
+                                overflowY="auto"
+                              >
+                                <VStack gap={0} align="stretch" p={1}>
+                                  {categories.filter(c => c.type === transaction.type).map((cat) => {
+                                    const isSelected = cat.id === transaction.category_id;
+                                    return (
+                                      <HStack
+                                        key={cat.id}
+                                        px={2}
+                                        py={2}
+                                        cursor="pointer"
+                                        bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                        _hover={{ bg: colors.rowStripedBg }}
+                                        borderRadius="6px"
+                                        onClick={() => {
+                                          updateTransactionCategory(transaction.id, cat.id, transaction.type);
+                                          setCategoryEditDropdownOpen(false);
+                                        }}
+                                        justify="space-between"
+                                        transition="background 0.1s"
+                                      >
+                                        <Text
+                                          color={colors.textPrimary}
+                                          fontSize="xs"
+                                          fontWeight={isSelected ? '600' : '400'}
+                                        >
+                                          {cat.name}
+                                        </Text>
+                                        {isSelected && (
+                                          <Text color="blue.500" fontSize="xs">✓</Text>
+                                        )}
+                                      </HStack>
+                                    );
+                                  })}
+                                </VStack>
+                              </Box>
+                            )}
+                          </Box>
+                          <Button size="xs" variant="ghost" onClick={() => { setEditingTransactionId(null); setCategoryEditDropdownOpen(false); }}>✕</Button>
                         </HStack>
                       ) : (
                         <Text
@@ -930,27 +1095,97 @@ export default function Transactions() {
                       <Table.Cell py={4} px={6}>
                         {editingTransactionId === transaction.id ? (
                           <HStack gap={2}>
-                            <select
-                              value={transaction.category_id || ''}
-                              onChange={(e) => updateTransactionCategory(transaction.id, e.target.value, transaction.type)}
-                              disabled={updatingCategory}
-                              style={{
-                                padding: '4px 8px',
-                                fontSize: '14px',
-                                borderRadius: '6px',
-                                border: `1px solid ${colors.borderColor}`,
-                                backgroundColor: colors.inputBg,
-                                color: colors.textPrimary,
-                                cursor: updatingCategory ? 'wait' : 'pointer',
-                                minWidth: '140px',
-                              }}
-                              autoFocus
-                            >
-                              {categories.filter(c => c.type === transaction.type).map(cat => (
-                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                              ))}
-                            </select>
-                            <Button size="xs" variant="ghost" onClick={() => setEditingTransactionId(null)}>✕</Button>
+                            <Box ref={categoryEditDropdownRef} position="relative" minW="140px">
+                              {/* Dropdown Trigger */}
+                              <Box
+                                onClick={() => !updatingCategory && setCategoryEditDropdownOpen(!categoryEditDropdownOpen)}
+                                cursor={updatingCategory ? 'wait' : 'pointer'}
+                                px={2}
+                                py={1}
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="space-between"
+                                borderRadius="6px"
+                                borderWidth="1px"
+                                borderColor={categoryEditDropdownOpen ? 'blue.500' : colors.borderColor}
+                                bg={colors.inputBg}
+                                opacity={updatingCategory ? 0.6 : 1}
+                                _hover={!updatingCategory ? { borderColor: 'blue.400' } : {}}
+                                transition="all 0.2s"
+                              >
+                                <Text
+                                  color={colors.textPrimary}
+                                  fontSize="sm"
+                                  noOfLines={1}
+                                >
+                                  {categories.find(c => c.id === transaction.category_id)?.name || 'Select'}
+                                </Text>
+                                <Box
+                                  as="span"
+                                  transform={categoryEditDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                                  transition="transform 0.2s"
+                                  color={colors.textSecondary}
+                                  fontSize="xs"
+                                  ml={2}
+                                >
+                                  ▼
+                                </Box>
+                              </Box>
+
+                              {/* Dropdown List */}
+                              {categoryEditDropdownOpen && !updatingCategory && (
+                                <Box
+                                  position="absolute"
+                                  top="100%"
+                                  left={0}
+                                  zIndex={1000}
+                                  mt={1}
+                                  bg={colors.cardBg}
+                                  borderWidth="1px"
+                                  borderColor={colors.borderColor}
+                                  borderRadius="12px"
+                                  boxShadow="lg"
+                                  maxH="240px"
+                                  minW="160px"
+                                  overflowY="auto"
+                                >
+                                  <VStack gap={0} align="stretch" p={1}>
+                                    {categories.filter(c => c.type === transaction.type).map((cat) => {
+                                      const isSelected = cat.id === transaction.category_id;
+                                      return (
+                                        <HStack
+                                          key={cat.id}
+                                          px={3}
+                                          py={2}
+                                          cursor="pointer"
+                                          bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                          _hover={{ bg: colors.rowStripedBg }}
+                                          borderRadius="6px"
+                                          onClick={() => {
+                                            updateTransactionCategory(transaction.id, cat.id, transaction.type);
+                                            setCategoryEditDropdownOpen(false);
+                                          }}
+                                          justify="space-between"
+                                          transition="background 0.1s"
+                                        >
+                                          <Text
+                                            color={colors.textPrimary}
+                                            fontSize="sm"
+                                            fontWeight={isSelected ? '600' : '400'}
+                                          >
+                                            {cat.name}
+                                          </Text>
+                                          {isSelected && (
+                                            <Text color="blue.500" fontSize="sm">✓</Text>
+                                          )}
+                                        </HStack>
+                                      );
+                                    })}
+                                  </VStack>
+                                </Box>
+                              )}
+                            </Box>
+                            <Button size="xs" variant="ghost" onClick={() => { setEditingTransactionId(null); setCategoryEditDropdownOpen(false); }}>✕</Button>
                           </HStack>
                         ) : (
                           <Text

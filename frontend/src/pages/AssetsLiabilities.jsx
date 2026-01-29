@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Flex,
@@ -848,6 +848,10 @@ const AssetModal = ({ isOpen, onClose, asset, categories, onSave, colors }) => {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // Custom dropdown state
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef(null);
+
   useEffect(() => {
     if (isOpen) {
       setFormData({
@@ -857,8 +861,20 @@ const AssetModal = ({ isOpen, onClose, asset, categories, onSave, colors }) => {
         note: asset?.note || '',
       });
       setErrors({});
+      setCategoryDropdownOpen(false);
     }
   }, [isOpen, asset, categories]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const validate = () => {
     const newErrors = {};
@@ -897,25 +913,93 @@ const AssetModal = ({ isOpen, onClose, asset, categories, onSave, colors }) => {
               <VStack gap={4}>
                 <Box w="100%">
                   <Text fontSize="sm" fontWeight="600" mb={2} color={colors.textSecondary}>Category</Text>
-                  <Box
-                    as="select"
-                    value={formData.category_id}
-                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                    bg={colors.inputBg}
-                    borderColor={colors.borderColor}
-                    borderWidth="1px"
-                    borderRadius="md"
-                    px={3}
-                    py={2}
-                    fontSize="sm"
-                    color={colors.textPrimary}
-                    w="100%"
-                    _hover={{ borderColor: colors.primary }}
-                    _focus={{ borderColor: colors.primary, outline: 'none' }}
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
-                    ))}
+                  <Box ref={categoryDropdownRef} position="relative" w="100%">
+                    {/* Dropdown Trigger */}
+                    <Box
+                      onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                      cursor="pointer"
+                      px={3}
+                      py={2}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      borderRadius="md"
+                      borderWidth="1px"
+                      borderColor={categoryDropdownOpen ? 'blue.500' : colors.borderColor}
+                      bg={colors.inputBg}
+                      _hover={{ borderColor: colors.primary }}
+                      transition="all 0.2s"
+                    >
+                      <Text
+                        color={colors.textPrimary}
+                        fontSize="sm"
+                        noOfLines={1}
+                      >
+                        {categories.find(c => c.id === formData.category_id)?.icon} {categories.find(c => c.id === formData.category_id)?.name || 'Select category'}
+                      </Text>
+                      <Box
+                        as="span"
+                        transform={categoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                        transition="transform 0.2s"
+                        color={colors.textSecondary}
+                        fontSize="xs"
+                      >
+                        ▼
+                      </Box>
+                    </Box>
+
+                    {/* Dropdown List */}
+                    {categoryDropdownOpen && (
+                      <Box
+                        position="absolute"
+                        top="100%"
+                        left={0}
+                        right={0}
+                        zIndex={1000}
+                        mt={1}
+                        bg={colors.cardBg}
+                        borderWidth="1px"
+                        borderColor={colors.borderColor}
+                        borderRadius="12px"
+                        boxShadow="lg"
+                        maxH={{ base: '280px', md: '320px' }}
+                        overflowY="auto"
+                      >
+                        <VStack gap={0} align="stretch" p={1}>
+                          {categories.map((cat) => {
+                            const isSelected = cat.id === formData.category_id;
+                            return (
+                              <HStack
+                                key={cat.id}
+                                px={3}
+                                py={2.5}
+                                cursor="pointer"
+                                bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                _hover={{ bg: colors.rowStripedBg }}
+                                borderRadius="8px"
+                                onClick={() => {
+                                  setFormData({ ...formData, category_id: cat.id });
+                                  setCategoryDropdownOpen(false);
+                                }}
+                                justify="space-between"
+                                transition="background 0.1s"
+                              >
+                                <Text
+                                  color={colors.textPrimary}
+                                  fontSize="sm"
+                                  fontWeight={isSelected ? '600' : '400'}
+                                >
+                                  {cat.icon} {cat.name}
+                                </Text>
+                                {isSelected && (
+                                  <Text color="blue.500" fontSize="sm">✓</Text>
+                                )}
+                              </HStack>
+                            );
+                          })}
+                        </VStack>
+                      </Box>
+                    )}
                   </Box>
                 </Box>
 
@@ -999,6 +1083,12 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
   const [saving, setSaving] = useState(false);
   const [autoFilledPayment, setAutoFilledPayment] = useState(false);
 
+  // Custom dropdown state
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [linkedCategoryDropdownOpen, setLinkedCategoryDropdownOpen] = useState(false);
+  const typeDropdownRef = useRef(null);
+  const linkedCategoryDropdownRef = useRef(null);
+
   useEffect(() => {
     if (isOpen) {
       setFormData({
@@ -1013,8 +1103,24 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
       });
       setErrors({});
       setAutoFilledPayment(false);
+      setTypeDropdownOpen(false);
+      setLinkedCategoryDropdownOpen(false);
     }
   }, [isOpen, liability, types]);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target)) {
+        setTypeDropdownOpen(false);
+      }
+      if (linkedCategoryDropdownRef.current && !linkedCategoryDropdownRef.current.contains(event.target)) {
+        setLinkedCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Auto-fill monthly payment from recurring payments when category is linked
   const handleCategoryChange = (categoryId) => {
@@ -1079,23 +1185,93 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
               <VStack gap={4}>
                 <Box w="100%">
                   <Text fontSize="sm" fontWeight="600" mb={2} color={colors.textSecondary}>Liability Type</Text>
-                  <Box
-                    as="select"
-                    value={formData.type_id}
-                    onChange={(e) => setFormData({ ...formData, type_id: e.target.value })}
-                    bg={colors.inputBg}
-                    borderColor={colors.borderColor}
-                    borderWidth="1px"
-                    borderRadius="md"
-                    px={3}
-                    py={2}
-                    fontSize="sm"
-                    color={colors.textPrimary}
-                    w="100%"
-                  >
-                    {types.map((type) => (
-                      <option key={type.id} value={type.id}>{type.icon} {type.name}</option>
-                    ))}
+                  <Box ref={typeDropdownRef} position="relative" w="100%">
+                    {/* Dropdown Trigger */}
+                    <Box
+                      onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+                      cursor="pointer"
+                      px={3}
+                      py={2}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      borderRadius="md"
+                      borderWidth="1px"
+                      borderColor={typeDropdownOpen ? 'blue.500' : colors.borderColor}
+                      bg={colors.inputBg}
+                      _hover={{ borderColor: colors.primary }}
+                      transition="all 0.2s"
+                    >
+                      <Text
+                        color={colors.textPrimary}
+                        fontSize="sm"
+                        noOfLines={1}
+                      >
+                        {types.find(t => t.id === formData.type_id)?.icon} {types.find(t => t.id === formData.type_id)?.name || 'Select type'}
+                      </Text>
+                      <Box
+                        as="span"
+                        transform={typeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                        transition="transform 0.2s"
+                        color={colors.textSecondary}
+                        fontSize="xs"
+                      >
+                        ▼
+                      </Box>
+                    </Box>
+
+                    {/* Dropdown List */}
+                    {typeDropdownOpen && (
+                      <Box
+                        position="absolute"
+                        top="100%"
+                        left={0}
+                        right={0}
+                        zIndex={1000}
+                        mt={1}
+                        bg={colors.cardBg}
+                        borderWidth="1px"
+                        borderColor={colors.borderColor}
+                        borderRadius="12px"
+                        boxShadow="lg"
+                        maxH={{ base: '280px', md: '320px' }}
+                        overflowY="auto"
+                      >
+                        <VStack gap={0} align="stretch" p={1}>
+                          {types.map((type) => {
+                            const isSelected = type.id === formData.type_id;
+                            return (
+                              <HStack
+                                key={type.id}
+                                px={3}
+                                py={2.5}
+                                cursor="pointer"
+                                bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                _hover={{ bg: colors.rowStripedBg }}
+                                borderRadius="8px"
+                                onClick={() => {
+                                  setFormData({ ...formData, type_id: type.id });
+                                  setTypeDropdownOpen(false);
+                                }}
+                                justify="space-between"
+                                transition="background 0.1s"
+                              >
+                                <Text
+                                  color={colors.textPrimary}
+                                  fontSize="sm"
+                                  fontWeight={isSelected ? '600' : '400'}
+                                >
+                                  {type.icon} {type.name}
+                                </Text>
+                                {isSelected && (
+                                  <Text color="blue.500" fontSize="sm">✓</Text>
+                                )}
+                              </HStack>
+                            );
+                          })}
+                        </VStack>
+                      </Box>
+                    )}
                   </Box>
                 </Box>
 
@@ -1119,35 +1295,138 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
                       (auto-reduce balance on payments)
                     </Text>
                   </Text>
-                  <Box
-                    as="select"
-                    value={formData.linked_category_id}
-                    onChange={(e) => handleCategoryChange(e.target.value)}
-                    bg={colors.inputBg}
-                    borderColor={colors.borderColor}
-                    borderWidth="1px"
-                    borderRadius="md"
-                    px={3}
-                    py={2}
-                    fontSize="sm"
-                    color={colors.textPrimary}
-                    w="100%"
-                    _hover={{ borderColor: colors.primary }}
-                  >
-                    <option value="">— No link (manual tracking) —</option>
-                    {spendingCategories.map((cat) => {
-                      // Show recurring payment amount (converted to monthly) next to category if available
-                      const recurringPayment = recurringPayments?.find(
-                        (rp) => rp.category_id === cat.id && rp.is_active && rp.type === 'expense'
-                      );
-                      const monthlyAmount = recurringPayment
-                        ? convertToMonthly(recurringPayment.amount, recurringPayment.frequency)
-                        : 0;
-                      const amountHint = recurringPayment ? ` (${formatCurrency(monthlyAmount)}/mo)` : '';
-                      return (
-                        <option key={cat.id} value={cat.id}>{cat.name}{amountHint}</option>
-                      );
-                    })}
+                  <Box ref={linkedCategoryDropdownRef} position="relative" w="100%">
+                    {/* Dropdown Trigger */}
+                    <Box
+                      onClick={() => setLinkedCategoryDropdownOpen(!linkedCategoryDropdownOpen)}
+                      cursor="pointer"
+                      px={3}
+                      py={2}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      borderRadius="md"
+                      borderWidth="1px"
+                      borderColor={linkedCategoryDropdownOpen ? 'blue.500' : colors.borderColor}
+                      bg={colors.inputBg}
+                      _hover={{ borderColor: colors.primary }}
+                      transition="all 0.2s"
+                    >
+                      <Text
+                        color={formData.linked_category_id ? colors.textPrimary : colors.textMuted}
+                        fontSize="sm"
+                        noOfLines={1}
+                      >
+                        {formData.linked_category_id
+                          ? (() => {
+                              const cat = spendingCategories.find(c => c.id === formData.linked_category_id);
+                              const recurringPayment = recurringPayments?.find(
+                                (rp) => rp.category_id === cat?.id && rp.is_active && rp.type === 'expense'
+                              );
+                              const monthlyAmount = recurringPayment
+                                ? convertToMonthly(recurringPayment.amount, recurringPayment.frequency)
+                                : 0;
+                              const amountHint = recurringPayment ? ` (${formatCurrency(monthlyAmount)}/mo)` : '';
+                              return `${cat?.name || ''}${amountHint}`;
+                            })()
+                          : '— No link (manual tracking) —'}
+                      </Text>
+                      <Box
+                        as="span"
+                        transform={linkedCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                        transition="transform 0.2s"
+                        color={colors.textSecondary}
+                        fontSize="xs"
+                      >
+                        ▼
+                      </Box>
+                    </Box>
+
+                    {/* Dropdown List */}
+                    {linkedCategoryDropdownOpen && (
+                      <Box
+                        position="absolute"
+                        top="100%"
+                        left={0}
+                        right={0}
+                        zIndex={1000}
+                        mt={1}
+                        bg={colors.cardBg}
+                        borderWidth="1px"
+                        borderColor={colors.borderColor}
+                        borderRadius="12px"
+                        boxShadow="lg"
+                        maxH={{ base: '280px', md: '320px' }}
+                        overflowY="auto"
+                      >
+                        <VStack gap={0} align="stretch" p={1}>
+                          {/* No link option */}
+                          <HStack
+                            px={3}
+                            py={2.5}
+                            cursor="pointer"
+                            bg={!formData.linked_category_id ? colors.rowStripedBg : 'transparent'}
+                            _hover={{ bg: colors.rowStripedBg }}
+                            borderRadius="8px"
+                            onClick={() => {
+                              handleCategoryChange('');
+                              setLinkedCategoryDropdownOpen(false);
+                            }}
+                            justify="space-between"
+                            transition="background 0.1s"
+                          >
+                            <Text
+                              color={colors.textMuted}
+                              fontSize="sm"
+                              fontWeight={!formData.linked_category_id ? '600' : '400'}
+                            >
+                              — No link (manual tracking) —
+                            </Text>
+                            {!formData.linked_category_id && (
+                              <Text color="blue.500" fontSize="sm">✓</Text>
+                            )}
+                          </HStack>
+                          {spendingCategories.map((cat) => {
+                            const isSelected = cat.id === formData.linked_category_id;
+                            const recurringPayment = recurringPayments?.find(
+                              (rp) => rp.category_id === cat.id && rp.is_active && rp.type === 'expense'
+                            );
+                            const monthlyAmount = recurringPayment
+                              ? convertToMonthly(recurringPayment.amount, recurringPayment.frequency)
+                              : 0;
+                            const amountHint = recurringPayment ? ` (${formatCurrency(monthlyAmount)}/mo)` : '';
+                            return (
+                              <HStack
+                                key={cat.id}
+                                px={3}
+                                py={2.5}
+                                cursor="pointer"
+                                bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                                _hover={{ bg: colors.rowStripedBg }}
+                                borderRadius="8px"
+                                onClick={() => {
+                                  handleCategoryChange(cat.id);
+                                  setLinkedCategoryDropdownOpen(false);
+                                }}
+                                justify="space-between"
+                                transition="background 0.1s"
+                              >
+                                <Text
+                                  color={colors.textPrimary}
+                                  fontSize="sm"
+                                  fontWeight={isSelected ? '600' : '400'}
+                                >
+                                  {cat.name}{amountHint}
+                                </Text>
+                                {isSelected && (
+                                  <Text color="blue.500" fontSize="sm">✓</Text>
+                                )}
+                              </HStack>
+                            );
+                          })}
+                        </VStack>
+                      </Box>
+                    )}
                   </Box>
                   {formData.linked_category_id && (() => {
                     const linkedRecurring = recurringPayments?.find(
@@ -1598,6 +1877,8 @@ export default function AssetsLiabilities() {
   const [snapshots, setSnapshots] = useState([]);
   const [recordDate, setRecordDate] = useState(new Date().toISOString().split('T')[0]);
   const [compareDate, setCompareDate] = useState('');
+  const [compareDropdownOpen, setCompareDropdownOpen] = useState(false);
+  const compareDropdownRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -1632,6 +1913,17 @@ export default function AssetsLiabilities() {
       loadMonthlyExpenses();
     }
   }, [user]);
+
+  // Handle click outside to close compare dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (compareDropdownRef.current && !compareDropdownRef.current.contains(event.target)) {
+        setCompareDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadMonthlyExpenses = async () => {
     try {
@@ -2074,26 +2366,89 @@ export default function AssetsLiabilities() {
                 color={colors.textPrimary}
                 w="160px"
               />
-              <Box
-                as="select"
-                value={compareDate}
-                onChange={(e) => setCompareDate(e.target.value)}
-                bg={colors.inputBg}
-                borderColor={colors.borderColor}
-                borderWidth="1px"
-                borderRadius="md"
-                px={3}
-                py={2}
-                fontSize="sm"
-                color={colors.textPrimary}
-                w="160px"
-                cursor="pointer"
-                _hover={{ borderColor: colors.primary }}
-              >
-                <option value="">Compare to...</option>
-                {snapshots.map((s) => (
-                  <option key={s.id} value={s.record_date}>{new Date(s.record_date).toLocaleDateString()}</option>
-                ))}
+              <Box ref={compareDropdownRef} position="relative" w="160px">
+                <Box
+                  onClick={() => setCompareDropdownOpen(!compareDropdownOpen)}
+                  bg={colors.inputBg}
+                  borderColor={compareDropdownOpen ? 'blue.500' : colors.borderColor}
+                  borderWidth="1px"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                  color={compareDate ? colors.textPrimary : colors.textMuted}
+                  cursor="pointer"
+                  _hover={{ borderColor: colors.primary }}
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  h="40px"
+                >
+                  <Text noOfLines={1}>
+                    {compareDate ? new Date(compareDate).toLocaleDateString() : 'Compare to...'}
+                  </Text>
+                  <Box
+                    as="span"
+                    transform={compareDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                    transition="transform 0.2s"
+                    fontSize="xs"
+                  >
+                    ▼
+                  </Box>
+                </Box>
+                {compareDropdownOpen && (
+                  <Box
+                    position="absolute"
+                    top="100%"
+                    left={0}
+                    right={0}
+                    zIndex={1000}
+                    mt={1}
+                    bg={colors.cardBg}
+                    borderWidth="1px"
+                    borderColor={colors.borderColor}
+                    borderRadius="md"
+                    boxShadow="lg"
+                    maxH="280px"
+                    overflowY="auto"
+                  >
+                    <VStack gap={0} align="stretch" p={1}>
+                      <Box
+                        px={3}
+                        py={2}
+                        cursor="pointer"
+                        bg={!compareDate ? colors.rowStripedBg : 'transparent'}
+                        _hover={{ bg: colors.rowStripedBg }}
+                        borderRadius="md"
+                        onClick={() => { setCompareDate(''); setCompareDropdownOpen(false); }}
+                      >
+                        <Text fontSize="sm" color={colors.textMuted}>No comparison</Text>
+                      </Box>
+                      {snapshots.map((s) => (
+                        <Box
+                          key={s.id}
+                          px={3}
+                          py={2}
+                          cursor="pointer"
+                          bg={compareDate === s.record_date ? colors.rowStripedBg : 'transparent'}
+                          _hover={{ bg: colors.rowStripedBg }}
+                          borderRadius="md"
+                          onClick={() => { setCompareDate(s.record_date); setCompareDropdownOpen(false); }}
+                          display="flex"
+                          justifyContent="space-between"
+                          alignItems="center"
+                        >
+                          <Text fontSize="sm" color={colors.textPrimary}>
+                            {new Date(s.record_date).toLocaleDateString()}
+                          </Text>
+                          {compareDate === s.record_date && (
+                            <Text color="blue.500" fontSize="sm">✓</Text>
+                          )}
+                        </Box>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
               </Box>
             </HStack>
             <Button

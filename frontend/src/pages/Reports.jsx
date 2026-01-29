@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Heading,
@@ -57,7 +57,7 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
     <Flex gap={{ base: 3, md: 4 }} h="100%" direction={{ base: 'column', md: 'row' }}>
       {/* Chart area */}
       <Box flex="1" overflowX="auto" display="flex" flexDirection="column" minH={{ base: '150px', md: 'auto' }}>
-        <Flex gap={1} flex="1" minW={{ base: '300px', md: '400px' }} align="flex-end" pb={1}>
+        <Flex gap={1} flex={{ base: 'none', md: '1' }} minW={{ base: '300px', md: '400px' }} align="flex-end" pb={1} h={{ base: '150px', md: '100%' }}>
           {data.map((month, index) => {
             const incomePercent = maxValue > 0 ? (month.income / maxValue) * 100 : 0;
             const expensePercent = maxValue > 0 ? (month.expenses / maxValue) * 100 : 0;
@@ -77,7 +77,7 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 cursor="pointer"
               >
                 {/* Bars container - takes remaining space */}
-                <Flex gap={{ base: 0.5, md: 1 }} align="flex-end" flex="1" w="100%" justify="center">
+                <Flex gap={{ base: 0.5, md: 1 }} align="flex-end" flex={{ base: 'none', md: '1' }} w="100%" justify="center" h={{ base: '100px', md: '100%' }}>
                   {/* Income bar */}
                   <Box
                     w={{ base: isHovered ? "14px" : "10px", md: isHovered ? "20px" : "16px" }}
@@ -680,6 +680,10 @@ export default function Reports() {
   const [hoveredBarMonth, setHoveredBarMonth] = useState(null);
   const [othersExpanded, setOthersExpanded] = useState(false);
 
+  // Custom dropdown state
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
+  const yearDropdownRef = useRef(null);
+
   // Generate year options
   const yearOptions = [2026, 2025];
 
@@ -688,6 +692,17 @@ export default function Reports() {
       loadYearlyData();
     }
   }, [user, selectedYear]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target)) {
+        setYearDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadYearlyData = async () => {
     setLoading(true);
@@ -830,24 +845,93 @@ export default function Reports() {
             <Text color={colors.textSecondary} mt={1}>Your yearly financial overview</Text>
           </Box>
           <HStack gap={2}>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              style={{
-                padding: '10px 20px',
-                fontSize: '16px',
-                fontWeight: '600',
-                borderRadius: '12px',
-                border: `2px solid ${colors.borderColor}`,
-                backgroundColor: colors.cardBg,
-                color: colors.textPrimary,
-                cursor: 'pointer',
-              }}
-            >
-              {yearOptions.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
+            <Box ref={yearDropdownRef} position="relative">
+              {/* Dropdown Trigger */}
+              <Box
+                onClick={() => setYearDropdownOpen(!yearDropdownOpen)}
+                cursor="pointer"
+                px={5}
+                py={2.5}
+                display="flex"
+                alignItems="center"
+                gap={2}
+                borderRadius="12px"
+                borderWidth="2px"
+                borderColor={yearDropdownOpen ? 'blue.500' : colors.borderColor}
+                bg={colors.cardBg}
+                _hover={{ borderColor: 'blue.400' }}
+                transition="all 0.2s"
+              >
+                <Text
+                  color={colors.textPrimary}
+                  fontSize="md"
+                  fontWeight="600"
+                >
+                  {selectedYear}
+                </Text>
+                <Box
+                  as="span"
+                  transform={yearDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                  transition="transform 0.2s"
+                  color={colors.textSecondary}
+                  fontSize="xs"
+                >
+                  ▼
+                </Box>
+              </Box>
+
+              {/* Dropdown List */}
+              {yearDropdownOpen && (
+                <Box
+                  position="absolute"
+                  top="100%"
+                  right={0}
+                  zIndex={1000}
+                  mt={1}
+                  bg={colors.cardBg}
+                  borderWidth="1px"
+                  borderColor={colors.borderColor}
+                  borderRadius="12px"
+                  boxShadow="lg"
+                  minW="100px"
+                  overflowY="auto"
+                >
+                  <VStack gap={0} align="stretch" p={1}>
+                    {yearOptions.map((year) => {
+                      const isSelected = year === selectedYear;
+                      return (
+                        <HStack
+                          key={year}
+                          px={3}
+                          py={2.5}
+                          cursor="pointer"
+                          bg={isSelected ? colors.rowStripedBg : 'transparent'}
+                          _hover={{ bg: colors.rowStripedBg }}
+                          borderRadius="8px"
+                          onClick={() => {
+                            setSelectedYear(year);
+                            setYearDropdownOpen(false);
+                          }}
+                          justify="space-between"
+                          transition="background 0.1s"
+                        >
+                          <Text
+                            color={colors.textPrimary}
+                            fontSize="sm"
+                            fontWeight={isSelected ? '600' : '400'}
+                          >
+                            {year}
+                          </Text>
+                          {isSelected && (
+                            <Text color="blue.500" fontSize="sm">✓</Text>
+                          )}
+                        </HStack>
+                      );
+                    })}
+                  </VStack>
+                </Box>
+              )}
+            </Box>
           </HStack>
         </Flex>
 
@@ -912,7 +996,7 @@ export default function Reports() {
                 </HStack>
               </HStack>
             </Flex>
-            <Box flex="1" minH="200px">
+            <Box flex="1" minH="200px" h={{ base: '200px', md: 'auto' }}>
               <MonthlyBarChart
                 data={monthlyData}
                 formatCurrency={formatCurrency}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Flex,
@@ -201,6 +201,8 @@ export default function Budget() {
   const [viewMode, setViewMode] = useState('current'); // 'current' or 'projected'
   const [previousMonthLimits, setPreviousMonthLimits] = useState({}); // Previous month's budget limits for comparison
   const [setupSortBy, setSetupSortBy] = useState('amount'); // 'amount' or 'name'
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef(null);
   const [committedLimits, setCommittedLimits] = useState({}); // Used for sorting - only updates on blur
   const [categorySearch, setCategorySearch] = useState(''); // Search filter for categories
   const [recommendationsKey, setRecommendationsKey] = useState(0); // Key to force refresh recommendations
@@ -224,6 +226,17 @@ export default function Budget() {
       calculateForecast();
     }
   }, [budgetData, recurringPayments, selectedMonth]);
+
+  // Handle click outside to close sort dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
+        setSortDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const calculateForecast = () => {
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -1529,23 +1542,80 @@ export default function Budget() {
                     />
                     <HStack gap={2}>
                       <Text fontSize="xs" color={colors.textMuted}>Sort:</Text>
-                      <select
-                        value={setupSortBy}
-                        onChange={(e) => setSetupSortBy(e.target.value)}
-                        style={{
-                          padding: '6px 12px',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          borderRadius: '8px',
-                          border: `1px solid ${colors.borderColor}`,
-                          backgroundColor: colors.cardBg,
-                          color: colors.textPrimary,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <option value="amount">Amount (Highest)</option>
-                        <option value="name">Name (A-Z)</option>
-                      </select>
+                      <Box ref={sortDropdownRef} position="relative">
+                        <Box
+                          onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                          px={3}
+                          py={1.5}
+                          fontSize="13px"
+                          fontWeight="500"
+                          borderRadius="8px"
+                          borderWidth="1px"
+                          borderColor={sortDropdownOpen ? 'blue.500' : colors.borderColor}
+                          bg={colors.cardBg}
+                          color={colors.textPrimary}
+                          cursor="pointer"
+                          display="flex"
+                          alignItems="center"
+                          gap={2}
+                          _hover={{ borderColor: 'blue.400' }}
+                          minW="140px"
+                        >
+                          <Text flex="1">{setupSortBy === 'amount' ? 'Amount (Highest)' : 'Name (A-Z)'}</Text>
+                          <Box
+                            as="span"
+                            transform={sortDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                            transition="transform 0.2s"
+                            fontSize="10px"
+                          >
+                            ▼
+                          </Box>
+                        </Box>
+                        {sortDropdownOpen && (
+                          <Box
+                            position="absolute"
+                            top="100%"
+                            left={0}
+                            right={0}
+                            zIndex={1000}
+                            mt={1}
+                            bg={colors.cardBg}
+                            borderWidth="1px"
+                            borderColor={colors.borderColor}
+                            borderRadius="8px"
+                            boxShadow="lg"
+                            overflow="hidden"
+                          >
+                            <VStack gap={0} align="stretch">
+                              {[
+                                { value: 'amount', label: 'Amount (Highest)' },
+                                { value: 'name', label: 'Name (A-Z)' },
+                              ].map((option) => (
+                                <Box
+                                  key={option.value}
+                                  px={3}
+                                  py={2}
+                                  cursor="pointer"
+                                  bg={setupSortBy === option.value ? colors.rowStripedBg : 'transparent'}
+                                  _hover={{ bg: colors.rowStripedBg }}
+                                  onClick={() => {
+                                    setSetupSortBy(option.value);
+                                    setSortDropdownOpen(false);
+                                  }}
+                                  display="flex"
+                                  justifyContent="space-between"
+                                  alignItems="center"
+                                >
+                                  <Text fontSize="13px" color={colors.textPrimary}>{option.label}</Text>
+                                  {setupSortBy === option.value && (
+                                    <Text color="blue.500" fontSize="sm">✓</Text>
+                                  )}
+                                </Box>
+                              ))}
+                            </VStack>
+                          </Box>
+                        )}
+                      </Box>
                     </HStack>
                   </HStack>
                 </Flex>
