@@ -71,6 +71,7 @@ export default function Transactions() {
   const [categoryEditDropdownOpen, setCategoryEditDropdownOpen] = useState(false);
   const periodDropdownRef = useRef(null);
   const categoryEditDropdownRef = useRef(null);
+  const categoryEditDropdownMobileRef = useRef(null);
 
   useEffect(() => {
     if (user) {
@@ -80,18 +81,24 @@ export default function Transactions() {
     }
   }, [user]);
 
-  // Handle click outside to close dropdowns
+  // Handle click outside to close dropdowns (mousedown + touchstart for mobile)
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target)) {
         setPeriodDropdownOpen(false);
       }
-      if (categoryEditDropdownRef.current && !categoryEditDropdownRef.current.contains(event.target)) {
+      const insideDesktop = categoryEditDropdownRef.current?.contains(event.target);
+      const insideMobile = categoryEditDropdownMobileRef.current?.contains(event.target);
+      if ((categoryEditDropdownRef.current || categoryEditDropdownMobileRef.current) && !insideDesktop && !insideMobile) {
         setCategoryEditDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   const loadCategories = async () => {
@@ -915,12 +922,14 @@ export default function Transactions() {
                   borderRadius="lg"
                   borderWidth="1px"
                   borderColor={colors.borderColor}
+                  position="relative"
+                  zIndex={editingTransactionId === transaction.id ? 10 : 'auto'}
                 >
                   <Flex justify="space-between" align="flex-start" mb={2}>
                     <Box flex="1">
                       {editingTransactionId === transaction.id ? (
                         <HStack gap={2} mb={1}>
-                          <Box ref={categoryEditDropdownRef} position="relative" flex={1} maxW="160px">
+                          <Box ref={categoryEditDropdownMobileRef} position="relative" flex={1} maxW="160px">
                             {/* Dropdown Trigger */}
                             <Box
                               onClick={() => !updatingCategory && setCategoryEditDropdownOpen(!categoryEditDropdownOpen)}
