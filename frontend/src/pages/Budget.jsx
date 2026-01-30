@@ -246,13 +246,12 @@ export default function Budget() {
     // Check if we're in the selected month
     const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
 
-    // Start date for forecast: TOMORROW if current month (today's payments may already be spent),
+    // Start date for forecast: TODAY if current month (matches Dashboard's Upcoming Payments),
     // or start of month if future month
     let forecastStart;
     if (isCurrentMonth) {
-      // Start from tomorrow to avoid double-counting payments due today that are already spent
-      forecastStart = new Date(today);
-      forecastStart.setDate(forecastStart.getDate() + 1);
+      // Start from today to match Dashboard's upcoming payments calculation
+      forecastStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     } else if (today < new Date(year, month - 1, 1)) {
       // Future month - forecast entire month
       forecastStart = new Date(year, month - 1, 1);
@@ -297,28 +296,21 @@ export default function Budget() {
     }
 
     // Build forecast data by merging with budget data
-    // Logic: For ALL categories with a budget limit, projected = at least the budget limit
-    // - Categories WITH recurring: projected = max(spent + recurring, limit)
-    // - Categories WITHOUT recurring: projected = max(spent, limit)
+    // Projected = spent + upcoming recurring + remaining budget for non-recurring categories
     const forecast = budgetData.map(item => {
       const upcoming = upcomingByCategory[item.id] || { amount: 0, payments: [] };
       const hasRecurring = upcoming.amount > 0;
-      const spentPlusUpcoming = item.spent + upcoming.amount;
 
-      // For all categories, assume at least the budget limit will be spent
+      // For categories WITH recurring: projected = spent + upcoming recurring
+      // For categories WITHOUT recurring: projected = full budget limit (assume it'll be used)
       let projectedSpent;
-      let discretionaryAmount = 0;
+      let nonRecurringRemaining = 0;
 
       if (hasRecurring) {
-        // Has recurring: spent + upcoming, but assume at least budget limit will be used
-        projectedSpent = item.limit > 0 ? Math.max(spentPlusUpcoming, item.limit) : spentPlusUpcoming;
-        discretionaryAmount = item.limit > 0 && spentPlusUpcoming < item.limit
-          ? item.limit - spentPlusUpcoming
-          : 0;
+        projectedSpent = item.spent + upcoming.amount;
       } else {
-        // No recurring: assume full budget will be spent
         projectedSpent = item.limit > 0 ? Math.max(item.spent, item.limit) : item.spent;
-        discretionaryAmount = item.limit > 0 && item.spent < item.limit
+        nonRecurringRemaining = item.limit > 0 && item.spent < item.limit
           ? item.limit - item.spent
           : 0;
       }
@@ -337,7 +329,7 @@ export default function Budget() {
         projectedPercent,
         willExceed,
         overAmount,
-        discretionaryAmount,
+        nonRecurringRemaining,
         hasRecurring,
       };
     });
@@ -1150,7 +1142,7 @@ export default function Budget() {
                     {/* Forecast Summary Card */}
                     {(() => {
                       const totalUpcoming = forecastData.reduce((sum, f) => sum + f.upcomingAmount, 0);
-                      const totalDiscretionary = forecastData.reduce((sum, f) => sum + f.discretionaryAmount, 0);
+                      const totalNonRecurringRemaining = forecastData.reduce((sum, f) => sum + f.nonRecurringRemaining, 0);
                       const totalProjected = forecastData.reduce((sum, f) => sum + f.projectedSpent, 0);
                       // Calculate true over-budget based on total projected vs total limit (not sum of individual overages)
                       const totalOverBudget = Math.max(0, totalProjected - totalLimit);
@@ -1208,9 +1200,9 @@ export default function Budget() {
                                     + Recurring: {formatCurrency(totalUpcoming)}
                                   </Text>
                                 )}
-                                {totalDiscretionary > 0 && (
+                                {totalNonRecurringRemaining > 0 && (
                                   <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                    + Expected: {formatCurrency(totalDiscretionary)}
+                                    + Remaining: {formatCurrency(totalNonRecurringRemaining)}
                                   </Text>
                                 )}
                               </HStack>
@@ -1354,11 +1346,11 @@ export default function Budget() {
                                 flexShrink={0}
                               />
                             )}
-                            {/* Discretionary (assumed) - dotted blue */}
-                            {item.discretionaryAmount > 0 && item.limit > 0 && (
+                            {/* Non-recurring remaining - dotted blue */}
+                            {item.nonRecurringRemaining > 0 && item.limit > 0 && (
                               <Box
                                 h="100%"
-                                w={`${Math.min((item.discretionaryAmount / item.limit) * 100, 100)}%`}
+                                w={`${Math.min((item.nonRecurringRemaining / item.limit) * 100, 100)}%`}
                                 bg="#93C5FD"
                                 backgroundImage="repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(255,255,255,0.5) 3px, rgba(255,255,255,0.5) 6px)"
                                 flexShrink={0}
@@ -1384,13 +1376,13 @@ export default function Budget() {
                                 <Text color="purple.500" fontWeight="500">{formatCurrency(item.upcomingAmount)}</Text>
                               </Flex>
                             )}
-                            {item.discretionaryAmount > 0 && (
+                            {item.nonRecurringRemaining > 0 && (
                               <Flex justify="space-between" fontSize="xs">
                                 <HStack gap={2}>
                                   <Box w="8px" h="8px" borderRadius="sm" bg="#93C5FD" />
-                                  <Text color="blue.400" fontWeight="500">Expected</Text>
+                                  <Text color="blue.400" fontWeight="500">Remaining</Text>
                                 </HStack>
-                                <Text color="blue.400" fontWeight="500">{formatCurrency(item.discretionaryAmount)}</Text>
+                                <Text color="blue.400" fontWeight="500">{formatCurrency(item.nonRecurringRemaining)}</Text>
                               </Flex>
                             )}
                             {item.willExceed && (

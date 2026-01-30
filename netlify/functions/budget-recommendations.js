@@ -362,18 +362,20 @@ export async function handler(event) {
     };
 
     // Calculate recurring payments for the target month
-    // For current month: remaining payments from tomorrow until end of month
+    // For current month: remaining payments from today until end of month
     // For future months: all payments for the entire month
     const isCurrentMonth = targetYear === now.getFullYear() && targetMonth === (now.getMonth() + 1);
     const recurringStartDate = isCurrentMonth
-      ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) // Tomorrow
+      ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) // Today
       : new Date(targetYear, targetMonth - 1, 1); // Start of target month
     const endOfMonth = new Date(targetYear, targetMonth, 0); // End of target month
 
     // Build map of categories with their recurring payment amounts
     (recurringPayments || []).forEach(rp => {
       if (rp.category_id) {
+        // Any active recurring payment means this category is not discretionary
         categoriesWithRecurring.add(rp.category_id);
+
         // Calculate monthly equivalent of recurring amount
         let monthlyAmount = Number(rp.amount);
         switch (rp.frequency) {
@@ -573,8 +575,8 @@ export async function handler(event) {
       const remaining = budget.limit - budget.spent;
       const availableToSave = remaining; // No recurring to subtract since we filtered them out
 
-      // Only show if there's meaningful savings potential (at least $10)
-      if (availableToSave >= 10) {
+      // Only show if there's savings potential (at least $1)
+      if (availableToSave >= 1) {
         const spending = categorySpending.find(s => s.category_id === categoryId);
 
         savingsOpportunities.push({
