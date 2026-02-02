@@ -334,9 +334,12 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
             const isHovered = hoveredPoint === i;
             const date = new Date(p.date);
             const dateLabel = `${date.getDate()}.${date.getMonth() + 1}.${String(date.getFullYear()).slice(-2)}`;
+            // Clamp hit-area rect within SVG bounds
+            const rectX = Math.max(0, p.x - 25);
+            const rectW = Math.min(50, width - rectX);
             return (
               <g key={i}>
-                <rect x={p.x - 25} y={paddingTop} width={50} height={chartHeight} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredPoint(i)} onMouseLeave={() => setHoveredPoint(null)} />
+                <rect x={rectX} y={0} width={rectW} height={height} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredPoint(i)} onMouseLeave={() => setHoveredPoint(null)} />
                 <circle cx={p.x} cy={p.y} r={isHovered ? 8 : 5} fill={p.equity >= 0 ? '#3B82F6' : '#EF4444'} stroke="white" strokeWidth={isHovered ? 3 : 2} style={{ transition: 'all 0.15s ease', cursor: 'pointer' }} onMouseEnter={() => setHoveredPoint(i)} onMouseLeave={() => setHoveredPoint(null)} />
                 <text x={p.x} y={height - 10} textAnchor="middle" fontSize="10" fill="#9CA3AF">{dateLabel}</text>
               </g>
@@ -345,29 +348,47 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
         </svg>
       </Box>
 
-      {/* Hover tooltip */}
-      {hoveredPoint !== null && points[hoveredPoint] && (
-        <Box position="absolute" top="10px" right="20px" bg={colors.cardBg} p={3} borderRadius="12px" boxShadow="0 4px 16px rgba(0,0,0,0.15)" border="1px solid" borderColor={colors.borderColor} minW="160px" zIndex={10}>
-          <Text fontSize="sm" fontWeight="700" color={colors.textPrimary} mb={2}>
-            {new Date(points[hoveredPoint].date).toLocaleDateString()}
-          </Text>
-          <Flex justify="space-between" mb={1}>
-            <Text fontSize="xs" color={colors.textSecondary}>Assets:</Text>
-            <Text fontSize="xs" fontWeight="600" color="green.500">{formatCurrency(points[hoveredPoint].assets)}</Text>
-          </Flex>
-          <Flex justify="space-between" mb={1}>
-            <Text fontSize="xs" color={colors.textSecondary}>Liabilities:</Text>
-            <Text fontSize="xs" fontWeight="600" color="red.500">{formatCurrency(points[hoveredPoint].liabilities)}</Text>
-          </Flex>
-          <Box h="1px" bg={colors.borderColor} my={2} />
-          <Flex justify="space-between">
-            <Text fontSize="xs" color={colors.textSecondary}>Net Worth:</Text>
-            <Text fontSize="sm" fontWeight="700" color={points[hoveredPoint].equity >= 0 ? 'blue.500' : 'red.500'}>
-              {formatCurrency(points[hoveredPoint].equity)}
-            </Text>
-          </Flex>
-        </Box>
-      )}
+      {/* Hover tooltip - positioned next to the dot */}
+      {hoveredPoint !== null && points[hoveredPoint] && (() => {
+        const p = points[hoveredPoint];
+        const isRightHalf = p.x > width / 2;
+        // Convert SVG coords to percentage of container
+        const leftPct = (p.x / width) * 100;
+        const topPct = (p.y / height) * 100;
+        return (
+          <Box
+            position="absolute"
+            zIndex={10}
+            pointerEvents="none"
+            style={{
+              left: `${leftPct}%`,
+              top: `${topPct}%`,
+              transform: `translate(${isRightHalf ? 'calc(-100% - 14px)' : '14px'}, -50%)`,
+            }}
+          >
+            <Box bg={colors.cardBg} p={3} borderRadius="12px" boxShadow="0 4px 20px rgba(0,0,0,0.25)" border="1px solid" borderColor={colors.borderColor} minW="160px">
+              <Text fontSize="sm" fontWeight="700" color={colors.textPrimary} mb={2}>
+                {new Date(p.date + 'T00:00:00').toLocaleDateString()}
+              </Text>
+              <Flex justify="space-between" mb={1}>
+                <Text fontSize="xs" color={colors.textSecondary}>Assets:</Text>
+                <Text fontSize="xs" fontWeight="600" color="green.500">{formatCurrency(p.assets)}</Text>
+              </Flex>
+              <Flex justify="space-between" mb={1}>
+                <Text fontSize="xs" color={colors.textSecondary}>Liabilities:</Text>
+                <Text fontSize="xs" fontWeight="600" color="red.500">{formatCurrency(p.liabilities)}</Text>
+              </Flex>
+              <Box h="1px" bg={colors.borderColor} my={2} />
+              <Flex justify="space-between">
+                <Text fontSize="xs" color={colors.textSecondary}>Net Worth:</Text>
+                <Text fontSize="sm" fontWeight="700" color={p.equity >= 0 ? 'blue.500' : 'red.500'}>
+                  {formatCurrency(p.equity)}
+                </Text>
+              </Flex>
+            </Box>
+          </Box>
+        );
+      })()}
     </Box>
   );
 };
@@ -1631,7 +1652,18 @@ const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm, itemType, itemName, c
 // ============================================
 
 // Summary Card Component
-const SummaryCard = ({ title, value, trend, gradient, colors, icon }) => {
+const SummaryCard = ({ title, value, trend, trendFormat, gradient, colors, icon, valueColor }) => {
+  const formatTrend = (val) => {
+    if (trendFormat === 'percent') return `${Math.abs(val).toFixed(1)}pp`;
+    return formatCurrency(Math.abs(val));
+  };
+  const isPositive = trend >= 0;
+  // For liabilities, an increase is bad (red), a decrease is good (green)
+  const trendIsGood = title === 'Total Liabilities' || title === 'Debt-to-Assets'
+    ? !isPositive
+    : isPositive;
+  const trendColor = trendIsGood ? colors.success : colors.danger;
+
   return (
     <Box
       bg={colors.cardBg}
@@ -1650,12 +1682,21 @@ const SummaryCard = ({ title, value, trend, gradient, colors, icon }) => {
           <Text fontSize="sm" color={colors.textMuted} fontWeight="600">{title}</Text>
           {icon && <Text fontSize="xl">{icon}</Text>}
         </HStack>
-        <Text fontSize={{ base: '2xl', md: '3xl' }} fontWeight="800" color={colors.textPrimary} letterSpacing="-0.02em">{value}</Text>
+        <Text fontSize={{ base: '2xl', md: '3xl' }} fontWeight="800" color={valueColor || colors.textPrimary} letterSpacing="-0.02em">{value}</Text>
         {trend !== undefined && trend !== null && (
           <HStack gap={1}>
-            <Text fontSize="xs" color={trend >= 0 ? colors.success : colors.danger} fontWeight="600">
-              {trend >= 0 ? '↗' : '↘'} {formatCurrency(Math.abs(trend))}
-            </Text>
+            <Box
+              display="inline-flex"
+              alignItems="center"
+              bg={trendIsGood ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}
+              px={1.5}
+              py={0.5}
+              borderRadius="md"
+            >
+              <Text fontSize="xs" color={trendColor} fontWeight="700">
+                {isPositive ? '▲' : '▼'} {formatTrend(trend)}
+              </Text>
+            </Box>
             <Text fontSize="xs" color={colors.textMuted}>vs previous</Text>
           </HStack>
         )}
@@ -1879,6 +1920,8 @@ export default function AssetsLiabilities() {
   const [compareDate, setCompareDate] = useState('');
   const [compareDropdownOpen, setCompareDropdownOpen] = useState(false);
   const compareDropdownRef = useRef(null);
+  const [recordDateDropdownOpen, setRecordDateDropdownOpen] = useState(false);
+  const recordDateDropdownRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -1914,11 +1957,14 @@ export default function AssetsLiabilities() {
     }
   }, [user]);
 
-  // Handle click outside to close compare dropdown
+  // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (compareDropdownRef.current && !compareDropdownRef.current.contains(event.target)) {
         setCompareDropdownOpen(false);
+      }
+      if (recordDateDropdownRef.current && !recordDateDropdownRef.current.contains(event.target)) {
+        setRecordDateDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -2291,17 +2337,37 @@ export default function AssetsLiabilities() {
     }
   };
 
-  // Calculate metrics
-  const totalAssets = assets.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
-  const totalLiabilities = liabilities.reduce((sum, l) => sum + (parseFloat(l.outstanding_balance) || 0), 0);
+  // Calculate live metrics
+  const liveTotalAssets = assets.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
+  const liveTotalLiabilities = liabilities.reduce((sum, l) => sum + (parseFloat(l.outstanding_balance) || 0), 0);
+
+  // Use snapshot data when a past date is selected, live data otherwise
+  const today = new Date().toISOString().split('T')[0];
+  const selectedSnapshot = recordDate !== today
+    ? snapshots.find((s) => s.record_date === recordDate)
+    : null;
+
+  const totalAssets = selectedSnapshot ? (selectedSnapshot.total_assets || 0) : liveTotalAssets;
+  const totalLiabilities = selectedSnapshot ? (selectedSnapshot.total_liabilities || 0) : liveTotalLiabilities;
   const equity = totalAssets - totalLiabilities;
   const debtToAssetsRatio = totalAssets > 0 ? (totalLiabilities / totalAssets) * 100 : 0;
 
-  // Equity change
+  // Comparison changes
   let equityChange = null;
+  let assetsChange = null;
+  let liabilitiesChange = null;
+  let debtToAssetsChange = null;
   if (compareDate && snapshots.length > 0) {
     const compareSnapshot = snapshots.find((s) => s.record_date === compareDate);
-    if (compareSnapshot) equityChange = equity - compareSnapshot.equity;
+    if (compareSnapshot) {
+      equityChange = equity - compareSnapshot.equity;
+      assetsChange = totalAssets - (compareSnapshot.total_assets || 0);
+      liabilitiesChange = totalLiabilities - (compareSnapshot.total_liabilities || 0);
+      const prevDebtToAssets = compareSnapshot.total_assets > 0
+        ? (compareSnapshot.total_liabilities / compareSnapshot.total_assets) * 100
+        : 0;
+      debtToAssetsChange = debtToAssetsRatio - prevDebtToAssets;
+    }
   }
 
   // Category-specific calculations
@@ -2357,18 +2423,94 @@ export default function AssetsLiabilities() {
           </HStack>
           <Flex gap={3} align="center" flexWrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
             <HStack gap={3}>
-              <Input
-                type="date"
-                value={recordDate}
-                onChange={(e) => setRecordDate(e.target.value)}
-                bg={colors.inputBg}
-                borderColor={colors.borderColor}
-                color={colors.textPrimary}
-                w="160px"
-              />
+              <Box ref={recordDateDropdownRef} position="relative" w="160px">
+                <Box
+                  onClick={() => { setRecordDateDropdownOpen(!recordDateDropdownOpen); setCompareDropdownOpen(false); }}
+                  bg={colors.inputBg}
+                  borderColor={recordDateDropdownOpen ? 'blue.500' : colors.borderColor}
+                  borderWidth="1px"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  fontSize="sm"
+                  color={colors.textPrimary}
+                  cursor="pointer"
+                  _hover={{ borderColor: colors.primary }}
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  h="40px"
+                >
+                  <Text noOfLines={1}>
+                    {new Date(recordDate + 'T00:00:00').toLocaleDateString()}
+                  </Text>
+                  <Box
+                    as="span"
+                    transform={recordDateDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                    transition="transform 0.2s"
+                    fontSize="xs"
+                  >
+                    ▼
+                  </Box>
+                </Box>
+                {recordDateDropdownOpen && (
+                  <Box
+                    position="absolute"
+                    top="100%"
+                    left={0}
+                    right={0}
+                    zIndex={1000}
+                    mt={1}
+                    bg={colors.cardBg}
+                    borderWidth="1px"
+                    borderColor={colors.borderColor}
+                    borderRadius="md"
+                    boxShadow="lg"
+                    maxH="280px"
+                    overflowY="auto"
+                  >
+                    <VStack gap={0} align="stretch" p={1}>
+                      {(() => {
+                        const today = new Date().toISOString().split('T')[0];
+                        const hasTodaySnapshot = snapshots.some((s) => s.record_date === today);
+                        const items = hasTodaySnapshot
+                          ? snapshots
+                          : [{ id: 'today', record_date: today }, ...snapshots];
+                        return items.map((s) => (
+                          <Box
+                            key={s.id}
+                            px={3}
+                            py={2}
+                            cursor="pointer"
+                            bg={recordDate === s.record_date ? colors.rowStripedBg : 'transparent'}
+                            _hover={{ bg: colors.rowStripedBg }}
+                            borderRadius="md"
+                            onClick={() => { setRecordDate(s.record_date); setRecordDateDropdownOpen(false); }}
+                            display="flex"
+                            justifyContent="space-between"
+                            alignItems="center"
+                          >
+                            <HStack gap={2}>
+                              <Text fontSize="sm" color={colors.textPrimary}>
+                                {new Date(s.record_date + 'T00:00:00').toLocaleDateString()}
+                              </Text>
+                              {s.record_date === today && (
+                                <Text fontSize="xs" color={colors.textMuted}>(today)</Text>
+                              )}
+                            </HStack>
+                            {recordDate === s.record_date && (
+                              <Text color="blue.500" fontSize="sm">✓</Text>
+                            )}
+                          </Box>
+                        ));
+                      })()}
+                    </VStack>
+                  </Box>
+                )}
+              </Box>
               <Box ref={compareDropdownRef} position="relative" w="160px">
                 <Box
-                  onClick={() => setCompareDropdownOpen(!compareDropdownOpen)}
+                  onClick={() => { setCompareDropdownOpen(!compareDropdownOpen); setRecordDateDropdownOpen(false); }}
                   bg={colors.inputBg}
                   borderColor={compareDropdownOpen ? 'blue.500' : colors.borderColor}
                   borderWidth="1px"
@@ -2466,11 +2608,18 @@ export default function AssetsLiabilities() {
 
         {/* Summary Cards */}
         <SimpleGrid columns={{ base: 2, sm: 3, md: 5 }} gap={4}>
-          <SummaryCard title="Total Assets" value={formatCurrency(totalAssets)} gradient="linear(to-br, green.500, green.700)" colors={colors} icon="📊" />
-          <SummaryCard title="Total Liabilities" value={formatCurrency(totalLiabilities)} gradient="linear(to-br, red.500, red.700)" colors={colors} icon="💳" />
+          <SummaryCard title="Total Assets" value={formatCurrency(totalAssets)} gradient="linear(to-br, green.500, green.700)" colors={colors} icon="📊" trend={assetsChange} />
+          <SummaryCard title="Total Liabilities" value={formatCurrency(totalLiabilities)} gradient="linear(to-br, red.500, red.700)" colors={colors} icon="💳" trend={liabilitiesChange} />
           <SummaryCard title="Net Worth" value={formatCurrency(equity)} gradient="linear(to-br, blue.500, blue.700)" colors={colors} icon="💎" trend={equityChange} />
-          <SummaryCard title="Debt-to-Assets" value={formatPercent(debtToAssetsRatio)} gradient="linear(to-br, purple.500, purple.700)" colors={colors} icon="📈" />
-          <SummaryCard title="Equity Change" value={equityChange !== null ? formatCurrency(equityChange) : '-'} gradient={equityChange >= 0 ? 'linear(to-br, green.500, green.700)' : 'linear(to-br, red.500, red.700)'} colors={colors} icon={equityChange >= 0 ? '↗️' : '↘️'} />
+          <SummaryCard title="Debt-to-Assets" value={formatPercent(debtToAssetsRatio)} gradient="linear(to-br, purple.500, purple.700)" colors={colors} icon="📈" trend={debtToAssetsChange} trendFormat="percent" />
+          <SummaryCard
+            title="Equity Change"
+            value={equityChange !== null ? `${equityChange >= 0 ? '+' : ''}${formatCurrency(equityChange)}` : '-'}
+            gradient={equityChange === null || equityChange >= 0 ? 'linear(to-br, green.500, green.700)' : 'linear(to-br, red.500, red.700)'}
+            colors={colors}
+            icon={equityChange === null || equityChange >= 0 ? '↗️' : '↘️'}
+            valueColor={equityChange === null ? colors.textMuted : equityChange >= 0 ? '#22C55E' : '#EF4444'}
+          />
         </SimpleGrid>
 
         {/* Portfolio Overview - Charts & Health Score */}
