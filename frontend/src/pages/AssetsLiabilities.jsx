@@ -300,7 +300,7 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
 
   return (
-    <Box overflowX={{ base: 'auto', md: 'visible' }}>
+    <Box overflow="visible">
       <Box position="relative">
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', maxWidth: '100%' }}>
           {/* Grid lines */}
@@ -353,7 +353,8 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
           const isRightHalf = p.x > width / 2;
           // Convert SVG coords to percentage of this inner container
           const leftPct = (p.x / width) * 100;
-          const topPct = (p.y / height) * 100;
+          // Clamp top so tooltip doesn't extend above the chart
+          const topPct = Math.max(5, (p.y / height) * 100);
           return (
             <Box
               position="absolute"
@@ -362,7 +363,7 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
               style={{
                 left: `${leftPct}%`,
                 top: `${topPct}%`,
-                transform: `translate(${isRightHalf ? 'calc(-100% - 14px)' : '14px'}, -50%)`,
+                transform: `translate(${isRightHalf ? 'calc(-100% - 14px)' : '14px'}, -30%)`,
               }}
             >
               <Box bg={colors.cardBg} p={3} borderRadius="12px" boxShadow="0 4px 20px rgba(0,0,0,0.25)" border="1px solid" borderColor={colors.borderColor} minW="150px">
