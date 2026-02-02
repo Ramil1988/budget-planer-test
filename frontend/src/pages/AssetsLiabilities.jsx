@@ -261,8 +261,8 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
   const maxVal = Math.max(...values.map(Math.abs), 1);
   const minVal = Math.min(...values, 0);
 
-  const width = 700;
-  const height = 200;
+  const width = 500;
+  const height = 220;
   const paddingTop = 30;
   const paddingBottom = 40;
   const paddingLeft = 60;
@@ -300,8 +300,8 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
 
   return (
-    <Box overflowX={{ base: 'auto', md: 'visible' }} position="relative">
-      <Box minW={{ base: '600px', md: 'auto' }}>
+    <Box overflowX={{ base: 'auto', md: 'visible' }}>
+      <Box position="relative">
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', maxWidth: '100%' }}>
           {/* Grid lines */}
           {yLabels.map((label, i) => (
@@ -346,49 +346,49 @@ const NetWorthTrendChart = ({ snapshots, colors }) => {
             );
           })}
         </svg>
-      </Box>
 
-      {/* Hover tooltip - positioned next to the dot */}
-      {hoveredPoint !== null && points[hoveredPoint] && (() => {
-        const p = points[hoveredPoint];
-        const isRightHalf = p.x > width / 2;
-        // Convert SVG coords to percentage of container
-        const leftPct = (p.x / width) * 100;
-        const topPct = (p.y / height) * 100;
-        return (
-          <Box
-            position="absolute"
-            zIndex={10}
-            pointerEvents="none"
-            style={{
-              left: `${leftPct}%`,
-              top: `${topPct}%`,
-              transform: `translate(${isRightHalf ? 'calc(-100% - 14px)' : '14px'}, -50%)`,
-            }}
-          >
-            <Box bg={colors.cardBg} p={3} borderRadius="12px" boxShadow="0 4px 20px rgba(0,0,0,0.25)" border="1px solid" borderColor={colors.borderColor} minW="160px">
-              <Text fontSize="sm" fontWeight="700" color={colors.textPrimary} mb={2}>
-                {new Date(p.date + 'T00:00:00').toLocaleDateString()}
-              </Text>
-              <Flex justify="space-between" mb={1}>
-                <Text fontSize="xs" color={colors.textSecondary}>Assets:</Text>
-                <Text fontSize="xs" fontWeight="600" color="green.500">{formatCurrency(p.assets)}</Text>
-              </Flex>
-              <Flex justify="space-between" mb={1}>
-                <Text fontSize="xs" color={colors.textSecondary}>Liabilities:</Text>
-                <Text fontSize="xs" fontWeight="600" color="red.500">{formatCurrency(p.liabilities)}</Text>
-              </Flex>
-              <Box h="1px" bg={colors.borderColor} my={2} />
-              <Flex justify="space-between">
-                <Text fontSize="xs" color={colors.textSecondary}>Net Worth:</Text>
-                <Text fontSize="sm" fontWeight="700" color={p.equity >= 0 ? 'blue.500' : 'red.500'}>
-                  {formatCurrency(p.equity)}
+        {/* Hover tooltip - positioned next to the dot, inside the scrollable container */}
+        {hoveredPoint !== null && points[hoveredPoint] && (() => {
+          const p = points[hoveredPoint];
+          const isRightHalf = p.x > width / 2;
+          // Convert SVG coords to percentage of this inner container
+          const leftPct = (p.x / width) * 100;
+          const topPct = (p.y / height) * 100;
+          return (
+            <Box
+              position="absolute"
+              zIndex={10}
+              pointerEvents="none"
+              style={{
+                left: `${leftPct}%`,
+                top: `${topPct}%`,
+                transform: `translate(${isRightHalf ? 'calc(-100% - 14px)' : '14px'}, -50%)`,
+              }}
+            >
+              <Box bg={colors.cardBg} p={3} borderRadius="12px" boxShadow="0 4px 20px rgba(0,0,0,0.25)" border="1px solid" borderColor={colors.borderColor} minW="150px">
+                <Text fontSize="sm" fontWeight="700" color={colors.textPrimary} mb={2}>
+                  {new Date(p.date + 'T00:00:00').toLocaleDateString()}
                 </Text>
-              </Flex>
+                <Flex justify="space-between" mb={1}>
+                  <Text fontSize="xs" color={colors.textSecondary}>Assets:</Text>
+                  <Text fontSize="xs" fontWeight="600" color="green.500">{formatCurrency(p.assets)}</Text>
+                </Flex>
+                <Flex justify="space-between" mb={1}>
+                  <Text fontSize="xs" color={colors.textSecondary}>Liabilities:</Text>
+                  <Text fontSize="xs" fontWeight="600" color="red.500">{formatCurrency(p.liabilities)}</Text>
+                </Flex>
+                <Box h="1px" bg={colors.borderColor} my={2} />
+                <Flex justify="space-between">
+                  <Text fontSize="xs" color={colors.textSecondary}>Net Worth:</Text>
+                  <Text fontSize="sm" fontWeight="700" color={p.equity >= 0 ? 'blue.500' : 'red.500'}>
+                    {formatCurrency(p.equity)}
+                  </Text>
+                </Flex>
+              </Box>
             </Box>
-          </Box>
-        );
-      })()}
+          );
+        })()}
+      </Box>
     </Box>
   );
 };
