@@ -56,8 +56,8 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
   return (
     <Flex gap={{ base: 3, md: 4 }} h="100%" direction={{ base: 'column', md: 'row' }}>
       {/* Chart area */}
-      <Box flex="1" overflowX="auto" display="flex" flexDirection="column" minH={{ base: '150px', md: 'auto' }}>
-        <Flex gap={1} flex={{ base: 'none', md: '1' }} minW={{ base: '300px', md: '400px' }} align="flex-end" pb={1} h={{ base: '150px', md: '100%' }}>
+      <Box flex="1" overflowX="auto" display="flex" flexDirection="column">
+        <Flex gap={1} flex="1" minW={{ base: '300px', md: '400px' }} align="flex-end" pb={1}>
           {data.map((month, index) => {
             const incomePercent = maxValue > 0 ? (month.income / maxValue) * 100 : 0;
             const expensePercent = maxValue > 0 ? (month.expenses / maxValue) * 100 : 0;
@@ -77,7 +77,7 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 cursor="pointer"
               >
                 {/* Bars container - takes remaining space */}
-                <Flex gap={{ base: 0.5, md: 1 }} align="flex-end" flex={{ base: 'none', md: '1' }} w="100%" justify="center" h={{ base: '100px', md: '100%' }}>
+                <Flex gap={{ base: 0.5, md: 1 }} align="flex-end" flex="1" w="100%" justify="center">
                   {/* Income bar */}
                   <Box
                     w={{ base: isHovered ? "14px" : "10px", md: isHovered ? "20px" : "16px" }}
@@ -147,7 +147,7 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                   </Text>
                 </Flex>
                 {incomeCategories.length > 0 && (
-                  <VStack gap={0} align="stretch" pl={3}>
+                  <VStack gap={0} align="stretch" pl={3} display={{ base: 'none', md: 'flex' }}>
                     {incomeCategories.map((cat) => (
                       <Flex key={cat.name} justify="space-between" fontSize="11px" color={colors.textSecondary} py={0.5}>
                         <Text noOfLines={1} maxW={{ base: '70px', md: '90px' }} fontStyle={cat.isOthers ? 'italic' : 'normal'}>{cat.name}</Text>
@@ -170,7 +170,7 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                   </Text>
                 </Flex>
                 {expenseCategories.length > 0 && (
-                  <VStack gap={0} align="stretch" pl={3}>
+                  <VStack gap={0} align="stretch" pl={3} display={{ base: 'none', md: 'flex' }}>
                     {expenseCategories.map((cat) => (
                       <Flex key={cat.name} justify="space-between" fontSize="11px" color={colors.textSecondary} py={0.5}>
                         <Text noOfLines={1} maxW={{ base: '70px', md: '90px' }} fontStyle={cat.isOthers ? 'italic' : 'normal'}>{cat.name}</Text>
@@ -996,14 +996,16 @@ export default function Reports() {
                 </HStack>
               </HStack>
             </Flex>
-            <Box flex="1" minH="200px" h={{ base: '200px', md: 'auto' }}>
-              <MonthlyBarChart
-                data={monthlyData}
-                formatCurrency={formatCurrency}
-                colors={colors}
-                hoveredBarMonth={hoveredBarMonth}
-                onHoverBarMonth={setHoveredBarMonth}
-              />
+            <Box flex="1" position="relative" minH={{ base: '200px', md: '0' }}>
+              <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                <MonthlyBarChart
+                  data={monthlyData}
+                  formatCurrency={formatCurrency}
+                  colors={colors}
+                  hoveredBarMonth={hoveredBarMonth}
+                  onHoverBarMonth={setHoveredBarMonth}
+                />
+              </Box>
             </Box>
           </Box>
 
