@@ -26,6 +26,7 @@ import {
   getNextPaymentDate,
   getUpcomingPayments,
   getMonthlyProjection,
+  getPaymentDatesInRange,
   formatFrequency,
   formatDate,
   FREQUENCY_CONFIG,
@@ -498,6 +499,57 @@ export default function RecurringPayments() {
             </Flex>
           </Box>
         )}
+
+        {/* Category Total when filtered */}
+        {selectedCategory && filteredPayments.length > 0 && (() => {
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          const monthlyTotal = filteredPayments
+            .filter(p => p.is_active)
+            .reduce((sum, p) => {
+              const occurrences = getPaymentDatesInRange(
+                p.start_date, p.frequency, monthStart, monthEnd,
+                p.end_date, p.business_days_only || false, p.last_business_day_of_month || false
+              ).length;
+              return sum + Number(p.amount) * occurrences;
+            }, 0);
+          return (
+            <Flex
+              align="center"
+              justify="space-between"
+              px={4}
+              py={2.5}
+              borderRadius="12px"
+              bg={colors.cardBg}
+              border="1px solid"
+              borderColor={colors.borderSubtle}
+            >
+              <HStack gap={2}>
+                <Box
+                  w="10px"
+                  h="10px"
+                  borderRadius="full"
+                  bg={getCategoryColor(selectedCategory)}
+                />
+                <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
+                  {selectedCategory}
+                </Text>
+                <Text fontSize="sm" color={colors.textMuted}>
+                  ({filteredPayments.length} {filteredPayments.length === 1 ? 'payment' : 'payments'})
+                </Text>
+              </HStack>
+              <Text
+                fontSize="md"
+                fontWeight="700"
+                color={activeTab === 'expense' ? '#E11D48' : '#059669'}
+              >
+                {activeTab === 'expense' ? '-' : '+'}{formatCurrency(monthlyTotal)}
+                <Text as="span" fontSize="xs" fontWeight="500" color={colors.textMuted}>/mo</Text>
+              </Text>
+            </Flex>
+          );
+        })()}
 
         {/* Recurring Payments List */}
         {filteredPayments.length === 0 ? (
