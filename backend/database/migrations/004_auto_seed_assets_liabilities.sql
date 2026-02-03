@@ -36,9 +36,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Create trigger to auto-seed data when a new user signs up
-DROP TRIGGER IF EXISTS auto_seed_asset_liability_trigger ON profiles;
+-- Uses auth.users instead of profiles to avoid dependency on profiles table existing
+DROP TRIGGER IF EXISTS auto_seed_asset_liability_trigger ON auth.users;
 CREATE TRIGGER auto_seed_asset_liability_trigger
-  AFTER INSERT ON profiles
+  AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION auto_seed_asset_liability_data();
 
@@ -47,7 +48,7 @@ DO $$
 DECLARE
   user_record RECORD;
 BEGIN
-  FOR user_record IN SELECT id FROM profiles LOOP
+  FOR user_record IN SELECT id FROM auth.users LOOP
     -- Check if user has asset categories
     IF NOT EXISTS (SELECT 1 FROM asset_categories WHERE user_id = user_record.id) THEN
       INSERT INTO asset_categories (user_id, name, icon) VALUES
