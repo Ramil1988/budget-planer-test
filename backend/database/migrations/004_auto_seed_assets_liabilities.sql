@@ -28,8 +28,12 @@ BEGIN
     (NEW.id, 'Other Debt', '💸');
 
   RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Log error but don't fail the profiles insert / user signup
+  RAISE WARNING 'auto_seed_asset_liability_data failed for user %: % (SQLSTATE: %)', NEW.id, SQLERRM, SQLSTATE;
+  RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Create trigger to auto-seed data when a new user signs up
 DROP TRIGGER IF EXISTS auto_seed_asset_liability_trigger ON profiles;

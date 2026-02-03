@@ -53,10 +53,21 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- STEP 3: Create master seed function that calls all individual seed functions
 -- ============================================================================
--- NOTE: Removed profiles table insert (table doesn't exist in current schema)
 CREATE OR REPLACE FUNCTION seed_new_user_data(target_user_id UUID)
 RETURNS void AS $$
 BEGIN
+  -- Create profile for the new user (required for asset/liability auto-seeding trigger)
+  INSERT INTO profiles (id, email, full_name)
+  VALUES (
+    target_user_id,
+    (SELECT email FROM auth.users WHERE id = target_user_id),
+    COALESCE(
+      (SELECT raw_user_meta_data->>'full_name' FROM auth.users WHERE id = target_user_id),
+      ''
+    )
+  )
+  ON CONFLICT (id) DO NOTHING;
+
   -- Seed expense categories
   PERFORM seed_user_categories(target_user_id);
 
@@ -78,7 +89,7 @@ BEGIN
   VALUES (target_user_id)
   ON CONFLICT (user_id) DO NOTHING;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ============================================================================
 -- STEP 4: Create trigger function for new user signup
@@ -91,10 +102,10 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   -- Log error but don't fail signup
-  RAISE WARNING 'handle_new_user failed for %: %', NEW.id, SQLERRM;
+  RAISE WARNING 'handle_new_user failed for user %: % (SQLSTATE: %)', NEW.id, SQLERRM, SQLSTATE;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ============================================================================
 -- STEP 5: Create trigger on auth.users table

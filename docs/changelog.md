@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Fix user signup "Database error saving new user" (2026-02-03):**
+  - Added missing `profiles` table INSERT to `seed_new_user_data()` function — the profiles row was removed in an earlier refactor but the table still exists in the schema
+  - This also fixes the `auto_seed_asset_liability_trigger` on `profiles` which was never firing for new users (asset categories and liability types were not being seeded)
+  - Added `EXCEPTION WHEN OTHERS` handler to `auto_seed_asset_liability_data()` to prevent asset/liability seeding failures from blocking signup
+  - Added `SET search_path = public` to all `SECURITY DEFINER` functions for safety
+  - **Action required:** Re-run migration 002 and 004 in Supabase SQL Editor to apply the fix
+
 ### Changed
 - **Smart Budget Suggestions UI Redesign (2026-01-28):**
   - **Collapsible Sections:** Three-level collapse structure
