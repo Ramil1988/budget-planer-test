@@ -23,7 +23,7 @@ const MONTHS = [
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Bar Chart Component for Income vs Expenses
-const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHoverBarMonth }) => {
+const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHoverBarMonth, onClickBarMonth }) => {
   const maxValue = Math.max(
     ...data.map(d => Math.max(d.income, d.expenses)),
     1
@@ -73,7 +73,7 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 h="100%"
                 onPointerEnter={(e) => e.pointerType === 'mouse' && onHoverBarMonth(index)}
                 onPointerLeave={(e) => e.pointerType === 'mouse' && onHoverBarMonth(null)}
-                onClick={() => onHoverBarMonth(hoveredBarMonth === index ? null : index)}
+                onClick={() => onClickBarMonth(index)}
                 cursor="pointer"
               >
                 {/* Bars container - takes remaining space */}
@@ -678,7 +678,8 @@ export default function Reports() {
   const [totals, setTotals] = useState({ income: 0, expenses: 0, balance: 0 });
   const [hoveredCategory, setHoveredCategory] = useState(null);
   const [hoveredMonth, setHoveredMonth] = useState(null);
-  const [hoveredBarMonth, setHoveredBarMonth] = useState(null);
+  const [pinnedBarMonth, setPinnedBarMonth] = useState(null);
+  const [previewBarMonth, setPreviewBarMonth] = useState(null);
   const [othersExpanded, setOthersExpanded] = useState(false);
   const [incomeCategoryData, setIncomeCategoryData] = useState([]);
   const [hoveredIncomeCategory, setHoveredIncomeCategory] = useState(null);
@@ -1022,8 +1023,9 @@ export default function Reports() {
                 data={monthlyData}
                 formatCurrency={formatCurrency}
                 colors={colors}
-                hoveredBarMonth={hoveredBarMonth}
-                onHoverBarMonth={setHoveredBarMonth}
+                hoveredBarMonth={previewBarMonth ?? pinnedBarMonth}
+                onHoverBarMonth={setPreviewBarMonth}
+                onClickBarMonth={(index) => setPinnedBarMonth(pinnedBarMonth === index ? null : index)}
               />
             </Box>
           </Box>
