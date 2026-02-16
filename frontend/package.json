@@ -43,6 +43,7 @@
   "pnpm": {
     "overrides": {
       "esbuild": "0.27.1"
-    }
+    },
+    "onlyBuiltDependencies": ["esbuild", "sharp", "@rollup/rollup-darwin-arm64"]
   }
 }

@@ -71,8 +71,8 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
                 align="center"
                 flex="1"
                 h="100%"
-                onMouseEnter={() => onHoverBarMonth(index)}
-                onMouseLeave={() => onHoverBarMonth(null)}
+                onPointerEnter={(e) => e.pointerType === 'mouse' && onHoverBarMonth(index)}
+                onPointerLeave={(e) => e.pointerType === 'mouse' && onHoverBarMonth(null)}
                 onClick={() => onHoverBarMonth(hoveredBarMonth === index ? null : index)}
                 cursor="pointer"
               >
@@ -125,7 +125,8 @@ const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHove
         borderRadius="10px"
         display="flex"
         flexDirection="column"
-        minH={{ base: 'auto', md: 'auto' }}
+        minH={{ base: 'auto', md: 0 }}
+        overflowY={{ base: 'visible', md: 'auto' }}
       >
         {hoveredData ? (
           <>
@@ -430,7 +431,7 @@ const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth, colo
 };
 
 // Category Donut Chart with hover effects (matching Dashboard style)
-const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory, themeColors, othersExpanded, onToggleOthers }) => {
+const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory, themeColors, othersExpanded, onToggleOthers, centerLabel = 'Total Spent' }) => {
   const size = 180;
   const strokeWidth = 35;
   const radius = (size - strokeWidth) / 2;
@@ -529,7 +530,7 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
             </>
           ) : (
             <>
-              <Text fontSize="xs" color={themeColors.textSecondary} fontWeight="500">Total Spent</Text>
+              <Text fontSize="xs" color={themeColors.textSecondary} fontWeight="500">{centerLabel}</Text>
               <Text fontSize="xl" fontWeight="800" color={themeColors.textPrimary}>
                 {formatCurrency(total)}
               </Text>
@@ -679,6 +680,9 @@ export default function Reports() {
   const [hoveredMonth, setHoveredMonth] = useState(null);
   const [hoveredBarMonth, setHoveredBarMonth] = useState(null);
   const [othersExpanded, setOthersExpanded] = useState(false);
+  const [incomeCategoryData, setIncomeCategoryData] = useState([]);
+  const [hoveredIncomeCategory, setHoveredIncomeCategory] = useState(null);
+  const [incomeOthersExpanded, setIncomeOthersExpanded] = useState(false);
 
   // Custom dropdown state
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
@@ -731,8 +735,9 @@ export default function Reports() {
         expenseCategories: {}, // { categoryName: amount }
       }));
 
-      // Category spending map (for overall donut chart)
+      // Category maps (for overall donut charts)
       const categoryMap = {};
+      const incomeCategoryMap = {};
 
       // Aggregate transactions by month and category
       (data || []).forEach(tx => {
@@ -742,16 +747,13 @@ export default function Reports() {
 
         if (tx.type === 'income') {
           monthly[monthIndex].income += Number(tx.amount);
-          // Track income by category for this month
           monthly[monthIndex].incomeCategories[catName] =
             (monthly[monthIndex].incomeCategories[catName] || 0) + Number(tx.amount);
+          incomeCategoryMap[catName] = (incomeCategoryMap[catName] || 0) + Number(tx.amount);
         } else {
           monthly[monthIndex].expenses += Number(tx.amount);
-          // Track expenses by category for this month
           monthly[monthIndex].expenseCategories[catName] =
             (monthly[monthIndex].expenseCategories[catName] || 0) + Number(tx.amount);
-
-          // Track overall category spending (for donut chart)
           categoryMap[catName] = (categoryMap[catName] || 0) + Number(tx.amount);
         }
       });
@@ -786,8 +788,28 @@ export default function Reports() {
       const totalIncome = monthly.reduce((sum, m) => sum + m.income, 0);
       const totalExpenses = monthly.reduce((sum, m) => sum + m.expenses, 0);
 
+      // Convert income category map to sorted array
+      const sortedIncomeCategories = Object.entries(incomeCategoryMap)
+        .map(([name, amount]) => ({ name, amount }))
+        .sort((a, b) => b.amount - a.amount);
+
+      let incomeCategoryArray;
+      if (sortedIncomeCategories.length > 5) {
+        const top5 = sortedIncomeCategories.slice(0, 5);
+        const otherCategories = sortedIncomeCategories.slice(5);
+        const othersAmount = otherCategories.reduce((sum, cat) => sum + cat.amount, 0);
+        incomeCategoryArray = [...top5, {
+          name: 'Others',
+          amount: othersAmount,
+          otherCategories: otherCategories.filter(cat => cat.amount > 0)
+        }];
+      } else {
+        incomeCategoryArray = sortedIncomeCategories;
+      }
+
       setMonthlyData(monthly);
       setCategoryData(categoryArray);
+      setIncomeCategoryData(incomeCategoryArray);
       setTotals({
         income: totalIncome,
         expenses: totalExpenses,
@@ -966,61 +988,59 @@ export default function Reports() {
           />
         </SimpleGrid>
 
-        {/* Charts Row */}
-        <Flex gap={6} direction={{ base: 'column', lg: 'row' }}>
-          {/* Monthly Bar Chart */}
-          <Box
-            flex="2"
-            p={4}
-            bg={colors.cardBg}
-            borderRadius="20px"
-            boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid" borderColor={colors.borderSubtle}
-            display="flex"
-            flexDirection="column"
-            minH="280px"
-          >
-            <Flex justify="space-between" align="center" mb={2} flexShrink={0}>
-              <Box>
-                <Heading size="md" color={colors.textPrimary}>Income vs Expenses</Heading>
-                <Text fontSize="sm" color={colors.textSecondary}>Monthly comparison</Text>
-              </Box>
-              <HStack gap={4}>
-                <HStack gap={1}>
-                  <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #34D399 0%, #059669 100%)" />
-                  <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Income</Text>
-                </HStack>
-                <HStack gap={1}>
-                  <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)" />
-                  <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Expenses</Text>
-                </HStack>
+        {/* Monthly Bar Chart */}
+        <Box
+          p={4}
+          bg={colors.cardBg}
+          borderRadius="20px"
+          boxShadow="0 1px 3px rgba(0,0,0,0.05)"
+          border="1px solid" borderColor={colors.borderSubtle}
+          display="flex"
+          flexDirection="column"
+          minH="280px"
+          overflow="hidden"
+        >
+          <Flex justify="space-between" align="center" mb={2} flexShrink={0}>
+            <Box>
+              <Heading size="md" color={colors.textPrimary}>Income vs Expenses</Heading>
+              <Text fontSize="sm" color={colors.textSecondary}>Monthly comparison</Text>
+            </Box>
+            <HStack gap={4}>
+              <HStack gap={1}>
+                <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #34D399 0%, #059669 100%)" />
+                <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Income</Text>
               </HStack>
-            </Flex>
-            <Box flex="1" position="relative" minH={{ base: '200px', md: '0' }}>
-              <Box position="absolute" top={0} left={0} right={0} bottom={0}>
-                <MonthlyBarChart
-                  data={monthlyData}
-                  formatCurrency={formatCurrency}
-                  colors={colors}
-                  hoveredBarMonth={hoveredBarMonth}
-                  onHoverBarMonth={setHoveredBarMonth}
-                />
-              </Box>
+              <HStack gap={1}>
+                <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)" />
+                <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Expenses</Text>
+              </HStack>
+            </HStack>
+          </Flex>
+          <Box flex="1" position="relative" minH={{ base: '200px', md: '0' }}>
+            <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+              <MonthlyBarChart
+                data={monthlyData}
+                formatCurrency={formatCurrency}
+                colors={colors}
+                hoveredBarMonth={hoveredBarMonth}
+                onHoverBarMonth={setHoveredBarMonth}
+              />
             </Box>
           </Box>
+        </Box>
 
-          {/* Category Breakdown */}
+        {/* Category Breakdowns */}
+        <SimpleGrid columns={{ base: 1, md: 2 }} gap={6}>
+          {/* Expense Breakdown */}
           <Box
-            flex="1"
             p={6}
             bg={colors.cardBg}
             borderRadius="20px"
             boxShadow="0 1px 3px rgba(0,0,0,0.05)"
             border="1px solid" borderColor={colors.borderSubtle}
-            minW={{ base: '100%', lg: '280px' }}
           >
-            <Heading size="md" color={colors.textPrimary} mb={1}>Top Categories</Heading>
-            <Text fontSize="sm" color={colors.textSecondary} mb={4}>Expense breakdown</Text>
+            <Heading size="md" color={colors.textPrimary} mb={1}>Expense Breakdown</Heading>
+            <Text fontSize="sm" color={colors.textSecondary} mb={4}>Where your money goes</Text>
             {categoryData.length > 0 ? (
               <CategoryDonutChart
                 categories={categoryData}
@@ -1031,6 +1051,7 @@ export default function Reports() {
                 themeColors={colors}
                 othersExpanded={othersExpanded}
                 onToggleOthers={() => setOthersExpanded(!othersExpanded)}
+                centerLabel="Total Spent"
               />
             ) : (
               <Flex justify="center" align="center" h="200px">
@@ -1038,7 +1059,36 @@ export default function Reports() {
               </Flex>
             )}
           </Box>
-        </Flex>
+
+          {/* Income Breakdown */}
+          <Box
+            p={6}
+            bg={colors.cardBg}
+            borderRadius="20px"
+            boxShadow="0 1px 3px rgba(0,0,0,0.05)"
+            border="1px solid" borderColor={colors.borderSubtle}
+          >
+            <Heading size="md" color={colors.textPrimary} mb={1}>Income Breakdown</Heading>
+            <Text fontSize="sm" color={colors.textSecondary} mb={4}>Where your money comes from</Text>
+            {incomeCategoryData.length > 0 ? (
+              <CategoryDonutChart
+                categories={incomeCategoryData}
+                total={totals.income}
+                formatCurrency={formatCurrency}
+                hoveredCategory={hoveredIncomeCategory}
+                onHoverCategory={setHoveredIncomeCategory}
+                themeColors={colors}
+                othersExpanded={incomeOthersExpanded}
+                onToggleOthers={() => setIncomeOthersExpanded(!incomeOthersExpanded)}
+                centerLabel="Total Earned"
+              />
+            ) : (
+              <Flex justify="center" align="center" h="200px">
+                <Text color={colors.textMuted}>No income data</Text>
+              </Flex>
+            )}
+          </Box>
+        </SimpleGrid>
 
         {/* Balance Trend */}
         <Box
