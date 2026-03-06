@@ -66,6 +66,10 @@ export default function Transactions() {
   const [editingTransactionId, setEditingTransactionId] = useState(null);
   const [updatingCategory, setUpdatingCategory] = useState(false);
 
+  // Amount editing state
+  const [editingAmountId, setEditingAmountId] = useState(null);
+  const [editingAmountValue, setEditingAmountValue] = useState('');
+
   // Custom dropdown state
   const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
   const [categoryEditDropdownOpen, setCategoryEditDropdownOpen] = useState(false);
@@ -136,6 +140,32 @@ export default function Transactions() {
       setError('Failed to update category');
     } finally {
       setUpdatingCategory(false);
+    }
+  };
+
+  const updateTransactionAmount = async (transactionId, newAmount) => {
+    const parsed = parseFloat(newAmount);
+    if (isNaN(parsed) || parsed <= 0) {
+      setEditingAmountId(null);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ amount: parsed })
+        .eq('id', transactionId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setTransactions(prev => prev.map(t =>
+        t.id === transactionId ? { ...t, amount: parsed } : t
+      ));
+      setEditingAmountId(null);
+    } catch (err) {
+      console.error('Error updating amount:', err);
+      setError('Failed to update amount');
+      setEditingAmountId(null);
     }
   };
 
@@ -1036,14 +1066,41 @@ export default function Transactions() {
                         {transaction.description}
                       </Text>
                     </Box>
-                    <Text
-                      fontWeight="bold"
-                      fontSize="md"
-                      color={transaction.type === 'income' ? 'green.600' : 'red.600'}
-                      ml={2}
-                    >
-                      {formatAmount(transaction.amount, transaction.type)}
-                    </Text>
+                    {editingAmountId === transaction.id ? (
+                      <Input
+                        size="sm"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editingAmountValue}
+                        onChange={(e) => setEditingAmountValue(e.target.value)}
+                        onBlur={() => updateTransactionAmount(transaction.id, editingAmountValue)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') updateTransactionAmount(transaction.id, editingAmountValue);
+                          if (e.key === 'Escape') setEditingAmountId(null);
+                        }}
+                        autoFocus
+                        w="100px"
+                        ml={2}
+                        textAlign="right"
+                        fontWeight="bold"
+                        bg={colors.inputBg}
+                        borderColor={colors.borderColor}
+                        color={colors.textPrimary}
+                      />
+                    ) : (
+                      <Text
+                        fontWeight="bold"
+                        fontSize="md"
+                        color={transaction.type === 'income' ? 'green.600' : 'red.600'}
+                        ml={2}
+                        cursor="pointer"
+                        _hover={{ textDecoration: 'underline' }}
+                        onClick={() => { setEditingAmountId(transaction.id); setEditingAmountValue(transaction.amount.toString()); }}
+                      >
+                        {formatAmount(transaction.amount, transaction.type)}
+                      </Text>
+                    )}
                   </Flex>
                   <Flex justify="space-between" align="center">
                     <Text fontSize="xs" color={colors.textMuted}>{formatDate(transaction.date)}</Text>
@@ -1216,12 +1273,39 @@ export default function Transactions() {
                         </Text>
                       </Table.Cell>
                       <Table.Cell textAlign="right" py={4} px={6}>
-                        <Text
-                          fontWeight="bold"
-                          color={transaction.type === 'income' ? 'green.600' : 'red.600'}
-                        >
-                          {formatAmount(transaction.amount, transaction.type)}
-                        </Text>
+                        {editingAmountId === transaction.id ? (
+                          <Input
+                            size="sm"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={editingAmountValue}
+                            onChange={(e) => setEditingAmountValue(e.target.value)}
+                            onBlur={() => updateTransactionAmount(transaction.id, editingAmountValue)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') updateTransactionAmount(transaction.id, editingAmountValue);
+                              if (e.key === 'Escape') setEditingAmountId(null);
+                            }}
+                            autoFocus
+                            w="100px"
+                            ml="auto"
+                            textAlign="right"
+                            fontWeight="bold"
+                            bg={colors.inputBg}
+                            borderColor={colors.borderColor}
+                            color={colors.textPrimary}
+                          />
+                        ) : (
+                          <Text
+                            fontWeight="bold"
+                            color={transaction.type === 'income' ? 'green.600' : 'red.600'}
+                            cursor="pointer"
+                            _hover={{ textDecoration: 'underline' }}
+                            onClick={() => { setEditingAmountId(transaction.id); setEditingAmountValue(transaction.amount.toString()); }}
+                          >
+                            {formatAmount(transaction.amount, transaction.type)}
+                          </Text>
+                        )}
                       </Table.Cell>
                       <Table.Cell textAlign="right" py={4} px={6}>
                         <Text color={transaction.balance < 0 ? 'red.600' : colors.textSecondary}>
