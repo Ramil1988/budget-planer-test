@@ -1190,8 +1190,9 @@ export default function Dashboard() {
               boxShadow="0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)"
               border="1px solid" borderColor={colors.borderSubtle}
             >
-              <Flex justify="space-between" align="center" mb={4}>
-                <HStack gap={3}>
+              <Box mb={4}>
+                {/* Row 1: Title + toggle buttons + Manage */}
+                <Flex justify="space-between" align="center" mb={{ base: 2, md: 0 }}>
                   <HStack gap={2}>
                     <Box
                       w="8px"
@@ -1203,7 +1204,66 @@ export default function Dashboard() {
                       Upcoming Payments
                     </Heading>
                   </HStack>
-                  {(() => {
+                  <HStack gap={2}>
+                    {/* View Toggle */}
+                    <HStack
+                      bg={colors.rowStripedBg}
+                      borderRadius="10px"
+                      p="2px"
+                      gap={0}
+                    >
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => {
+                          setPaymentsViewMode('list');
+                          setSelectedCalendarDate(null);
+                          setSelectedCalendarPayments([]);
+                        }}
+                        bg={paymentsViewMode === 'list' ? colors.toggleActiveBg : colors.toggleInactiveBg}
+                        color={paymentsViewMode === 'list' ? colors.toggleActiveText : colors.toggleInactiveText}
+                        borderRadius="8px"
+                        px={2}
+                        h="28px"
+                        fontWeight="500"
+                        fontSize="xs"
+                        boxShadow={paymentsViewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
+                        _hover={{ bg: paymentsViewMode === 'list' ? colors.toggleActiveBg : colors.toggleHoverBg }}
+                      >
+                        ☰
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setPaymentsViewMode('calendar')}
+                        bg={paymentsViewMode === 'calendar' ? colors.toggleActiveBg : colors.toggleInactiveBg}
+                        color={paymentsViewMode === 'calendar' ? colors.toggleActiveText : colors.toggleInactiveText}
+                        borderRadius="8px"
+                        px={2}
+                        h="28px"
+                        fontWeight="500"
+                        fontSize="xs"
+                        boxShadow={paymentsViewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
+                        _hover={{ bg: paymentsViewMode === 'calendar' ? colors.toggleActiveBg : colors.toggleHoverBg }}
+                      >
+                        📅
+                      </Button>
+                    </HStack>
+                    <Button
+                      as={RouterLink}
+                      to="/recurring"
+                      variant="ghost"
+                      size="sm"
+                      color="#2563EB"
+                      fontWeight="600"
+                      _hover={{ bg: colors.primaryBg }}
+                    >
+                      Manage
+                    </Button>
+                  </HStack>
+                </Flex>
+                {/* Row 2: Badges */}
+                {(() => {
                     const now = new Date();
                     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                     const isCurrentMonth = calendarViewMonth === now.getMonth() && calendarViewYear === now.getFullYear();
@@ -1238,79 +1298,86 @@ export default function Dashboard() {
                       });
                     });
 
-                    if (total === 0) return null;
+                    // Calculate expenses until next Salary payment
+                    let untilSalary = null;
+                    if (isCurrentMonth) {
+                      // Find the next Salary date (look up to 3 months ahead)
+                      let nextSalaryDate = null;
+                      const searchEnd = new Date(now.getFullYear(), now.getMonth() + 3, 0);
+                      for (const payment of allRecurringPayments) {
+                        if (!payment.is_active || payment.categories?.name !== 'Salary') continue;
+                        const dates = getPaymentDatesInRange(
+                          payment.start_date,
+                          payment.frequency,
+                          today,
+                          searchEnd,
+                          payment.end_date,
+                          payment.business_days_only || false,
+                          payment.last_business_day_of_month || false
+                        );
+                        for (const date of dates) {
+                          if (date > today && (!nextSalaryDate || date < nextSalaryDate)) {
+                            nextSalaryDate = date;
+                          }
+                        }
+                      }
+
+                      if (nextSalaryDate) {
+                        let expensesUntilSalary = 0;
+                        allRecurringPayments.forEach(payment => {
+                          if (!payment.is_active || payment.type !== 'expense') return;
+                          const dates = getPaymentDatesInRange(
+                            payment.start_date,
+                            payment.frequency,
+                            today,
+                            nextSalaryDate,
+                            payment.end_date,
+                            payment.business_days_only || false,
+                            payment.last_business_day_of_month || false
+                          );
+                          dates.forEach(date => {
+                            if (date >= today && date < nextSalaryDate) {
+                              expensesUntilSalary += Number(payment.amount);
+                            }
+                          });
+                        });
+                        if (expensesUntilSalary > 0) {
+                          untilSalary = expensesUntilSalary;
+                        }
+                      }
+                    }
+
+                    if (total === 0 && !untilSalary) return null;
                     return (
-                      <Box
-                        bg={colors.rowStripedBg}
-                        px={3}
-                        py={1}
-                        borderRadius="full"
-                      >
-                        <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
-                          {formatCurrency(total)} left
-                        </Text>
-                      </Box>
+                      <HStack gap={2}>
+                        {total > 0 && (
+                          <Box
+                            bg={colors.rowStripedBg}
+                            px={3}
+                            py={1}
+                            borderRadius="full"
+                          >
+                            <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
+                              {formatCurrency(total)} left
+                            </Text>
+                          </Box>
+                        )}
+                        {untilSalary && (
+                          <Box
+                            bg="#FEF3C7"
+                            px={3}
+                            py={1}
+                            borderRadius="full"
+                          >
+                            <Text fontSize="xs" fontWeight="600" color="#92400E">
+                              {formatCurrency(untilSalary)} til salary
+                            </Text>
+                          </Box>
+                        )}
+                      </HStack>
                     );
                   })()}
-                </HStack>
-                <HStack gap={2}>
-                  {/* View Toggle */}
-                  <HStack
-                    bg={colors.rowStripedBg}
-                    borderRadius="10px"
-                    p="2px"
-                    gap={0}
-                  >
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => {
-                        setPaymentsViewMode('list');
-                        setSelectedCalendarDate(null);
-                        setSelectedCalendarPayments([]);
-                      }}
-                      bg={paymentsViewMode === 'list' ? colors.toggleActiveBg : colors.toggleInactiveBg}
-                      color={paymentsViewMode === 'list' ? colors.toggleActiveText : colors.toggleInactiveText}
-                      borderRadius="8px"
-                      px={2}
-                      h="28px"
-                      fontWeight="500"
-                      fontSize="xs"
-                      boxShadow={paymentsViewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
-                      _hover={{ bg: paymentsViewMode === 'list' ? colors.toggleActiveBg : colors.toggleHoverBg }}
-                    >
-                      ☰
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => setPaymentsViewMode('calendar')}
-                      bg={paymentsViewMode === 'calendar' ? colors.toggleActiveBg : colors.toggleInactiveBg}
-                      color={paymentsViewMode === 'calendar' ? colors.toggleActiveText : colors.toggleInactiveText}
-                      borderRadius="8px"
-                      px={2}
-                      h="28px"
-                      fontWeight="500"
-                      fontSize="xs"
-                      boxShadow={paymentsViewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'}
-                      _hover={{ bg: paymentsViewMode === 'calendar' ? colors.toggleActiveBg : colors.toggleHoverBg }}
-                    >
-                      📅
-                    </Button>
-                  </HStack>
-                  <Button
-                    as={RouterLink}
-                    to="/recurring"
-                    variant="ghost"
-                    size="sm"
-                    color="#2563EB"
-                    fontWeight="600"
-                    _hover={{ bg: colors.primaryBg }}
-                  >
-                    Manage
-                  </Button>
-                </HStack>
-              </Flex>
+              </Box>
 
               {paymentsViewMode === 'list' ? (
                 <>
