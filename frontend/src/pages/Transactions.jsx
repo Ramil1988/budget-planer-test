@@ -39,6 +39,7 @@ export default function Transactions() {
   const [endDate, setEndDate] = useState('');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+  const [filterDescription, setFilterDescription] = useState('');
   const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
 
   // Delete all dialog state
@@ -171,7 +172,7 @@ export default function Transactions() {
 
   useEffect(() => {
     filterTransactions();
-  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount]);
+  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount, filterDescription]);
 
   // Refresh trash when switching to trash view (in case items were restored/deleted elsewhere)
   useEffect(() => {
@@ -298,8 +299,19 @@ export default function Transactions() {
       );
     }
 
-    // Apply custom filters if enabled
-    if (customFiltersApplied) {
+    // Check if any custom filter field has a value
+    const hasCustomFilterValues = filterDescription.trim() || startDate || endDate || minAmount !== '' || maxAmount !== '';
+
+    // Apply custom filters if explicitly applied OR if any filter field has a value
+    if (customFiltersApplied || hasCustomFilterValues) {
+      // Description filter (searches description and category)
+      if (filterDescription.trim()) {
+        const descQuery = filterDescription.toLowerCase();
+        filtered = filtered.filter(t =>
+          t.description.toLowerCase().includes(descQuery) ||
+          t.category.toLowerCase().includes(descQuery)
+        );
+      }
       // Date range filter
       if (startDate) {
         filtered = filtered.filter(t => t.date >= startDate);
@@ -528,6 +540,7 @@ export default function Transactions() {
     setEndDate('');
     setMinAmount('');
     setMaxAmount('');
+    setFilterDescription('');
     setCustomFiltersApplied(false);
     setSelectedPeriod('current');
     setShowCustomFilters(false);
@@ -878,6 +891,21 @@ export default function Transactions() {
                         />
                       </Box>
                     </Flex>
+                  </Box>
+
+                  {/* Description */}
+                  <Box>
+                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Description</Text>
+                    <Input
+                      type="text"
+                      placeholder="Filter by description..."
+                      value={filterDescription}
+                      onChange={(e) => setFilterDescription(e.target.value)}
+                      bg={colors.cardBg}
+                      borderColor={colors.borderColor}
+                      color={colors.textPrimary}
+                      size="md"
+                    />
                   </Box>
 
                   {/* Amount Range */}
