@@ -96,7 +96,7 @@ const ProgressBar = ({ percent, height = '8px', showOverflow = true }) => {
 };
 
 // Category Budget Card Component
-const BudgetCard = ({ item, formatCurrency, index, onClick, colors }) => {
+const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTotal }) => {
   const isOver = item.percentOfLimit > 100;
   const isWarning = item.percentOfLimit > 80 && item.percentOfLimit <= 100;
   const hasLimit = item.limit > 0;
@@ -122,14 +122,28 @@ const BudgetCard = ({ item, formatCurrency, index, onClick, colors }) => {
     >
       <Flex justify="space-between" align="flex-start" mb={3}>
         <Box flex="1">
-          <Text
-            fontWeight="600"
-            fontSize="md"
-            color={colors.textPrimary}
-            mb={1}
-          >
-            {item.name}
-          </Text>
+          <HStack gap={2} mb={1}>
+            <Text
+              fontWeight="600"
+              fontSize="md"
+              color={colors.textPrimary}
+            >
+              {item.name}
+            </Text>
+            {percentOfTotal > 0 && (
+              <Text
+                fontSize="xs"
+                fontWeight="600"
+                color="blue.400"
+                bg="rgba(59,130,246,0.1)"
+                px={1.5}
+                py={0.5}
+                borderRadius="4px"
+              >
+                {percentOfTotal < 1 ? '<1' : percentOfTotal.toFixed(0)}%
+              </Text>
+            )}
+          </HStack>
           <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
             {formatCurrency(item.spent)}
           </Text>
@@ -1123,6 +1137,7 @@ export default function Budget() {
                         index={index}
                         onClick={() => loadCategoryTransactions(item.id, item.name)}
                         colors={colors}
+                        percentOfTotal={totalLimit > 0 ? (item.limit / totalLimit) * 100 : 0}
                       />
                     ))}
                     {categorySearch && budgetData.filter(item => item.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
@@ -1297,6 +1312,19 @@ export default function Budget() {
                                 <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
                                   {item.name}
                                 </Text>
+                                {totalLimit > 0 && item.limit > 0 && (
+                                  <Text
+                                    fontSize="xs"
+                                    fontWeight="600"
+                                    color="blue.400"
+                                    bg="rgba(59,130,246,0.1)"
+                                    px={1.5}
+                                    py={0.5}
+                                    borderRadius="4px"
+                                  >
+                                    {((item.limit / totalLimit) * 100) < 1 ? '<1' : ((item.limit / totalLimit) * 100).toFixed(0)}%
+                                  </Text>
+                                )}
                                 {item.willExceed && (
                                   <Text
                                     fontSize="10px"
@@ -1616,7 +1644,9 @@ export default function Budget() {
                   gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
                   gap={3}
                 >
-                  {categories
+                  {(() => {
+                    const totalAllLimits = Object.values(committedLimits).reduce((sum, val) => sum + Number(val || 0), 0);
+                    return categories
                     .slice() // Clone to avoid mutating original
                     .filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase()))
                     .sort((a, b) => {
@@ -1633,6 +1663,7 @@ export default function Budget() {
                       const prevLimit = Number(previousMonthLimits[cat.id] || 0);
                       const diff = currentLimit - prevLimit;
                       const hasPrevData = prevLimit > 0 || (cat.id in previousMonthLimits);
+                      const percentage = totalAllLimits > 0 ? (Number(committedLimits[cat.id] || 0) / totalAllLimits) * 100 : 0;
 
                       return (
                         <Box
@@ -1647,9 +1678,24 @@ export default function Budget() {
                           style={{ animation: `fadeSlideIn 0.3s ease-out ${index * 0.03}s both` }}
                         >
                           <Flex justify="space-between" align="flex-start" mb={3}>
-                            <Text fontWeight="600" fontSize="sm" color={colors.textSecondary}>
-                              {cat.name}
-                            </Text>
+                            <HStack gap={2}>
+                              <Text fontWeight="600" fontSize="sm" color={colors.textSecondary}>
+                                {cat.name}
+                              </Text>
+                              {percentage > 0 && (
+                                <Text
+                                  fontSize="xs"
+                                  fontWeight="600"
+                                  color="blue.400"
+                                  bg="rgba(59,130,246,0.1)"
+                                  px={1.5}
+                                  py={0.5}
+                                  borderRadius="4px"
+                                >
+                                  {percentage < 1 ? '<1' : percentage.toFixed(0)}%
+                                </Text>
+                              )}
+                            </HStack>
                             {/* Show difference indicator */}
                             {hasPrevData && diff !== 0 && (
                               <HStack gap={1}>
@@ -1692,7 +1738,8 @@ export default function Budget() {
                           )}
                         </Box>
                       );
-                    })}
+                    });
+                  })()}
                     {categorySearch && categories.filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
                       <Box gridColumn="1 / -1" textAlign="center" py={8}>
                         <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
