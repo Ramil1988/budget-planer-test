@@ -650,6 +650,13 @@ export default function Dashboard() {
   const [calendarViewMonth, setCalendarViewMonth] = useState(new Date().getMonth()); // Calendar displayed month (0-11)
   const [calendarViewYear, setCalendarViewYear] = useState(new Date().getFullYear()); // Calendar displayed year
 
+  // Sync calendar view when the month picker changes
+  useEffect(() => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    setCalendarViewMonth(month - 1); // convert 1-indexed to 0-indexed
+    setCalendarViewYear(year);
+  }, [selectedMonth]);
+
   // Refs for chart click-away
   const dailySpendingRef = useRef(null);
   const cashFlowRef = useRef(null);

@@ -35,11 +35,19 @@ export default function Transactions() {
 
   // Custom filter states
   const [showCustomFilters, setShowCustomFilters] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  });
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [filterDescription, setFilterDescription] = useState('');
+  const [filterBank, setFilterBank] = useState('');
   const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
 
   // Delete all dialog state
@@ -172,7 +180,7 @@ export default function Transactions() {
 
   useEffect(() => {
     filterTransactions();
-  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount, filterDescription]);
+  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount, filterDescription, filterBank]);
 
   // Refresh trash when switching to trash view (in case items were restored/deleted elsewhere)
   useEffect(() => {
@@ -300,7 +308,7 @@ export default function Transactions() {
     }
 
     // Check if any custom filter field has a value
-    const hasCustomFilterValues = filterDescription.trim() || startDate || endDate || minAmount !== '' || maxAmount !== '';
+    const hasCustomFilterValues = filterDescription.trim() || startDate || endDate || minAmount !== '' || maxAmount !== '' || filterBank !== '';
 
     // Apply custom filters if explicitly applied OR if any filter field has a value
     if (customFiltersApplied || hasCustomFilterValues) {
@@ -331,6 +339,10 @@ export default function Transactions() {
         if (!isNaN(max)) {
           filtered = filtered.filter(t => t.amount <= max);
         }
+      }
+      // Bank filter
+      if (filterBank) {
+        filtered = filtered.filter(t => t.bank === filterBank);
       }
     } else if (selectedPeriod === 'current') {
       const now = new Date();
@@ -541,6 +553,7 @@ export default function Transactions() {
     setMinAmount('');
     setMaxAmount('');
     setFilterDescription('');
+    setFilterBank('');
     setCustomFiltersApplied(false);
     setSelectedPeriod('current');
     setShowCustomFilters(false);
@@ -548,6 +561,34 @@ export default function Transactions() {
 
   const toggleCustomFilters = () => {
     setShowCustomFilters(!showCustomFilters);
+  };
+
+  // Auto-fill date range based on selected period
+  const updateDateRangeForPeriod = (period) => {
+    if (period === 'current') {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth(); // 0-indexed
+      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      setStartDate(firstDay);
+      setEndDate(endDay);
+    } else if (period === 'last-month') {
+      const now = new Date();
+      let month = now.getMonth() - 1; // 0-indexed
+      let year = now.getFullYear();
+      if (month < 0) { month = 11; year -= 1; }
+      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      setStartDate(firstDay);
+      setEndDate(endDay);
+    } else {
+      // All time - clear dates
+      setStartDate('');
+      setEndDate('');
+    }
   };
 
   const downloadCSV = () => {
@@ -730,7 +771,6 @@ export default function Transactions() {
                   flex="1"
                   minW={{ base: '100%', sm: '200px' }}
                 />
-                {!customFiltersApplied && (
                   <Box ref={periodDropdownRef} position="relative" minW="130px">
                     {/* Dropdown Trigger */}
                     <Box
@@ -802,6 +842,7 @@ export default function Transactions() {
                                 borderRadius="8px"
                                 onClick={() => {
                                   setSelectedPeriod(option.value);
+                                  updateDateRangeForPeriod(option.value);
                                   setPeriodDropdownOpen(false);
                                 }}
                                 justify="space-between"
@@ -824,7 +865,6 @@ export default function Transactions() {
                       </Box>
                     )}
                   </Box>
-                )}
                 <Button
                   variant={showCustomFilters || customFiltersApplied ? 'solid' : 'outline'}
                   colorScheme={customFiltersApplied ? 'blue' : 'gray'}
@@ -907,6 +947,39 @@ export default function Transactions() {
                       size="md"
                     />
                   </Box>
+
+                  {/* Bank Filter */}
+                  {(() => {
+                    const bankOptions = [...new Set(transactions.filter(t => t.bank).map(t => t.bank))].sort();
+                    if (bankOptions.length === 0) return null;
+                    return (
+                      <Box>
+                        <Text fontWeight="600" color={colors.textPrimary} mb={3}>Bank</Text>
+                        <Box
+                          as="select"
+                          value={filterBank}
+                          onChange={(e) => setFilterBank(e.target.value)}
+                          bg={colors.cardBg}
+                          borderWidth="1px"
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
+                          borderRadius="6px"
+                          px={3}
+                          py={2}
+                          w="100%"
+                          fontSize="sm"
+                          outline="none"
+                          _hover={{ borderColor: 'blue.400' }}
+                          _focus={{ borderColor: 'blue.500', boxShadow: '0 0 0 1px var(--chakra-colors-blue-500)' }}
+                        >
+                          <option value="" style={{ background: 'var(--chakra-colors-gray-800)' }}>All banks</option>
+                          {bankOptions.map(bank => (
+                            <option key={bank} value={bank} style={{ background: 'var(--chakra-colors-gray-800)' }}>{bank}</option>
+                          ))}
+                        </Box>
+                      </Box>
+                    );
+                  })()}
 
                   {/* Amount Range */}
                   <Box>
