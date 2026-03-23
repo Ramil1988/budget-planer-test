@@ -75,6 +75,9 @@ export default function Transactions() {
   const [editingTransactionId, setEditingTransactionId] = useState(null);
   const [updatingCategory, setUpdatingCategory] = useState(false);
 
+  // Category change confirmation dialog state
+  const [pendingCategoryChange, setPendingCategoryChange] = useState(null);
+
   // Amount editing state
   const [editingAmountId, setEditingAmountId] = useState(null);
   const [editingAmountValue, setEditingAmountValue] = useState('');
@@ -127,8 +130,24 @@ export default function Transactions() {
     }
   };
 
-  const updateTransactionCategory = async (transactionId, newCategoryId, transactionType) => {
+  const handleCategorySelect = (transaction, newCategoryId) => {
+    if (newCategoryId === transaction.category_id) return;
+    const newCategory = categories.find(c => c.id === newCategoryId);
+    setPendingCategoryChange({
+      transactionId: transaction.id,
+      transactionDescription: transaction.description,
+      transactionType: transaction.type,
+      newCategoryId,
+      newCategoryName: newCategory?.name || 'Unknown',
+    });
+    setCategoryEditDropdownOpen(false);
+  };
+
+  const updateTransactionCategory = async (alsoUpdateMapping) => {
+    if (!pendingCategoryChange) return;
+    const { transactionId, transactionDescription, newCategoryId, newCategoryName } = pendingCategoryChange;
     setUpdatingCategory(true);
+    setPendingCategoryChange(null);
     try {
       const { error } = await supabase
         .from('transactions')
@@ -138,10 +157,22 @@ export default function Transactions() {
 
       if (error) throw error;
 
+      if (alsoUpdateMapping && transactionDescription) {
+        // Normalize: take the main part of the description (before details like card numbers)
+        const descNormalized = transactionDescription.trim();
+        // Upsert merchant mapping
+        await supabase
+          .from('merchant_mappings')
+          .upsert({
+            user_id: user.id,
+            transaction_description: descNormalized,
+            category_name: newCategoryName,
+          }, { onConflict: 'user_id,transaction_description' });
+      }
+
       // Update local state
-      const newCategory = categories.find(c => c.id === newCategoryId);
       setTransactions(prev => prev.map(t =>
-        t.id === transactionId ? { ...t, category: newCategory?.name || 'Unknown', category_id: newCategoryId } : t
+        t.id === transactionId ? { ...t, category: newCategoryName, category_id: newCategoryId } : t
       ));
       setEditingTransactionId(null);
     } catch (err) {
@@ -1127,7 +1158,7 @@ export default function Transactions() {
                                         _hover={{ bg: colors.rowStripedBg }}
                                         borderRadius="6px"
                                         onClick={() => {
-                                          updateTransactionCategory(transaction.id, cat.id, transaction.type);
+                                          handleCategorySelect(transaction, cat.id);
                                           setCategoryEditDropdownOpen(false);
                                         }}
                                         justify="space-between"
@@ -1329,7 +1360,7 @@ export default function Transactions() {
                                           _hover={{ bg: colors.rowStripedBg }}
                                           borderRadius="6px"
                                           onClick={() => {
-                                            updateTransactionCategory(transaction.id, cat.id, transaction.type);
+                                            handleCategorySelect(transaction, cat.id);
                                             setCategoryEditDropdownOpen(false);
                                           }}
                                           justify="space-between"
@@ -1806,6 +1837,79 @@ export default function Transactions() {
                     Restore All
                   </Button>
                 </HStack>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+
+      {/* Category Change Confirmation Dialog */}
+      <Dialog.Root open={!!pendingCategoryChange} onOpenChange={(e) => !e.open && setPendingCategoryChange(null)}>
+        <Portal>
+          <Dialog.Backdrop bg="blackAlpha.600" />
+          <Dialog.Positioner>
+            <Dialog.Content
+              maxW="420px"
+              w="90%"
+              borderRadius="16px"
+              overflow="hidden"
+              bg={colors.cardBg}
+            >
+              <Dialog.Header
+                bg="linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)"
+                color="white"
+                p={5}
+              >
+                <Flex justify="space-between" align="center">
+                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
+                    Change Category
+                  </Dialog.Title>
+                  <Dialog.CloseTrigger asChild>
+                    <CloseButton
+                      color="white"
+                      _hover={{ bg: 'whiteAlpha.200' }}
+                      borderRadius="full"
+                    />
+                  </Dialog.CloseTrigger>
+                </Flex>
+              </Dialog.Header>
+
+              <Dialog.Body p={6}>
+                <VStack gap={4} align="stretch">
+                  <Text color={colors.textPrimary} fontSize="md">
+                    Change category to <strong>{pendingCategoryChange?.newCategoryName}</strong>
+                  </Text>
+                  <Text color={colors.textSecondary} fontSize="sm">
+                    Apply this change only to this transaction, or also update the mapping so future imports with this description are automatically categorized?
+                  </Text>
+                </VStack>
+              </Dialog.Body>
+
+              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
+                <VStack gap={2} w="100%">
+                  <Button
+                    w="100%"
+                    variant="outline"
+                    borderColor="blue.500"
+                    color="blue.500"
+                    _hover={{ bg: 'blue.500', color: 'white' }}
+                    onClick={() => updateTransactionCategory(false)}
+                    disabled={updatingCategory}
+                  >
+                    Only this transaction
+                  </Button>
+                  <Button
+                    w="100%"
+                    bg="blue.500"
+                    color="white"
+                    _hover={{ bg: 'blue.600' }}
+                    onClick={() => updateTransactionCategory(true)}
+                    loading={updatingCategory}
+                    loadingText="Updating..."
+                  >
+                    Always (update mapping)
+                  </Button>
+                </VStack>
               </Dialog.Footer>
             </Dialog.Content>
           </Dialog.Positioner>
