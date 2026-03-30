@@ -210,7 +210,17 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
   // but then the next iteration starts from Saturday again, causing infinite loops.
   // We collect the raw scheduled dates first, then adjust at the end.
   // Exception: lastBusinessDayOfMonth already calculates correct dates internally.
-  let currentDate = getNextPaymentDate(startDate, frequency, rStart, endDate, false, lastBusinessDayOfMonth);
+  //
+  // When businessDaysOnly is true, start searching 2 days earlier to catch weekend dates
+  // that will be adjusted forward into the range (e.g., Sunday -> Monday).
+  // Without this, a raw date like Sun March 29 would be skipped when rangeStart is March 30,
+  // even though the adjusted date (Mon March 30) should be included.
+  let searchFrom = rStart;
+  if (businessDaysOnly && !skipBusinessDayAdjustment) {
+    searchFrom = new Date(rStart);
+    searchFrom.setDate(searchFrom.getDate() - 2);
+  }
+  let currentDate = getNextPaymentDate(startDate, frequency, searchFrom, endDate, false, lastBusinessDayOfMonth);
 
   // If no next date (ended), return empty
   if (!currentDate) return dates;

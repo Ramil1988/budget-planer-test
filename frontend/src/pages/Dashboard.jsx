@@ -1308,23 +1308,36 @@ export default function Dashboard() {
                     // Calculate expenses until next Salary payment
                     let untilSalary = null;
                     if (isCurrentMonth) {
-                      // Find the next Salary date (look up to 3 months ahead)
+                      // Find the next Salary date from the PRIMARY salary (highest amount)
+                      // This prevents smaller income payments categorized as "Salary" from
+                      // overriding the main biweekly/monthly paycheck date
                       let nextSalaryDate = null;
                       const searchEnd = new Date(now.getFullYear(), now.getMonth() + 3, 0);
+
+                      // First, find the salary payment with the highest amount
+                      let primarySalary = null;
                       for (const payment of allRecurringPayments) {
-                        if (!payment.is_active || payment.categories?.name !== 'Salary') continue;
+                        if (!payment.is_active || payment.type !== 'income' || payment.categories?.name !== 'Salary') continue;
+                        if (!primarySalary || Number(payment.amount) > Number(primarySalary.amount)) {
+                          primarySalary = payment;
+                        }
+                      }
+
+                      // Get the next date from the primary salary only
+                      if (primarySalary) {
                         const dates = getPaymentDatesInRange(
-                          payment.start_date,
-                          payment.frequency,
+                          primarySalary.start_date,
+                          primarySalary.frequency,
                           today,
                           searchEnd,
-                          payment.end_date,
-                          payment.business_days_only || false,
-                          payment.last_business_day_of_month || false
+                          primarySalary.end_date,
+                          primarySalary.business_days_only || false,
+                          primarySalary.last_business_day_of_month || false
                         );
                         for (const date of dates) {
                           if (date > today && (!nextSalaryDate || date < nextSalaryDate)) {
                             nextSalaryDate = date;
+                            break;
                           }
                         }
                       }
