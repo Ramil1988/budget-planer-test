@@ -1263,7 +1263,7 @@ export default function Transactions() {
             borderWidth="1px"
             borderColor={colors.borderColor}
             borderRadius="lg"
-            overflow="hidden"
+            overflow="visible"
             bg={colors.cardBg}
             w="100%"
           >
