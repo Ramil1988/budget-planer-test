@@ -1307,17 +1307,24 @@ export default function Dashboard() {
 
                     // Calculate expenses until next Salary payment
                     let untilSalary = null;
+                    let daysUntilSalary = null;
                     if (isCurrentMonth) {
                       // Find the next Salary date from the PRIMARY salary (highest amount)
-                      // This prevents smaller income payments categorized as "Salary" from
-                      // overriding the main biweekly/monthly paycheck date
+                      // Match on category name "Salary" (case-insensitive) or payment name containing "salary"
                       let nextSalaryDate = null;
                       const searchEnd = new Date(now.getFullYear(), now.getMonth() + 3, 0);
+
+                      const isSalaryPayment = (payment) => {
+                        if (!payment.is_active || payment.type !== 'income') return false;
+                        const catName = (payment.categories?.name || '').toLowerCase();
+                        const payName = (payment.name || '').toLowerCase();
+                        return catName === 'salary' || payName.includes('salary');
+                      };
 
                       // First, find the salary payment with the highest amount
                       let primarySalary = null;
                       for (const payment of allRecurringPayments) {
-                        if (!payment.is_active || payment.type !== 'income' || payment.categories?.name !== 'Salary') continue;
+                        if (!isSalaryPayment(payment)) continue;
                         if (!primarySalary || Number(payment.amount) > Number(primarySalary.amount)) {
                           primarySalary = payment;
                         }
@@ -1343,6 +1350,7 @@ export default function Dashboard() {
                       }
 
                       if (nextSalaryDate) {
+                        daysUntilSalary = Math.ceil((nextSalaryDate - today) / (1000 * 60 * 60 * 24));
                         let expensesUntilSalary = 0;
                         allRecurringPayments.forEach(payment => {
                           if (!payment.is_active || payment.type !== 'expense') return;
@@ -1356,18 +1364,16 @@ export default function Dashboard() {
                             payment.last_business_day_of_month || false
                           );
                           dates.forEach(date => {
-                            if (date >= today && date < nextSalaryDate) {
+                            if (date >= today && date <= nextSalaryDate) {
                               expensesUntilSalary += Number(payment.amount);
                             }
                           });
                         });
-                        if (expensesUntilSalary > 0) {
-                          untilSalary = expensesUntilSalary;
-                        }
+                        untilSalary = expensesUntilSalary;
                       }
                     }
 
-                    if (total === 0 && !untilSalary) return null;
+                    if (total === 0 && daysUntilSalary === null) return null;
                     return (
                       <HStack gap={2}>
                         {total > 0 && (
@@ -1382,7 +1388,7 @@ export default function Dashboard() {
                             </Text>
                           </Box>
                         )}
-                        {untilSalary && (
+                        {daysUntilSalary !== null && (
                           <Box
                             bg="#FEF3C7"
                             px={3}
@@ -1390,7 +1396,12 @@ export default function Dashboard() {
                             borderRadius="full"
                           >
                             <Text fontSize="xs" fontWeight="600" color="#92400E">
-                              {formatCurrency(untilSalary)} til salary
+                              {untilSalary > 0
+                                ? `${formatCurrency(untilSalary)} til salary`
+                                : daysUntilSalary === 1
+                                  ? 'Salary tomorrow'
+                                  : `Salary in ${daysUntilSalary} days`
+                              }
                             </Text>
                           </Box>
                         )}
