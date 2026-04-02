@@ -1329,7 +1329,6 @@ export default function Dashboard() {
                           primarySalary = payment;
                         }
                       }
-
                       // Get the next date from the primary salary only
                       if (primarySalary) {
                         const dates = getPaymentDatesInRange(

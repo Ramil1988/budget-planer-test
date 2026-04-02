@@ -211,14 +211,19 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
   // We collect the raw scheduled dates first, then adjust at the end.
   // Exception: lastBusinessDayOfMonth already calculates correct dates internally.
   //
-  // When businessDaysOnly is true, start searching 2 days earlier to catch weekend dates
-  // that will be adjusted forward into the range (e.g., Sunday -> Monday).
-  // Without this, a raw date like Sun March 29 would be skipped when rangeStart is March 30,
-  // even though the adjusted date (Mon March 30) should be included.
+  // When businessDaysOnly is true, expand the search window by 2 days on each side to catch
+  // weekend dates that will be adjusted into the range after business day adjustment:
+  // - Start 2 days earlier: catches Sunday dates adjusted forward to Monday (e.g., Sun Mar 29 -> Mon Mar 30)
+  // - End 2 days later: catches Saturday dates adjusted backward to Friday (e.g., Sat Apr 4 -> Fri Apr 3)
+  // The final filter (after adjustment) still uses the original rStart/rEnd bounds.
   let searchFrom = rStart;
+  let searchTo = rEnd;
   if (businessDaysOnly && !skipBusinessDayAdjustment) {
     searchFrom = new Date(rStart);
     searchFrom.setDate(searchFrom.getDate() - 2);
+    searchTo = new Date(rEnd);
+    searchTo.setDate(searchTo.getDate() + 2);
+    searchTo.setHours(23, 59, 59, 999);
   }
   let currentDate = getNextPaymentDate(startDate, frequency, searchFrom, endDate, false, lastBusinessDayOfMonth);
 
@@ -229,7 +234,7 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
   const rawDates = [];
   let lastDateKey = null;
 
-  while (currentDate && currentDate <= rEnd) {
+  while (currentDate && currentDate <= searchTo) {
     if (end && currentDate > end) break;
 
     // Safety check: detect stuck loop (same date appearing twice)
