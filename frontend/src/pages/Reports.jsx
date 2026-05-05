@@ -615,8 +615,11 @@ const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory
                           bg={getCategoryColor(otherCat.name, index + otherIndex + 1)}
                           flexShrink={0}
                         />
-                        <Text color={themeColors.textSecondary} noOfLines={1} flex="1" minW="0">
+                        <Text color={themeColors.textSecondary} noOfLines={1} minW="0">
                           {otherCat.name}
+                        </Text>
+                        <Text color={themeColors.textMuted} flexShrink={0}>
+                          {total > 0 ? ((otherCat.amount / total) * 100).toFixed(1) : 0}%
                         </Text>
                       </HStack>
                       <Text fontWeight="500" color={themeColors.textPrimary} flexShrink={0} ml={2}>
