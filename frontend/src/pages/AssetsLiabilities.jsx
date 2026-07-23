@@ -114,6 +114,16 @@ const convertToMonthly = (amount, frequency) => {
   return parseFloat(amount) * multiplier;
 };
 
+// Payments of a liability's linked category, limited to those made since the
+// liability started (an older liability can share the same category)
+const getLiabilityPayments = (liability, paymentsByCategory) => {
+  if (!liability.linked_category_id) return null;
+  const payments = paymentsByCategory[liability.linked_category_id];
+  if (!payments) return null;
+  if (!liability.start_date) return payments;
+  return payments.filter((p) => p.date >= liability.start_date);
+};
+
 // Format percentage
 const formatPercent = (value) => {
   return `${(value || 0).toFixed(1)}%`;
@@ -1099,6 +1109,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
     interest_rate: liability?.interest_rate || 0,
     original_balance: liability?.original_balance || 0,
     linked_category_id: liability?.linked_category_id || '',
+    start_date: liability?.start_date || new Date().toISOString().split('T')[0],
     note: liability?.note || '',
   });
   const [errors, setErrors] = useState({});
@@ -1121,6 +1132,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
         interest_rate: liability?.interest_rate || 0,
         original_balance: liability?.original_balance || liability?.outstanding_balance || 0,
         linked_category_id: liability?.linked_category_id || '',
+        start_date: liability?.start_date || new Date().toISOString().split('T')[0],
         note: liability?.note || '',
       });
       setErrors({});
@@ -1184,7 +1196,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
       return;
     }
     setSaving(true);
-    await onSave(formData);
+    await onSave({ ...formData, start_date: formData.start_date || null });
     setSaving(false);
     onClose();
   };
@@ -1472,6 +1484,23 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
                       </VStack>
                     );
                   })()}
+                </Box>
+
+                <Box w="100%">
+                  <Text fontSize="sm" fontWeight="600" mb={2} color={colors.textSecondary}>
+                    Start Date
+                    <Text as="span" fontSize="xs" color={colors.textMuted} fontWeight="400" ml={2}>
+                      (only payments from this date count)
+                    </Text>
+                  </Text>
+                  <Input
+                    type="date"
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    bg={colors.inputBg}
+                    borderColor={colors.borderColor}
+                    color={colors.textPrimary}
+                  />
                 </Box>
 
                 <SimpleGrid columns={2} gap={4} w="100%">
@@ -2104,14 +2133,19 @@ export default function AssetsLiabilities() {
       if (recurringError) throw recurringError;
       setRecurringPayments(recurringData || []);
 
-      // Load payments for linked categories (last 12 months)
-      const linkedCategoryIds = (liabsData || [])
-        .filter(l => l.linked_category_id)
-        .map(l => l.linked_category_id);
+      // Load payments for linked categories (last 12 months, or further back if a
+      // liability started earlier — payments are filtered per liability on render)
+      const linkedLiabilities = (liabsData || []).filter(l => l.linked_category_id);
+      const linkedCategoryIds = linkedLiabilities.map(l => l.linked_category_id);
 
       if (linkedCategoryIds.length > 0) {
         const oneYearAgo = new Date();
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+        const fetchFrom = linkedLiabilities
+          .map(l => l.start_date)
+          .filter(Boolean)
+          .reduce((earliest, d) => (d < earliest ? d : earliest), oneYearAgo.toISOString().split('T')[0]);
 
         const { data: paymentsData, error: paymentsError } = await supabase
           .from('transactions')
@@ -2119,7 +2153,7 @@ export default function AssetsLiabilities() {
           .eq('user_id', user.id)
           .eq('type', 'expense')
           .in('category_id', linkedCategoryIds)
-          .gte('date', oneYearAgo.toISOString().split('T')[0])
+          .gte('date', fetchFrom)
           .order('date', { ascending: false });
 
         if (paymentsError) throw paymentsError;
@@ -2221,6 +2255,8 @@ export default function AssetsLiabilities() {
     if (formData.linked_category_id && !linkedCategoryPayments[formData.linked_category_id]) {
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const defaultFrom = oneYearAgo.toISOString().split('T')[0];
+      const fetchFrom = formData.start_date && formData.start_date < defaultFrom ? formData.start_date : defaultFrom;
 
       const { data: paymentsData } = await supabase
         .from('transactions')
@@ -2228,7 +2264,7 @@ export default function AssetsLiabilities() {
         .eq('user_id', user.id)
         .eq('type', 'expense')
         .eq('category_id', formData.linked_category_id)
-        .gte('date', oneYearAgo.toISOString().split('T')[0])
+        .gte('date', fetchFrom)
         .order('date', { ascending: false });
 
       if (paymentsData) {
@@ -2995,7 +3031,7 @@ export default function AssetsLiabilities() {
                         liability={liability}
                         type={liabilityTypes.find((t) => t.id === liability.type_id)}
                         linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
-                        payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
+                        payments={getLiabilityPayments(liability, linkedCategoryPayments)}
                         onEdit={(l) => { setEditingLiability(l); setLiabilityModalOpen(true); }}
                         onDelete={(l) => { setItemToDelete({ ...l, type: 'liability', name: l.creditor }); setDeleteConfirmOpen(true); }}
                         colors={colors}
@@ -3046,7 +3082,7 @@ export default function AssetsLiabilities() {
                         liabilityType={liabilityTypes.find((t) => t.id === liability.type_id)}
                         linkedCategory={liability.linked_category_id ? spendingCategories.find((c) => c.id === liability.linked_category_id) : null}
                         linkedRecurring={linkedRecurring}
-                        payments={liability.linked_category_id ? linkedCategoryPayments[liability.linked_category_id] : null}
+                        payments={getLiabilityPayments(liability, linkedCategoryPayments)}
                         colors={colors}
                       />
                     </Box>

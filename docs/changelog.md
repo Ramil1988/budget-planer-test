@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Liability payments no longer inherited from a previous liability (2026-07-23):**
+  - A new liability linked to a spending category showed the whole category's payment history — e.g. a new mortgage displayed the old mortgage's payments under "RECENT PAYMENTS" and in the `$X paid (N payments)` row
+  - Added `start_date` to `liabilities` (migration `006_add_liability_start_date.sql`, backfilled from `created_at`) and a **Start Date** field in the liability modal
+  - `AssetsLiabilities.jsx` now filters linked-category payments per liability via `getLiabilityPayments()`; the payment query fetches from the earliest liability start date when that predates the default 12-month window
+  - Migration `007_liability_triggers_respect_start_date.sql` makes the auto-reduce triggers respect `start_date` too, so a backdated payment can no longer shrink the balance of a liability that started later. When several liabilities share a category, the most recently started matching one wins
 - **Fix user signup "Database error saving new user" (2026-02-03):**
   - Added missing `profiles` table INSERT to `seed_new_user_data()` function — the profiles row was removed in an earlier refactor but the table still exists in the schema
   - This also fixes the `auto_seed_asset_liability_trigger` on `profiles` which was never firing for new users (asset categories and liability types were not being seeded)
