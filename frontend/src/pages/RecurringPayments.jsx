@@ -25,11 +25,18 @@ import { useDarkModeColors } from '../lib/useDarkModeColors';
 import {
   getNextPaymentDate,
   getUpcomingPayments,
-  getMonthlyProjection,
   formatFrequency,
   formatDate,
   FREQUENCY_CONFIG,
 } from '../lib/recurringUtils';
+
+// Monthly-equivalent multiplier for each recurring frequency, so payments of
+// any cadence can be summed into a single "/mo" figure.
+const FREQ_TO_MONTHLY = {
+  daily: 365 / 12, weekly: 52 / 12, biweekly: 26 / 12,
+  monthly: 1, quarterly: 1 / 3, yearly: 1 / 12,
+};
+const monthlyEquivalent = (p) => Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1);
 
 // Category colors
 const categoryColors = {
@@ -284,9 +291,27 @@ export default function RecurringPayments() {
   // Filter categories by type
   const filteredCategories = categories.filter(c => c.type === formData.type);
 
-  // Calculate projections
-  const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-  const projection = getMonthlyProjection(recurringPayments.filter(p => p.is_active), currentMonth);
+  // A recurring counts toward the monthly totals if it's active and not already
+  // finished (end_date in the past). Ended-but-still-active rows stay visible in
+  // the list but no longer contribute a monthly cost.
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isOngoing = (p) => p.is_active && (!p.end_date || p.end_date >= todayStr);
+
+  // Monthly summary: normalized monthly-equivalent total of every ongoing
+  // recurring, so all payments count (incl. ones that start next month, like a
+  // mortgage) regardless of whether they happen to fall in the current month.
+  const ongoingRecurring = recurringPayments.filter(isOngoing);
+  const incomeRecurring = ongoingRecurring.filter(p => p.type === 'income');
+  const expenseRecurring = ongoingRecurring.filter(p => p.type === 'expense');
+  const summary = {
+    income: incomeRecurring.reduce((s, p) => s + monthlyEquivalent(p), 0),
+    expenses: expenseRecurring.reduce((s, p) => s + monthlyEquivalent(p), 0),
+    incomeCount: incomeRecurring.length,
+    expenseCount: expenseRecurring.length,
+  };
+  summary.net = summary.income - summary.expenses;
+
   const upcomingPayments = getUpcomingPayments(recurringPayments.filter(p => p.is_active), 30);
 
   // Format currency
@@ -362,12 +387,12 @@ export default function RecurringPayments() {
           >
             <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
               <Text fontSize="sm" opacity={0.9}>Monthly Income</Text>
-              <Text fontSize="lg" fontWeight="700">{formatCurrency(projection.income)}</Text>
+              <Text fontSize="lg" fontWeight="700">{formatCurrency(summary.income)}</Text>
             </Flex>
             <Box display={{ base: 'none', sm: 'block' }}>
               <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Monthly Income</Text>
-              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(projection.income)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{projection.payments.filter(p => p.type === 'income').length} payments</Text>
+              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(summary.income)}</Text>
+              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{summary.incomeCount} payments</Text>
             </Box>
           </Box>
           <Box
@@ -378,28 +403,28 @@ export default function RecurringPayments() {
           >
             <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
               <Text fontSize="sm" opacity={0.9}>Monthly Expenses</Text>
-              <Text fontSize="lg" fontWeight="700">{formatCurrency(projection.expenses)}</Text>
+              <Text fontSize="lg" fontWeight="700">{formatCurrency(summary.expenses)}</Text>
             </Flex>
             <Box display={{ base: 'none', sm: 'block' }}>
               <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Monthly Expenses</Text>
-              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(projection.expenses)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{projection.payments.filter(p => p.type === 'expense').length} payments</Text>
+              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(summary.expenses)}</Text>
+              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{summary.expenseCount} payments</Text>
             </Box>
           </Box>
           <Box
             p={{ base: 4, md: 5 }}
             borderRadius={{ base: '12px', md: '16px' }}
-            bg={projection.net >= 0 ? 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)' : 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)'}
+            bg={summary.net >= 0 ? 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)' : 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)'}
             color="white"
           >
             <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
               <Text fontSize="sm" opacity={0.9}>Net Cash Flow</Text>
-              <Text fontSize="lg" fontWeight="700">{projection.net >= 0 ? '+' : ''}{formatCurrency(projection.net)}</Text>
+              <Text fontSize="lg" fontWeight="700">{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</Text>
             </Flex>
             <Box display={{ base: 'none', sm: 'block' }}>
               <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Net Cash Flow</Text>
-              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{projection.net >= 0 ? '+' : ''}{formatCurrency(projection.net)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{projection.net >= 0 ? 'Surplus' : 'Deficit'}</Text>
+              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</Text>
+              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{summary.net >= 0 ? 'Surplus' : 'Deficit'}</Text>
             </Box>
           </Box>
         </SimpleGrid>
@@ -504,13 +529,9 @@ export default function RecurringPayments() {
           // Monthly-equivalent total of the filtered recurrings, independent of
           // whether a payment happens to fall in the current calendar month
           // (e.g. an insurance that starts next month still contributes its /mo cost).
-          const FREQ_TO_MONTHLY = {
-            daily: 365 / 12, weekly: 52 / 12, biweekly: 26 / 12,
-            monthly: 1, quarterly: 1 / 3, yearly: 1 / 12,
-          };
           const monthlyTotal = filteredPayments
-            .filter(p => p.is_active)
-            .reduce((sum, p) => sum + Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1), 0);
+            .filter(isOngoing)
+            .reduce((sum, p) => sum + monthlyEquivalent(p), 0);
           return (
             <Flex
               align="center"

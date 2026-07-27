@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Recurring summary cards now reflect all active recurrings, not just this month's occurrences (2026-07-24):**
+  - "Monthly Income / Monthly Expenses / Net Cash Flow" previously summed only payments whose date fell in the current calendar month, so a mortgage (or any recurring) starting next month was excluded and the expense total was far too low
+  - The cards now show the monthly-equivalent total of every ongoing recurring (incl. ones starting next month, like the mortgage), normalizing non-monthly frequencies to a monthly figure via a shared `monthlyEquivalent()` helper (also used by the filtered-category header)
+  - Recurrings that have already finished (`end_date` in the past) are excluded from the totals and counts even if still flagged active — they stay visible in the list but no longer add a monthly cost
+  - The per-card count now reflects the number of ongoing recurrings of that type
+
 ### Fixed
 - **Filtered recurring category total showed $0.00 when payments start next month (2026-07-24):**
   - The category-filter header in Recurring Payments summed only occurrences in the current calendar month, so filtering to e.g. Insurance (both policies starting next month) showed `-$0.00/mo` despite two active payments
