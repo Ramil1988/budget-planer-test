@@ -26,7 +26,6 @@ import {
   getNextPaymentDate,
   getUpcomingPayments,
   getMonthlyProjection,
-  getPaymentDatesInRange,
   formatFrequency,
   formatDate,
   FREQUENCY_CONFIG,
@@ -502,18 +501,16 @@ export default function RecurringPayments() {
 
         {/* Category Total when filtered */}
         {selectedCategory && filteredPayments.length > 0 && (() => {
-          const now = new Date();
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          // Monthly-equivalent total of the filtered recurrings, independent of
+          // whether a payment happens to fall in the current calendar month
+          // (e.g. an insurance that starts next month still contributes its /mo cost).
+          const FREQ_TO_MONTHLY = {
+            daily: 365 / 12, weekly: 52 / 12, biweekly: 26 / 12,
+            monthly: 1, quarterly: 1 / 3, yearly: 1 / 12,
+          };
           const monthlyTotal = filteredPayments
             .filter(p => p.is_active)
-            .reduce((sum, p) => {
-              const occurrences = getPaymentDatesInRange(
-                p.start_date, p.frequency, monthStart, monthEnd,
-                p.end_date, p.business_days_only || false, p.last_business_day_of_month || false
-              ).length;
-              return sum + Number(p.amount) * occurrences;
-            }, 0);
+            .reduce((sum, p) => sum + Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1), 0);
           return (
             <Flex
               align="center"

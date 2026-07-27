@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Filtered recurring category total showed $0.00 when payments start next month (2026-07-24):**
+  - The category-filter header in Recurring Payments summed only occurrences in the current calendar month, so filtering to e.g. Insurance (both policies starting next month) showed `-$0.00/mo` despite two active payments
+  - Now it shows the monthly-equivalent total of the active filtered recurrings regardless of whether they fall in the current month (Insurance → `-$368.14/mo`), normalizing non-monthly frequencies to a monthly figure (biweekly ×26/12, weekly ×52/12, quarterly ÷3, yearly ÷12, etc.)
+- **Recurring "Monthly Expenses" double-counted a payment near a weekend month boundary (2026-07-24):**
+  - A business-day-adjusted payment due on the 1st of the next month, when that 1st fell on a weekend, was pulled back into the current month (e.g. Sat Aug 1 → Fri Jul 31) and counted **in addition** to the current month's own occurrence — inflating the total and the payment count (July showed ChatGPT Plus twice: Jul 1 + Jul 31, total $687.87 / 9 instead of $659.12 / 8), while the next month lost it entirely
+  - `getMonthlyProjection` now buckets each occurrence by the month it is **scheduled** in, not the month its business-day-adjusted date lands in, via a new `filterBy: 'scheduled'` mode on the shared occurrence collector in `recurringUtils.js`
+  - `getPaymentDatesInRange` keeps its existing adjusted-date behavior (used by the til-salary running total and upcoming-payments list) — unchanged
 - **Liability payments no longer inherited from a previous liability (2026-07-23):**
   - A new liability linked to a spending category showed the whole category's payment history — e.g. a new mortgage displayed the old mortgage's payments under "RECENT PAYMENTS" and in the `$X paid (N payments)` row
   - Added `start_date` to `liabilities` (migration `006_add_liability_start_date.sql`, backfilled from `created_at`) and a **Start Date** field in the liability modal

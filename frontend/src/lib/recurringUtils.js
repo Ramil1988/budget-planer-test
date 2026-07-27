@@ -194,8 +194,8 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
  * @param {boolean} lastBusinessDayOfMonth - If true, always use last business day of month
  * @returns {Date[]} - Array of payment dates within the range
  */
-export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false) {
-  const dates = [];
+function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false, filterBy = 'adjusted') {
+  const occurrences = [];
   const start = parseLocalDate(startDate);
   const rStart = parseLocalDate(rangeStart);
   const rEnd = parseLocalDate(rangeEnd);
@@ -228,7 +228,7 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
   let currentDate = getNextPaymentDate(startDate, frequency, searchFrom, endDate, false, lastBusinessDayOfMonth);
 
   // If no next date (ended), return empty
-  if (!currentDate) return dates;
+  if (!currentDate) return occurrences;
 
   // Collect all dates in range (unadjusted or already correctly adjusted for lastBusinessDayOfMonth)
   const rawDates = [];
@@ -271,17 +271,32 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
       finalDate = adjustToBusinessDay(date);
     }
 
-    // Create a date key for deduplication (YYYY-MM-DD format)
-    const dateKey = finalDate.toISOString().split('T')[0];
+    // `scheduled` is the raw (unadjusted) date; `date`/`finalDate` is what
+    // actually lands on the calendar after any business-day shift.
+    // filterBy 'adjusted' (default): membership by the shifted date — used for
+    //   "what hits the account in this window" (e.g. the til-salary running total).
+    // filterBy 'scheduled': membership by the raw date — used for monthly
+    //   projections so a payment stays in the calendar month it's due, instead
+    //   of a weekend 1st being pulled into (and double-counting) the prior month.
+    const member = filterBy === 'scheduled' ? date : finalDate;
+    const dateKey = member.toISOString().split('T')[0];
 
-    // Only include if still in range after adjustment AND not already added
-    if (finalDate >= rStart && finalDate <= rEnd && !seenDates.has(dateKey)) {
+    if (member >= rStart && member <= rEnd && !seenDates.has(dateKey)) {
       seenDates.add(dateKey);
-      dates.push(finalDate);
+      occurrences.push({ scheduled: date, date: finalDate });
     }
   }
 
-  return dates;
+  return occurrences;
+}
+
+/**
+ * Get all payment dates in a range (business-day adjusted where applicable).
+ * @returns {Date[]} - Adjusted payment dates within the range
+ */
+export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false) {
+  return collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate, businessDaysOnly, lastBusinessDayOfMonth)
+    .map(o => o.date);
 }
 
 /**
@@ -344,17 +359,23 @@ export function getMonthlyProjection(recurringPayments, month) {
   for (const payment of recurringPayments) {
     if (!payment.is_active) continue;
 
-    const dates = getPaymentDatesInRange(
+    // Bucket by the month each payment is SCHEDULED in (filterBy: 'scheduled'),
+    // not the month its business-day-adjusted date lands in. Otherwise a payment
+    // due on the 1st of next month that falls on a weekend gets pulled back into
+    // this month (e.g. Sat Aug 1 -> Fri Jul 31), double-counting here and going
+    // missing next month.
+    const occurrences = collectOccurrences(
       payment.start_date,
       payment.frequency,
       startDate,
       endDate,
       payment.end_date,
       payment.business_days_only || false,
-      payment.last_business_day_of_month || false
+      payment.last_business_day_of_month || false,
+      'scheduled'
     );
 
-    for (const date of dates) {
+    for (const { date } of occurrences) {
       const amount = Number(payment.amount);
       if (payment.type === 'income') {
         income += amount;
