@@ -105,26 +105,91 @@ const FREQ_TO_MONTHLY = {
   yearly: 1 / 12,
 };
 
-// Marks a category that is driven by recurring payments
-const RecurringBadge = ({ info }) => {
+const money = (amount) =>
+  `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Marks a category that is driven by recurring payments. Hovering (or tapping,
+// on touch devices) breaks down which recurrings feed it and what they cost.
+const RecurringBadge = ({ info, colors }) => {
+  const [open, setOpen] = useState(false);
+
   if (!info) return null;
 
-  const monthly = info.monthly.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const isFinePointer = () => window.matchMedia('(pointer: fine)').matches;
+
   return (
-    <Text
-      as="span"
-      fontSize="xs"
-      fontWeight="600"
-      color="purple.400"
-      bg="rgba(168,85,247,0.12)"
-      px={1.5}
-      py={0.5}
-      borderRadius="4px"
-      whiteSpace="nowrap"
-      title={`${info.names.join(', ')} — ~$${monthly}/mo recurring`}
+    <Box
+      position="relative"
+      display="inline-flex"
+      onMouseEnter={() => isFinePointer() && setOpen(true)}
+      onMouseLeave={() => isFinePointer() && setOpen(false)}
+      onClick={(e) => {
+        // Don't let the tap fall through to the card's own click handler
+        e.stopPropagation();
+        if (!isFinePointer()) setOpen(!open);
+      }}
+      cursor="pointer"
     >
-      🔁 {info.count}
-    </Text>
+      <Text
+        as="span"
+        fontSize="xs"
+        fontWeight="600"
+        color="purple.400"
+        bg="rgba(168,85,247,0.12)"
+        px={1.5}
+        py={0.5}
+        borderRadius="4px"
+        whiteSpace="nowrap"
+      >
+        🔁 {info.count}
+      </Text>
+
+      {open && (
+        <Box
+          // Always absolute: the cards apply a transform on hover, which would
+          // make a position:fixed panel resolve against the card instead of the
+          // viewport.
+          position="absolute"
+          top="calc(100% + 8px)"
+          left="0"
+          bg={colors.cardBg}
+          border="1px solid"
+          borderColor="purple.400"
+          borderRadius="12px"
+          boxShadow="0 12px 32px rgba(0,0,0,0.35)"
+          p={3}
+          zIndex={999}
+          w="240px"
+        >
+            <Text fontSize="xs" fontWeight="700" color={colors.textMuted} mb={2} textTransform="uppercase" letterSpacing="0.05em">
+              Recurring payments
+            </Text>
+
+            <VStack align="stretch" gap={1.5}>
+              {info.items.map((item) => (
+                <Flex key={item.name} justify="space-between" gap={3} align="baseline">
+                  <Box minW="0">
+                    <Text fontSize="sm" color={colors.textPrimary} truncate>{item.name}</Text>
+                    <Text fontSize="10px" color={colors.textMuted} textTransform="capitalize">
+                      {item.frequency}
+                    </Text>
+                  </Box>
+                  <Text fontSize="sm" fontWeight="600" color={colors.textPrimary} whiteSpace="nowrap">
+                    {money(item.amount)}
+                  </Text>
+                </Flex>
+              ))}
+            </VStack>
+
+            <Flex justify="space-between" align="baseline" mt={2} pt={2} borderTop="1px solid" borderColor={colors.borderSubtle}>
+              <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>Total</Text>
+              <Text fontSize="sm" fontWeight="700" color="purple.400" whiteSpace="nowrap">
+                {money(info.monthly)}/mo
+              </Text>
+            </Flex>
+        </Box>
+      )}
+    </Box>
   );
 };
 
@@ -143,10 +208,14 @@ const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTot
       border="1px solid"
       borderColor={isOver ? 'red.200' : colors.borderSubtle}
       transition="all 0.3s ease"
+      position="relative"
       _hover={{
         transform: 'translateY(-2px)',
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         cursor: 'pointer',
+        // Keep the recurring tooltip above neighbouring cards: the hover
+        // transform makes this card its own stacking context.
+        zIndex: 5,
       }}
       style={{
         animation: `fadeSlideIn 0.4s ease-out ${index * 0.05}s both`,
@@ -176,7 +245,7 @@ const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTot
                 {percentOfTotal < 1 ? '<1' : percentOfTotal.toFixed(0)}%
               </Text>
             )}
-            <RecurringBadge info={recurringInfo} />
+            <RecurringBadge info={recurringInfo} colors={colors} />
           </HStack>
           <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
             {formatCurrency(item.spent)}
@@ -875,10 +944,22 @@ export default function Budget() {
       if (!p.category_id) continue;
       if (p.end_date && p.end_date < todayStr) continue;
 
-      if (!map[p.category_id]) map[p.category_id] = { count: 0, monthly: 0, names: [] };
+      const monthly = Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1);
+
+      if (!map[p.category_id]) map[p.category_id] = { count: 0, monthly: 0, items: [] };
       map[p.category_id].count += 1;
-      map[p.category_id].monthly += Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1);
-      map[p.category_id].names.push(p.name);
+      map[p.category_id].monthly += monthly;
+      map[p.category_id].items.push({
+        name: p.name,
+        amount: Number(p.amount),
+        frequency: p.frequency,
+        monthly,
+      });
+    }
+
+    // Biggest commitment first
+    for (const entry of Object.values(map)) {
+      entry.items.sort((a, b) => b.monthly - a.monthly);
     }
 
     return map;
@@ -1731,7 +1812,8 @@ export default function Budget() {
                           border="1px solid"
                           borderColor={diff !== 0 && hasPrevData ? (diff > 0 ? 'green.300' : 'red.300') : colors.borderColor}
                           transition="all 0.2s ease"
-                          _hover={{ borderColor: 'blue.300', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}
+                          position="relative"
+                          _hover={{ borderColor: 'blue.300', boxShadow: '0 2px 8px rgba(59,130,246,0.1)', zIndex: 5 }}
                           style={{ animation: `fadeSlideIn 0.3s ease-out ${index * 0.03}s both` }}
                         >
                           <Flex justify="space-between" align="flex-start" mb={3}>
@@ -1752,7 +1834,7 @@ export default function Budget() {
                                   {percentage < 1 ? '<1' : percentage.toFixed(0)}%
                                 </Text>
                               )}
-                              <RecurringBadge info={recurringByCategory[cat.id]} />
+                              <RecurringBadge info={recurringByCategory[cat.id]} colors={colors} />
                             </HStack>
                             {/* Show difference indicator */}
                             {hasPrevData && diff !== 0 && (
