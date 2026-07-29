@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Recurring markers on budget categories (2026-07-24):**
+  - Categories driven by recurring payments are now flagged with a `🔁 N` badge (N = number of recurrings) in **both** Budget Tracking and Budget Setup, so it's clear which limits are fixed commitments rather than discretionary spending
+  - Hovering the badge shows the recurring names and their combined monthly cost (e.g. Subscriptions → `Apple Cloud+, ChatGPT Plus, … — ~$201/mo recurring`)
+  - Non-monthly frequencies are normalized to a monthly figure; finished recurrings (`end_date` in the past) are not counted
+
 ### Changed
 - **Recurring summary cards now reflect all active recurrings, not just this month's occurrences (2026-07-24):**
   - "Monthly Income / Monthly Expenses / Net Cash Flow" previously summed only payments whose date fell in the current calendar month, so a mortgage (or any recurring) starting next month was excluded and the expense total was far too low

@@ -95,8 +95,41 @@ const ProgressBar = ({ percent, height = '8px', showOverflow = true }) => {
   );
 };
 
+// Multipliers to express any recurring frequency as a monthly cost
+const FREQ_TO_MONTHLY = {
+  daily: 365 / 12,
+  weekly: 52 / 12,
+  biweekly: 26 / 12,
+  monthly: 1,
+  quarterly: 1 / 3,
+  yearly: 1 / 12,
+};
+
+// Marks a category that is driven by recurring payments
+const RecurringBadge = ({ info }) => {
+  if (!info) return null;
+
+  const monthly = info.monthly.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  return (
+    <Text
+      as="span"
+      fontSize="xs"
+      fontWeight="600"
+      color="purple.400"
+      bg="rgba(168,85,247,0.12)"
+      px={1.5}
+      py={0.5}
+      borderRadius="4px"
+      whiteSpace="nowrap"
+      title={`${info.names.join(', ')} — ~$${monthly}/mo recurring`}
+    >
+      🔁 {info.count}
+    </Text>
+  );
+};
+
 // Category Budget Card Component
-const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTotal }) => {
+const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTotal, recurringInfo }) => {
   const isOver = item.percentOfLimit > 100;
   const isWarning = item.percentOfLimit > 80 && item.percentOfLimit <= 100;
   const hasLimit = item.limit > 0;
@@ -143,6 +176,7 @@ const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTot
                 {percentOfTotal < 1 ? '<1' : percentOfTotal.toFixed(0)}%
               </Text>
             )}
+            <RecurringBadge info={recurringInfo} />
           </HStack>
           <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
             {formatCurrency(item.spent)}
@@ -828,6 +862,28 @@ export default function Budget() {
   const totalRemaining = totalLimit - totalSpent;
   const totalPercentSpent = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0;
 
+  // Which categories are driven by recurring payments, and what they cost per
+  // month. Used to flag those categories in both Budget Tracking and Setup.
+  // recurringPayments is already limited to active expense recurrings; skip the
+  // ones that have already finished.
+  const recurringByCategory = (() => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const map = {};
+
+    for (const p of recurringPayments) {
+      if (!p.category_id) continue;
+      if (p.end_date && p.end_date < todayStr) continue;
+
+      if (!map[p.category_id]) map[p.category_id] = { count: 0, monthly: 0, names: [] };
+      map[p.category_id].count += 1;
+      map[p.category_id].monthly += Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1);
+      map[p.category_id].names.push(p.name);
+    }
+
+    return map;
+  })();
+
   if (loading && categories.length === 0) {
     return (
       <PageContainer>
@@ -1138,6 +1194,7 @@ export default function Budget() {
                         onClick={() => loadCategoryTransactions(item.id, item.name)}
                         colors={colors}
                         percentOfTotal={totalLimit > 0 ? (item.limit / totalLimit) * 100 : 0}
+                        recurringInfo={recurringByCategory[item.id]}
                       />
                     ))}
                     {categorySearch && budgetData.filter(item => item.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
@@ -1695,6 +1752,7 @@ export default function Budget() {
                                   {percentage < 1 ? '<1' : percentage.toFixed(0)}%
                                 </Text>
                               )}
+                              <RecurringBadge info={recurringByCategory[cat.id]} />
                             </HStack>
                             {/* Show difference indicator */}
                             {hasPrevData && diff !== 0 && (
