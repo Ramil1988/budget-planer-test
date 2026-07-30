@@ -24,12 +24,27 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     });
 
-    // Listen for auth changes
+    // Listen for auth changes.
+    //
+    // Supabase fires this on every tab focus/visibility change (TOKEN_REFRESHED,
+    // SIGNED_IN) with a freshly built user object. Storing it unconditionally
+    // gave `user` a new identity each time, which re-ran every `useEffect([user])`
+    // across the app and made pages refetch — looking like a spontaneous reload
+    // whenever you came back to the tab. So only replace the objects when
+    // something meaningful actually changed.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession((prev) =>
+        prev?.access_token === nextSession?.access_token ? prev : nextSession
+      );
+      setUser((prev) => {
+        const next = nextSession?.user ?? null;
+        // updated_at keeps genuine profile changes (USER_UPDATED) propagating
+        return prev?.id === next?.id && prev?.updated_at === next?.updated_at
+          ? prev
+          : next;
+      });
       setLoading(false);
     });
 

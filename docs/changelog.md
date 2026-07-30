@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Pages no longer reload themselves when you return to the browser tab (2026-07-24):**
+  - Supabase fires `onAuthStateChange` on every tab focus/visibility change, and `AuthContext` stored the freshly built `user` object each time. That gave `user` a new object identity, re-running all 14 `useEffect([user, ...])` hooks across the app and refetching every page — losing filters, scroll position and in-progress edits
+  - `AuthContext` now keeps the `user` and `session` objects when nothing meaningful changed (compared by user `id` + `updated_at`, and by `access_token`), so data loads on navigation and explicit actions only
+  - Measured before/after on the Transactions page: switching tabs away and back fired **4 Supabase requests** (`transactions` ×2, `categories`, `user_settings`) before the fix and **0** after, with the active filter preserved. Genuine sign-in, sign-out, token refresh and profile updates still propagate
+
 ### Changed
 - **Navigation reorganized, Import and Categories grouped under Settings (2026-07-24):**
   - Nav order is now Dashboard → Budget → Recurring → Report → **Assets** → Transactions → **Settings** (Assets moved up next to Report)
