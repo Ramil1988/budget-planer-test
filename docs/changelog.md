@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Income/expense filter on Transactions (2026-07-24):**
-  - New **Type** dropdown (All types / Income / Expense) in the Transactions filter panel, alongside Description, Bank and Amount range
-  - Participates in the existing filter flow: counts toward "any filter set" and resets with **Clear filters**
+  - New **Type** dropdown (All types / Income / Expense) on the main toolbar, between the period selector and the Filters button — always visible, no need to open the filter panel
+  - Applies on top of the selected period rather than switching the page into custom-filter mode, so e.g. `Last month` + `Income` correctly lists last month's income (it is deliberately excluded from `hasCustomFilterValues`, which would otherwise override the period with the custom date range)
+  - Composes with the panel filters (period + type + bank all narrow together) and is independent of **Clear filters**, which only resets the panel's own fields
   - Side effect fixed: the "Period total" footer sums expenses only, so filtering to Income showed a red `-$0.00` as if it were a loss. A zero total now renders as a neutral `$0.00`; non-zero expense totals are unchanged (still red and negative)
 - **Recurring markers on budget categories (2026-07-24):**
   - Categories driven by recurring payments are now flagged with a `🔁 N` badge (N = number of recurrings) in **both** Budget Tracking and Budget Setup, so it's clear which limits are fixed commitments rather than discretionary spending
