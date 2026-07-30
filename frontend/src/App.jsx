@@ -17,6 +17,8 @@ import Budget from './pages/Budget'
 import RecurringPayments from './pages/RecurringPayments'
 import Reports from './pages/Reports'
 import AssetsLiabilities from './pages/AssetsLiabilities'
+import Settings from './pages/Settings'
+import SettingsTabs from './components/SettingsTabs'
 
 function App() {
   return (
@@ -40,10 +42,21 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Settings group — each tab keeps its own URL */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsTabs />
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/import"
           element={
             <ProtectedRoute>
+              <SettingsTabs />
               <ImportTransactions />
             </ProtectedRoute>
           }
@@ -52,6 +65,7 @@ function App() {
           path="/categories"
           element={
             <ProtectedRoute>
+              <SettingsTabs />
               <CategoryManager />
             </ProtectedRoute>
           }

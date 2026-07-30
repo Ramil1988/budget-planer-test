@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Navigation reorganized, Import and Categories grouped under Settings (2026-07-24):**
+  - Nav order is now Dashboard → Budget → Recurring → Report → **Assets** → Transactions → **Settings** (Assets moved up next to Report)
+  - **Settings is a new nav entry** that groups three tabs: Preferences, Import, Categories. It stays highlighted on all three routes
+  - `Settings.jsx` already existed but had **no route** and was unreachable — it is now the Preferences tab (push notifications + account info). Its existing "go to the Import tab" hint finally matches the UI
+  - Each tab keeps its own URL (`/settings`, `/import`, `/categories`), so existing links, bookmarks and browser history still work — the tab bar (`components/SettingsTabs.jsx`) is navigation, not local state
+  - `NavLink` gained an optional `match` prop so one nav item can own several routes
 - **"Period total" reflects the type being filtered, and a real delete button (2026-07-24):**
   - The footer summed expenses only, so filtering to Income showed `$0.00` and made the list look empty. It now totals income when the Income filter is active (green, `+$4,660.42`) and expenses otherwise (red, negative). `All types` keeps totalling expenses only
   - The row delete control was a bare `×`; it is now a trash icon in a 32px target, muted at rest, brightening with the hovered row and turning red on direct hover, with an `aria-label`, tooltip and visible focus ring

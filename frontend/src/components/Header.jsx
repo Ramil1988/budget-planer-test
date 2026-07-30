@@ -33,6 +33,9 @@ function Header() {
   const signOutHoverBg = useColorModeValue('#FAFAFA', '#3F3F46')
   const hamburgerColor = useColorModeValue('#52525B', '#A1A1AA')
 
+  // Routes grouped under the Settings tab — it stays highlighted on all of them
+  const SETTINGS_PATHS = ['/settings', '/import', '/categories']
+
   const isActive = (path) => {
     return location.pathname === path
   }
@@ -42,7 +45,9 @@ function Header() {
     navigate('/')
   }
 
-  const NavLink = ({ to, children, onClick }) => (
+  const NavLink = ({ to, children, onClick, match }) => {
+    const active = match ? match.includes(location.pathname) : isActive(to)
+    return (
     <Box
       as={RouterLink}
       to={to}
@@ -52,8 +57,8 @@ function Header() {
       borderRadius="8px"
       fontWeight="500"
       fontSize="14px"
-      color={isActive(to) ? navActiveColor : navColor}
-      bg={isActive(to) ? navActiveBg : 'transparent'}
+      color={active ? navActiveColor : navColor}
+      bg={active ? navActiveBg : 'transparent'}
       _hover={{
         color: navActiveColor,
         bg: navHoverBg,
@@ -62,7 +67,8 @@ function Header() {
     >
       {children}
     </Box>
-  )
+    )
+  }
 
   return (
     <Box
@@ -123,10 +129,9 @@ function Header() {
               <NavLink to="/budget">Budget</NavLink>
               <NavLink to="/recurring">Recurring</NavLink>
               <NavLink to="/reports">Report</NavLink>
-              <NavLink to="/transactions">Transactions</NavLink>
-              <NavLink to="/import">Import</NavLink>
-              <NavLink to="/categories">Categories</NavLink>
               <NavLink to="/assets-liabilities">Assets</NavLink>
+              <NavLink to="/transactions">Transactions</NavLink>
+              <NavLink to="/settings" match={SETTINGS_PATHS}>Settings</NavLink>
             </>
           )}
         </HStack>
@@ -257,17 +262,14 @@ function Header() {
                 <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Report
                 </MobileNavLink>
+                <MobileNavLink to="/assets-liabilities" active={isActive('/assets-liabilities')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
+                  Assets & Liabilities
+                </MobileNavLink>
                 <MobileNavLink to="/transactions" active={isActive('/transactions')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
                   Transactions
                 </MobileNavLink>
-                <MobileNavLink to="/import" active={isActive('/import')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Import
-                </MobileNavLink>
-                <MobileNavLink to="/categories" active={isActive('/categories')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Categories
-                </MobileNavLink>
-                <MobileNavLink to="/assets-liabilities" active={isActive('/assets-liabilities')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Assets & Liabilities
+                <MobileNavLink to="/settings" active={SETTINGS_PATHS.includes(location.pathname)} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
+                  Settings
                 </MobileNavLink>
                 <Box pt={3} borderTop="1px solid" borderColor={borderColor} mt={2}>
                   <Button
