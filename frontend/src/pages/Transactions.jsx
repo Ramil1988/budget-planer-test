@@ -48,6 +48,7 @@ export default function Transactions() {
   const [maxAmount, setMaxAmount] = useState('');
   const [filterDescription, setFilterDescription] = useState('');
   const [filterBank, setFilterBank] = useState('');
+  const [filterType, setFilterType] = useState(''); // '' | 'income' | 'expense'
   const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
 
   // Delete all dialog state
@@ -211,7 +212,7 @@ export default function Transactions() {
 
   useEffect(() => {
     filterTransactions();
-  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount, filterDescription, filterBank]);
+  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount, filterDescription, filterBank, filterType]);
 
   // Refresh trash when switching to trash view (in case items were restored/deleted elsewhere)
   useEffect(() => {
@@ -339,7 +340,7 @@ export default function Transactions() {
     }
 
     // Check if any custom filter field has a value
-    const hasCustomFilterValues = filterDescription.trim() || startDate || endDate || minAmount !== '' || maxAmount !== '' || filterBank !== '';
+    const hasCustomFilterValues = filterDescription.trim() || startDate || endDate || minAmount !== '' || maxAmount !== '' || filterBank !== '' || filterType !== '';
 
     // Apply custom filters if explicitly applied OR if any filter field has a value
     if (customFiltersApplied || hasCustomFilterValues) {
@@ -374,6 +375,10 @@ export default function Transactions() {
       // Bank filter
       if (filterBank) {
         filtered = filtered.filter(t => t.bank === filterBank);
+      }
+      // Income / expense filter
+      if (filterType) {
+        filtered = filtered.filter(t => t.type === filterType);
       }
     } else if (selectedPeriod === 'current') {
       const now = new Date();
@@ -585,6 +590,7 @@ export default function Transactions() {
     setMaxAmount('');
     setFilterDescription('');
     setFilterBank('');
+    setFilterType('');
     setCustomFiltersApplied(false);
     setSelectedPeriod('current');
     setShowCustomFilters(false);
@@ -977,6 +983,32 @@ export default function Transactions() {
                       color={colors.textPrimary}
                       size="md"
                     />
+                  </Box>
+
+                  {/* Type Filter */}
+                  <Box>
+                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Type</Text>
+                    <Box
+                      as="select"
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value)}
+                      bg={colors.cardBg}
+                      borderWidth="1px"
+                      borderColor={colors.borderColor}
+                      color={colors.textPrimary}
+                      borderRadius="6px"
+                      px={3}
+                      py={2}
+                      w="100%"
+                      fontSize="sm"
+                      outline="none"
+                      _hover={{ borderColor: 'blue.400' }}
+                      _focus={{ borderColor: 'blue.500', boxShadow: '0 0 0 1px var(--chakra-colors-blue-500)' }}
+                    >
+                      <option value="" style={{ background: 'var(--chakra-colors-gray-800)' }}>All types</option>
+                      <option value="income" style={{ background: 'var(--chakra-colors-gray-800)' }}>Income</option>
+                      <option value="expense" style={{ background: 'var(--chakra-colors-gray-800)' }}>Expense</option>
+                    </Box>
                   </Box>
 
                   {/* Bank Filter */}
@@ -1464,23 +1496,27 @@ export default function Transactions() {
           </Box>
 
               {/* Summary Footer - shows total expenses only */}
-              {filteredTransactions.length > 0 && (
-                <Flex justify="flex-end" px={4} w="100%">
-                  <HStack gap={2}>
-                    <Text color={colors.textSecondary}>Period total:</Text>
-                    <Text
-                      fontWeight="bold"
-                      fontSize="lg"
-                      color="red.600"
-                    >
-                      -${filteredTransactions
-                        .filter(t => t.type === 'expense')
-                        .reduce((sum, t) => sum + t.amount, 0)
-                        .toFixed(2)}
-                    </Text>
-                  </HStack>
-                </Flex>
-              )}
+              {filteredTransactions.length > 0 && (() => {
+                const periodTotal = filteredTransactions
+                  .filter(t => t.type === 'expense')
+                  .reduce((sum, t) => sum + t.amount, 0);
+                return (
+                  <Flex justify="flex-end" px={4} w="100%">
+                    <HStack gap={2}>
+                      <Text color={colors.textSecondary}>Period total:</Text>
+                      <Text
+                        fontWeight="bold"
+                        fontSize="lg"
+                        // No expenses in view (e.g. filtered to income) — a red
+                        // "-$0.00" would read as a loss.
+                        color={periodTotal > 0 ? 'red.600' : colors.textSecondary}
+                      >
+                        {periodTotal > 0 ? '-' : ''}${periodTotal.toFixed(2)}
+                      </Text>
+                    </HStack>
+                  </Flex>
+                );
+              })()}
             </>
           )}
 

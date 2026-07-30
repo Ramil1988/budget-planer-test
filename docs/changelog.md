@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Income/expense filter on Transactions (2026-07-24):**
+  - New **Type** dropdown (All types / Income / Expense) in the Transactions filter panel, alongside Description, Bank and Amount range
+  - Participates in the existing filter flow: counts toward "any filter set" and resets with **Clear filters**
+  - Side effect fixed: the "Period total" footer sums expenses only, so filtering to Income showed a red `-$0.00` as if it were a loss. A zero total now renders as a neutral `$0.00`; non-zero expense totals are unchanged (still red and negative)
 - **Recurring markers on budget categories (2026-07-24):**
   - Categories driven by recurring payments are now flagged with a `🔁 N` badge (N = number of recurrings) in **both** Budget Tracking and Budget Setup, so it's clear which limits are fixed commitments rather than discretionary spending
   - Hovering the badge (tapping on touch devices) opens a breakdown panel listing each recurring with its amount and frequency, plus the combined monthly total — e.g. Electricity → Hydro One $65.50 + Enbridge GAS $44.83, `Total $110.33/mo`
