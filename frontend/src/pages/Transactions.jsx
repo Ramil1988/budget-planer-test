@@ -17,7 +17,7 @@ import {
   Portal,
   CloseButton,
 } from '@chakra-ui/react';
-import { LuFilter, LuX } from 'react-icons/lu';
+import { LuFilter, LuX, LuTrash2 } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
@@ -1270,16 +1270,23 @@ export default function Transactions() {
                       <Text fontSize="xs" color={transaction.balance < 0 ? 'red.500' : colors.textMuted}>
                         Bal: {formatBalance(transaction.balance)}
                       </Text>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        colorScheme="red"
+                      <Flex
+                        as="button"
+                        type="button"
+                        aria-label="Move to trash"
                         onClick={() => handleDeleteTransaction(transaction.id)}
-                        opacity={0.6}
-                        _hover={{ opacity: 1 }}
+                        align="center"
+                        justify="center"
+                        boxSize="32px"
+                        borderRadius="8px"
+                        color={colors.textMuted}
+                        bg="transparent"
+                        transition="all 0.15s ease"
+                        _active={{ bg: 'red.50', color: 'red.600' }}
+                        _dark={{ _active: { bg: 'rgba(239,68,68,0.16)', color: 'red.300' } }}
                       >
-                        ×
-                      </Button>
+                        <LuTrash2 size={15} />
+                      </Flex>
                     </HStack>
                   </Flex>
                 </Box>
@@ -1316,7 +1323,7 @@ export default function Transactions() {
                   </Table.Row>
                 ) : (
                   filteredTransactions.map((transaction) => (
-                    <Table.Row key={transaction.id} bg={colors.cardBg} _hover={{ bg: colors.rowHoverBg }}>
+                    <Table.Row key={transaction.id} role="group" className="group" bg={colors.cardBg} _hover={{ bg: colors.rowHoverBg }}>
                       <Table.Cell py={4} px={6}>
                         <Text color={colors.textSecondary}>{formatDate(transaction.date)}</Text>
                       </Table.Cell>
@@ -1475,16 +1482,30 @@ export default function Transactions() {
                         </Text>
                       </Table.Cell>
                       <Table.Cell py={4} px={3}>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          colorScheme="red"
+                        <Flex
+                          as="button"
+                          type="button"
+                          aria-label="Move to trash"
+                          title="Move to trash"
                           onClick={() => handleDeleteTransaction(transaction.id)}
-                          opacity={0.4}
-                          _hover={{ opacity: 1 }}
+                          align="center"
+                          justify="center"
+                          boxSize="32px"
+                          mx="auto"
+                          borderRadius="8px"
+                          color={colors.textMuted}
+                          bg="transparent"
+                          transition="all 0.15s ease"
+                          // Muted until the row is hovered, then turns red on
+                          // direct hover so the destructive action is obvious.
+                          opacity={0.35}
+                          _groupHover={{ opacity: 1 }}
+                          _hover={{ bg: 'red.50', color: 'red.600', opacity: 1 }}
+                          _focusVisible={{ opacity: 1, outline: '2px solid', outlineColor: 'red.500', outlineOffset: '1px' }}
+                          _dark={{ _hover: { bg: 'rgba(239,68,68,0.16)', color: 'red.300' } }}
                         >
-                          ×
-                        </Button>
+                          <LuTrash2 size={16} />
+                        </Flex>
                       </Table.Cell>
                     </Table.Row>
                   ))
@@ -1493,11 +1514,17 @@ export default function Transactions() {
             </Table.Root>
           </Box>
 
-              {/* Summary Footer - shows total expenses only */}
+              {/* Summary Footer - totals whatever is currently in view */}
               {filteredTransactions.length > 0 && (() => {
-                const periodTotal = filteredTransactions
-                  .filter(t => t.type === 'expense')
+                const sumOf = (type) => filteredTransactions
+                  .filter(t => t.type === type)
                   .reduce((sum, t) => sum + t.amount, 0);
+                const income = sumOf('income');
+                const expenses = sumOf('expense');
+                // Filtering to income must total the income on screen, not the
+                // (zero) expenses — otherwise the list looks like it found nothing.
+                const isIncome = filterType === 'income';
+                const periodTotal = isIncome ? income : expenses;
                 return (
                   <Flex justify="flex-end" px={4} w="100%">
                     <HStack gap={2}>
@@ -1505,11 +1532,9 @@ export default function Transactions() {
                       <Text
                         fontWeight="bold"
                         fontSize="lg"
-                        // No expenses in view (e.g. filtered to income) — a red
-                        // "-$0.00" would read as a loss.
-                        color={periodTotal > 0 ? 'red.600' : colors.textSecondary}
+                        color={periodTotal === 0 ? colors.textSecondary : (isIncome ? 'green.600' : 'red.600')}
                       >
-                        {periodTotal > 0 ? '-' : ''}${periodTotal.toFixed(2)}
+                        {periodTotal === 0 ? '' : (isIncome ? '+' : '-')}${periodTotal.toFixed(2)}
                       </Text>
                     </HStack>
                   </Flex>

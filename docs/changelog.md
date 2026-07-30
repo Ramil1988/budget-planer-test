@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **"Period total" reflects the type being filtered, and a real delete button (2026-07-24):**
+  - The footer summed expenses only, so filtering to Income showed `$0.00` and made the list look empty. It now totals income when the Income filter is active (green, `+$4,660.42`) and expenses otherwise (red, negative). `All types` keeps totalling expenses only
+  - The row delete control was a bare `×`; it is now a trash icon in a 32px target, muted at rest, brightening with the hovered row and turning red on direct hover, with an `aria-label`, tooltip and visible focus ring
+
 ### Added
 - **Income/expense filter on Transactions (2026-07-24):**
   - New **Type** dropdown (All types / Income / Expense) on the main toolbar, between the period selector and the Filters button — always visible, no need to open the filter panel
