@@ -1521,10 +1521,9 @@ export default function Transactions() {
                   .reduce((sum, t) => sum + t.amount, 0);
                 const income = sumOf('income');
                 const expenses = sumOf('expense');
-                // Filtering to income must total the income on screen, not the
-                // (zero) expenses — otherwise the list looks like it found nothing.
-                const isIncome = filterType === 'income';
-                const periodTotal = isIncome ? income : expenses;
+                // Net of what is actually on screen — the type dropdown is only
+                // one of several filters, so it can't decide which side to total.
+                const periodTotal = income - expenses;
                 return (
                   <Flex justify="flex-end" px={4} w="100%">
                     <HStack gap={2}>
@@ -1532,9 +1531,9 @@ export default function Transactions() {
                       <Text
                         fontWeight="bold"
                         fontSize="lg"
-                        color={periodTotal === 0 ? colors.textSecondary : (isIncome ? 'green.600' : 'red.600')}
+                        color={periodTotal === 0 ? colors.textSecondary : (periodTotal > 0 ? 'green.600' : 'red.600')}
                       >
-                        {periodTotal === 0 ? '' : (isIncome ? '+' : '-')}${periodTotal.toFixed(2)}
+                        {periodTotal === 0 ? '' : (periodTotal > 0 ? '+' : '-')}${Math.abs(periodTotal).toFixed(2)}
                       </Text>
                     </HStack>
                   </Flex>
