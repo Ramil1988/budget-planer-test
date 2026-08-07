@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Measured before/after on the Transactions page: switching tabs away and back fired **4 Supabase requests** (`transactions` ×2, `categories`, `user_settings`) before the fix and **0** after, with the active filter preserved. Genuine sign-in, sign-out, token refresh and profile updates still propagate
 
 ### Changed
+- **Recurring summary shows a real month instead of a smoothed average (2026-08-07):**
+  - The three cards summed a **monthly-equivalent** of every recurring (biweekly × 26 ÷ 12, etc.). A $1,918.07 biweekly salary read as **$4,155.82/mo** — an annual average that matches no actual month, since August holds 2 paydays ($3,836.14) and only May and October hold 3 ($5,754.21)
+  - They now count **what actually falls in the selected month**, occurrence by occurrence, via the existing `getMonthlyProjection()`. Labels name the month: *Income in August*, *Expenses in August*
+  - The counter under each figure counted **recurring records** ("1 payments" for one biweekly salary); it now counts **occurrences in that month** ("2 payments")
+  - A **month switcher** (← August →, with a *Today* chip once you leave the current month) drives all three cards, so you can look ahead at a three-payday month or a quarter when insurance is due
+  - The category-filter total follows the same basis — *Afterschool (2 payments) −$440.00 in October*. Consequence of the switch: a recurring that hasn't started yet reads `0 payments / $0.00` in earlier months rather than contributing an averaged cost
 - **Navigation reorganized, Import and Categories grouped under Settings (2026-07-24):**
   - Nav order is now Dashboard → Budget → Recurring → Report → **Assets** → Transactions → **Settings** (Assets moved up next to Report)
   - **Settings is a new nav entry** that groups three tabs: Preferences, Import, Categories. It stays highlighted on all three routes

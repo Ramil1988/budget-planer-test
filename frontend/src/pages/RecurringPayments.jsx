@@ -25,18 +25,17 @@ import { useDarkModeColors } from '../lib/useDarkModeColors';
 import {
   getNextPaymentDate,
   getUpcomingPayments,
+  getMonthlyProjection,
   formatFrequency,
   formatDate,
   FREQUENCY_CONFIG,
 } from '../lib/recurringUtils';
 
-// Monthly-equivalent multiplier for each recurring frequency, so payments of
-// any cadence can be summed into a single "/mo" figure.
-const FREQ_TO_MONTHLY = {
-  daily: 365 / 12, weekly: 52 / 12, biweekly: 26 / 12,
-  monthly: 1, quarterly: 1 / 3, yearly: 1 / 12,
+// Current month as 'YYYY-MM' — the month the summary opens on.
+const currentMonthKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
-const monthlyEquivalent = (p) => Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1);
 
 // Category colors
 const categoryColors = {
@@ -79,6 +78,7 @@ export default function RecurringPayments() {
   const [activeTab, setActiveTab] = useState('expense');
   const [showInactive, setShowInactive] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null); // Category filter
+  const [summaryMonth, setSummaryMonth] = useState(currentMonthKey); // Month the summary cards cover
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -308,26 +308,27 @@ export default function RecurringPayments() {
   // Filter categories by type
   const filteredCategories = categories.filter(c => c.type === formData.type);
 
-  // A recurring counts toward the monthly totals if it's active and not already
-  // finished (end_date in the past). Ended-but-still-active rows stay visible in
-  // the list but no longer contribute a monthly cost.
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const isOngoing = (p) => p.is_active && (!p.end_date || p.end_date >= todayStr);
-
-  // Monthly summary: normalized monthly-equivalent total of every ongoing
-  // recurring, so all payments count (incl. ones that start next month, like a
-  // mortgage) regardless of whether they happen to fall in the current month.
-  const ongoingRecurring = recurringPayments.filter(isOngoing);
-  const incomeRecurring = ongoingRecurring.filter(p => p.type === 'income');
-  const expenseRecurring = ongoingRecurring.filter(p => p.type === 'expense');
+  // Summary for the selected month: what actually falls in it, occurrence by
+  // occurrence. A biweekly salary counts twice in most months and three times in
+  // the months that hold a third payday, instead of showing a smoothed average
+  // that matches no real month.
+  const projection = getMonthlyProjection(recurringPayments, summaryMonth);
   const summary = {
-    income: incomeRecurring.reduce((s, p) => s + monthlyEquivalent(p), 0),
-    expenses: expenseRecurring.reduce((s, p) => s + monthlyEquivalent(p), 0),
-    incomeCount: incomeRecurring.length,
-    expenseCount: expenseRecurring.length,
+    income: projection.income,
+    expenses: projection.expenses,
+    net: projection.net,
+    incomeCount: projection.payments.filter(p => p.type === 'income').length,
+    expenseCount: projection.payments.filter(p => p.type === 'expense').length,
   };
-  summary.net = summary.income - summary.expenses;
+
+  const [summaryYear, summaryMonthNum] = summaryMonth.split('-').map(Number);
+  const summaryMonthLabel = new Date(summaryYear, summaryMonthNum - 1, 1)
+    .toLocaleDateString('en-US', { month: 'long', year: summaryYear !== new Date().getFullYear() ? 'numeric' : undefined });
+
+  const shiftSummaryMonth = (delta) => {
+    const d = new Date(summaryYear, summaryMonthNum - 1 + delta, 1);
+    setSummaryMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
 
   const upcomingPayments = getUpcomingPayments(recurringPayments.filter(p => p.is_active), 30);
 
@@ -394,6 +395,43 @@ export default function RecurringPayments() {
           </Box>
         )}
 
+        {/* Month picker for the summary below */}
+        <Flex align="center" justify="space-between" gap={2}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => shiftSummaryMonth(-1)}
+            color={colors.textSecondary}
+            aria-label="Previous month"
+          >
+            ←
+          </Button>
+          <HStack gap={2}>
+            <Text fontWeight="700" fontSize={{ base: 'sm', md: 'md' }} color={colors.textPrimary}>
+              {summaryMonthLabel}
+            </Text>
+            {summaryMonth !== currentMonthKey() && (
+              <Button
+                size="xs"
+                variant="outline"
+                borderRadius="full"
+                onClick={() => setSummaryMonth(currentMonthKey())}
+              >
+                Today
+              </Button>
+            )}
+          </HStack>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => shiftSummaryMonth(1)}
+            color={colors.textSecondary}
+            aria-label="Next month"
+          >
+            →
+          </Button>
+        </Flex>
+
         {/* Monthly Projection Summary */}
         <SimpleGrid columns={{ base: 1, sm: 3 }} gap={{ base: 3, md: 4 }}>
           <Box
@@ -403,13 +441,15 @@ export default function RecurringPayments() {
             color="white"
           >
             <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
-              <Text fontSize="sm" opacity={0.9}>Monthly Income</Text>
+              <Text fontSize="sm" opacity={0.9}>Income in {summaryMonthLabel}</Text>
               <Text fontSize="lg" fontWeight="700">{formatCurrency(summary.income)}</Text>
             </Flex>
             <Box display={{ base: 'none', sm: 'block' }}>
-              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Monthly Income</Text>
+              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Income in {summaryMonthLabel}</Text>
               <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(summary.income)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{summary.incomeCount} payments</Text>
+              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>
+                {summary.incomeCount} {summary.incomeCount === 1 ? 'payment' : 'payments'}
+              </Text>
             </Box>
           </Box>
           <Box
@@ -419,13 +459,15 @@ export default function RecurringPayments() {
             color="white"
           >
             <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
-              <Text fontSize="sm" opacity={0.9}>Monthly Expenses</Text>
+              <Text fontSize="sm" opacity={0.9}>Expenses in {summaryMonthLabel}</Text>
               <Text fontSize="lg" fontWeight="700">{formatCurrency(summary.expenses)}</Text>
             </Flex>
             <Box display={{ base: 'none', sm: 'block' }}>
-              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Monthly Expenses</Text>
+              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Expenses in {summaryMonthLabel}</Text>
               <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(summary.expenses)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{summary.expenseCount} payments</Text>
+              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>
+                {summary.expenseCount} {summary.expenseCount === 1 ? 'payment' : 'payments'}
+              </Text>
             </Box>
           </Box>
           <Box
@@ -543,12 +585,12 @@ export default function RecurringPayments() {
 
         {/* Category Total when filtered */}
         {selectedCategory && filteredPayments.length > 0 && (() => {
-          // Monthly-equivalent total of the filtered recurrings, independent of
-          // whether a payment happens to fall in the current calendar month
-          // (e.g. an insurance that starts next month still contributes its /mo cost).
-          const monthlyTotal = filteredPayments
-            .filter(isOngoing)
-            .reduce((sum, p) => sum + monthlyEquivalent(p), 0);
+          // What this category actually costs in the selected month, counting each
+          // occurrence — same basis as the summary cards above.
+          const occurrences = projection.payments.filter(
+            p => p.type === activeTab && p.categories?.name === selectedCategory
+          );
+          const monthlyTotal = occurrences.reduce((sum, p) => sum + Number(p.amount), 0);
           return (
             <Flex
               align="center"
@@ -571,7 +613,7 @@ export default function RecurringPayments() {
                   {selectedCategory}
                 </Text>
                 <Text fontSize="sm" color={colors.textMuted}>
-                  ({filteredPayments.length} {filteredPayments.length === 1 ? 'payment' : 'payments'})
+                  ({occurrences.length} {occurrences.length === 1 ? 'payment' : 'payments'})
                 </Text>
               </HStack>
               <Text
@@ -580,7 +622,7 @@ export default function RecurringPayments() {
                 color={activeTab === 'expense' ? '#E11D48' : '#059669'}
               >
                 {activeTab === 'expense' ? '-' : '+'}{formatCurrency(monthlyTotal)}
-                <Text as="span" fontSize="xs" fontWeight="500" color={colors.textMuted}>/mo</Text>
+                <Text as="span" fontSize="xs" fontWeight="500" color={colors.textMuted}> in {summaryMonthLabel}</Text>
               </Text>
             </Flex>
           );
