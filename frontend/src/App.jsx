@@ -1,5 +1,9 @@
+import { useEffect, useRef } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Box, Flex } from '@chakra-ui/react'
+import { useAuth } from './contexts/AuthContext'
+import { supabase } from './lib/supabaseClient'
+import { generateDueRecurringTransactions } from './lib/recurringAutoAdd'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -21,6 +25,19 @@ import Settings from './pages/Settings'
 import SettingsTabs from './components/SettingsTabs'
 
 function App() {
+  const { user } = useAuth()
+  const autoAddRunFor = useRef(null)
+
+  // Recurring payments marked "add automatically" record themselves once their date
+  // arrives. Runs once per session — generation is idempotent, so a missed run just
+  // catches up the next time the app is opened.
+  useEffect(() => {
+    if (!user || autoAddRunFor.current === user.id) return
+    autoAddRunFor.current = user.id
+    generateDueRecurringTransactions(supabase, user.id)
+      .catch(err => console.error('Recurring auto-add failed:', err))
+  }, [user])
+
   return (
     <Flex direction="column" minH="100vh" overflowX="hidden" w="100%">
       <Header />

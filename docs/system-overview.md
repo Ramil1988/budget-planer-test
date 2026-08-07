@@ -106,6 +106,20 @@ This document provides a technical overview of how BudgetWise is structured and 
     - `getMonthlyProjection(recurringPayments, month)`.
     - `formatFrequency`, `formatDate`.
 
+- `frontend/src/lib/recurringAutoAdd.js`
+  - Turns due recurring payments into real transactions:
+    - `generateDueRecurringTransactions(supabase, userId)` — called once per session from `App.jsx`.
+      Creates a transaction for every occurrence of an `auto_add` payment that is due, starting at
+      `auto_add_from` (no backfill). Idempotent: generated rows carry `transactions.recurring_payment_id`
+      and a unique index on `(recurring_payment_id, date)` prevents duplicates.
+    - `matchesRecurringOccurrence(tx, recurring, occurrenceDate)` — is this manual/imported row the
+      bank's version of that occurrence? Requires the recurring payment's `match_description`, plus the
+      same type, the same amount, and a date within `MATCH_WINDOW_DAYS` (4).
+    - `filterOutRecurringDuplicates(supabase, userId, transactions)` — used by the Google Sheets import
+      paths (`ImportTransactions.jsx`, `AutoSyncContext.jsx`) so a payment isn't recorded twice.
+      `netlify/functions/google-sheets-webhook.js` duplicates both helpers, since it runs server-side
+      with the service-role client and can't import frontend modules.
+
 - `frontend/src/lib/notifications.js`
   - Browser notification abstraction:
     - `isNotificationSupported`, `getNotificationPermission`, `requestNotificationPermission`.
@@ -145,6 +159,9 @@ Core tables (see `backend/database/schema.sql` and migrations):
 - `user_settings` – per-user config (Google Sheet URL/name, auto-sync flags, webhook secret, etc.).
 - `merchant_mappings` – merchant description → category name rules.
 - `recurring_payments` – recurring incomes/expenses with frequency, dates, `is_active`, and optional `category_id`.
+  Auto-add columns: `auto_add`, `auto_add_from`, `match_description`.
+- `transactions.recurring_payment_id` – set when a transaction was generated from a recurring payment
+  (NULL for manual and imported rows); unique with `date`.
 
 Security:
 

@@ -28,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The row delete control was a bare `×`; it is now a trash icon in a 32px target, muted at rest, brightening with the hovered row and turning red on direct hover, with an `aria-label`, tooltip and visible focus ring
 
 ### Added
+- **Recurring payments can add themselves to Transactions (2026-08-07):**
+  - New **"Add to transactions automatically"** option per recurring payment. When the due date arrives, the transaction is created for you — salary, mortgage, subscriptions no longer have to be typed in by hand
+  - The transaction takes the recurring payment's **category, amount and name**, and respects the existing scheduling rules (business days only, last business day of month)
+  - **Enabling it never backfills.** Generation starts from the day the option was switched on (`auto_add_from`), so turning it on for a two-year-old mortgage doesn't drop 24 transactions into your history and shift the account balance
+  - **Never creates the same occurrence twice.** Generated rows carry `transactions.recurring_payment_id`, and a unique index on `(recurring_payment_id, date)` makes generation idempotent — opening the app twice, or on two devices, cannot double-record a payment. A generated transaction you delete stays deleted
+  - **Optional "Bank description"** field: how the payment reads on your statement (e.g. `PAYROLL DEP`). Used to recognise the same payment arriving from the Google Sheets import — a row with the same type and amount, whose description contains it, within 4 days of the generated date, is treated as the same money and not recorded twice. Matching works in both directions: auto-add skips an occurrence the bank already reported, and the import skips a row that auto-add already recorded. Without this field nothing is cross-matched (a false match would hide a real transaction)
+  - Covers **all three import paths** — manual import, background auto-sync, and the real-time Apps Script webhook (`netlify/functions/google-sheets-webhook.js`, which carries its own copy of the matcher since it runs server-side)
+  - Runs on the client when the app opens (`App.jsx` → `lib/recurringAutoAdd.js`), same shape as the Google Sheets auto-sync — no server cron, no service-role key, RLS still applies. A missed run just catches up next time the app is opened
+  - Migration: `backend/database/migrations/008_recurring_auto_add.sql`
 - **Income/expense filter on Transactions (2026-07-24):**
   - New **Type** dropdown (All types / Income / Expense) on the main toolbar, between the period selector and the Filters button — always visible, no need to open the filter panel
   - Applies on top of the selected period rather than switching the page into custom-filter mode, so e.g. `Last month` + `Income` correctly lists last month's income (it is deliberately excluded from `hasCustomFilterValues`, which would otherwise override the period with the custom date range)

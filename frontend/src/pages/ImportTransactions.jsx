@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAutoSync } from '../contexts/AutoSyncContext';
 import PageContainer from '../components/PageContainer';
 import { fetchTransactionsFromGoogleSheets, parseCSVFile, validateTransactions, extractSheetId } from '../lib/importUtils';
+import { filterOutRecurringDuplicates } from '../lib/recurringAutoAdd';
 import { supabase } from '../lib/supabaseClient';
 import {
   showNotification,
@@ -515,10 +516,14 @@ export default function ImportTransactions() {
       );
 
       // Filter out duplicates
-      const uniqueTransactions = transactions.filter(t => {
+      const notAlreadyImported = transactions.filter(t => {
         const signature = `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`;
         return !existingSet.has(signature);
       });
+
+      // Also drop rows the bank is reporting for a recurring payment that already
+      // recorded itself via auto-add (matched on its "bank description").
+      const uniqueTransactions = await filterOutRecurringDuplicates(supabase, user.id, notAlreadyImported);
 
       const duplicateCount = transactions.length - uniqueTransactions.length;
 

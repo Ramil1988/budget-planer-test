@@ -65,7 +65,7 @@ function getLastBusinessDayOfMonth(year, month) {
  * @param {Date|string} date - Date to parse
  * @returns {Date} - Date object in local time at midnight
  */
-function parseLocalDate(date) {
+export function parseLocalDate(date) {
   if (date instanceof Date) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);

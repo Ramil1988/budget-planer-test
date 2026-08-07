@@ -18,6 +18,68 @@ const normalizeAmount = (amt) => Math.abs(Number(amt)).toFixed(2);
 // Helper: Create transaction signature for duplicate detection
 const createSignature = (tx) => `${tx.date}|${normalizeDesc(tx.description)}|${normalizeAmount(tx.amount)}`;
 
+// How far apart the generated date and the bank's posting date may be and still be the
+// same payment. Keep in sync with frontend/src/lib/recurringAutoAdd.js.
+const MATCH_WINDOW_DAYS = 4;
+
+// Helper: Parse a YYYY-MM-DD key into a local-time Date at midnight
+const parseDayKey = (key) => {
+  const [year, month, day] = String(key).split('T')[0].split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+// Helper: Shift a YYYY-MM-DD key by N days
+const shiftDayKey = (key, days) => {
+  const d = parseDayKey(key);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// Helper: Is this incoming row the bank's version of an already generated recurring transaction?
+// Requires the recurring payment's match_description — without it there is nothing reliable to
+// compare the bank's wording against, and a false match would hide a real transaction.
+function matchesRecurringOccurrence(tx, recurring, occurrenceDate) {
+  const needle = (recurring?.match_description || '').trim();
+  if (!needle) return false;
+  if (tx.type !== recurring.type) return false;
+  if (Math.abs(Number(tx.amount) - Number(recurring.amount)) > 0.005) return false;
+  if (!(tx.description || '').toUpperCase().includes(needle.toUpperCase())) return false;
+
+  const daysApart = Math.abs(parseDayKey(tx.date) - parseDayKey(occurrenceDate)) / 86400000;
+  return daysApart <= MATCH_WINDOW_DAYS;
+}
+
+// Helper: Drop rows a recurring payment already recorded itself via auto-add, so the same
+// payment isn't counted twice. Mirrors filterOutRecurringDuplicates in the frontend.
+async function filterOutRecurringDuplicates(transactions, userId) {
+  if (!transactions.length) return transactions;
+
+  const dates = transactions.map(t => t.date).sort();
+
+  const { data: generated, error } = await supabase
+    .from('transactions')
+    .select('date, amount, type, recurring_payments(match_description)')
+    .eq('user_id', userId)
+    .not('recurring_payment_id', 'is', null)
+    .is('deleted_at', null)
+    .gte('date', shiftDayKey(dates[0], -MATCH_WINDOW_DAYS))
+    .lte('date', shiftDayKey(dates[dates.length - 1], MATCH_WINDOW_DAYS));
+
+  if (error) {
+    // Don't lose the webhook payload over this — importing is better than dropping.
+    console.error('Error fetching generated recurring transactions:', error);
+    return transactions;
+  }
+
+  if (!generated?.length) return transactions;
+
+  return transactions.filter(t => !generated.some(g => matchesRecurringOccurrence(
+    t,
+    { type: g.type, amount: g.amount, match_description: g.recurring_payments?.match_description },
+    g.date
+  )));
+}
+
 // Helper: Parse date string into YYYY-MM-DD format
 function parseDate(dateStr) {
   if (!dateStr) return null;
@@ -260,7 +322,11 @@ export async function handler(event) {
     );
 
     // Filter out duplicates
-    const uniqueTransactions = validTransactions.filter(t => !existingSet.has(createSignature(t)));
+    const notAlreadyImported = validTransactions.filter(t => !existingSet.has(createSignature(t)));
+
+    // Also drop rows the bank is reporting for a recurring payment that already recorded
+    // itself via auto-add (matched on its "bank description").
+    const uniqueTransactions = await filterOutRecurringDuplicates(notAlreadyImported, userId);
 
     if (uniqueTransactions.length === 0) {
       return {

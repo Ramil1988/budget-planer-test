@@ -99,6 +99,11 @@
 - [x] Business Days Only for Recurring Payments
   - [x] Toggle to skip weekends for recurring payments
   - [x] Fixed infinite loop bug in projections
+- [x] Auto-add recurring payments to Transactions (2026-08-07)
+  - [x] Per-payment "Add to transactions automatically" toggle
+  - [x] Generated on app open (`lib/recurringAutoAdd.js`), idempotent via unique `(recurring_payment_id, date)`
+  - [x] Never backfills — starts from the day the option was enabled (`auto_add_from`)
+  - [x] Optional "Bank description" matches the same payment from the Google Sheets import, both directions
 - [x] Smart Budget Suggestions (Full Feature)
   - [x] **Backend Analysis Engine** (`budget-recommendations.js` - 668 lines)
     - [x] 6-month historical spending analysis per category

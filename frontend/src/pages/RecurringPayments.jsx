@@ -96,6 +96,8 @@ export default function RecurringPayments() {
     notes: '',
     business_days_only: false,
     last_business_day_of_month: false,
+    auto_add: false,
+    match_description: '',
   });
 
   // Custom dropdown state
@@ -160,6 +162,14 @@ export default function RecurringPayments() {
     setError('');
 
     try {
+      // Auto-add only ever generates from the day it was switched on, so enabling it on an
+      // old recurring doesn't backfill months of history. Editing an already-auto payment
+      // keeps the original date.
+      const todayDate = new Date();
+      const autoAddFrom = editingPayment?.auto_add && editingPayment.auto_add_from
+        ? editingPayment.auto_add_from
+        : `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+
       const payload = {
         user_id: user.id,
         name: formData.name.trim(),
@@ -173,6 +183,9 @@ export default function RecurringPayments() {
         is_active: true,
         business_days_only: formData.business_days_only,
         last_business_day_of_month: formData.last_business_day_of_month,
+        auto_add: formData.auto_add,
+        auto_add_from: formData.auto_add ? autoAddFrom : null,
+        match_description: formData.match_description.trim() || null,
       };
 
       if (editingPayment) {
@@ -242,6 +255,8 @@ export default function RecurringPayments() {
       notes: '',
       business_days_only: false,
       last_business_day_of_month: false,
+      auto_add: false,
+      match_description: '',
     });
     setIsModalOpen(true);
   };
@@ -259,6 +274,8 @@ export default function RecurringPayments() {
       notes: payment.notes || '',
       business_days_only: payment.business_days_only || false,
       last_business_day_of_month: payment.last_business_day_of_month || false,
+      auto_add: payment.auto_add || false,
+      match_description: payment.match_description || '',
     });
     setIsModalOpen(true);
   };
@@ -667,6 +684,11 @@ export default function RecurringPayments() {
                                 Weekdays
                               </Badge>
                             )}
+                            {payment.auto_add && (
+                              <Badge colorPalette="green" variant="subtle" fontSize="10px">
+                                Auto
+                              </Badge>
+                            )}
                           </Flex>
                         </Box>
                       </HStack>
@@ -768,6 +790,11 @@ export default function RecurringPayments() {
                           {payment.last_business_day_of_month && (
                             <Badge colorPalette="purple" variant="subtle" size="sm">
                               Last biz day
+                            </Badge>
+                          )}
+                          {payment.auto_add && (
+                            <Badge colorPalette="green" variant="subtle" size="sm">
+                              Auto-added
                             </Badge>
                           )}
                           {payment.end_date && (
@@ -1274,6 +1301,73 @@ export default function RecurringPayments() {
                             </Text>
                           </Box>
                         </Flex>
+                      </Box>
+                    )}
+
+                    {/* Auto-add to transactions */}
+                    <Box>
+                      <Flex
+                        align="center"
+                        gap={3}
+                        p={3}
+                        borderRadius="10px"
+                        bg={formData.auto_add ? colors.successBg : colors.rowStripedBg}
+                        border="1px solid"
+                        borderColor={formData.auto_add ? colors.successBorder : colors.borderColor}
+                        cursor="pointer"
+                        onClick={() => setFormData({ ...formData, auto_add: !formData.auto_add })}
+                        transition="all 0.2s"
+                        _hover={{ borderColor: colors.successBorder }}
+                      >
+                        <Box
+                          w="20px"
+                          h="20px"
+                          borderRadius="4px"
+                          border="2px solid"
+                          borderColor={formData.auto_add ? 'green.500' : colors.borderColor}
+                          bg={formData.auto_add ? 'green.500' : 'transparent'}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          flexShrink={0}
+                        >
+                          {formData.auto_add && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </Box>
+                        <Box flex="1">
+                          <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
+                            Add to transactions automatically
+                          </Text>
+                          <Text fontSize="xs" color={colors.textMuted}>
+                            {editingPayment?.auto_add && editingPayment.auto_add_from
+                              ? `Recording automatically since ${formatDate(editingPayment.auto_add_from)}`
+                              : 'Records itself when the date arrives — starting today, past dates are left alone'}
+                          </Text>
+                        </Box>
+                      </Flex>
+                    </Box>
+
+                    {/* Bank description — used to recognise the same payment coming from the sheet */}
+                    {formData.auto_add && (
+                      <Box>
+                        <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>
+                          Bank description
+                        </Text>
+                        <Input
+                          placeholder="e.g., PAYROLL DEP, HYDRO BILL PMT"
+                          value={formData.match_description}
+                          onChange={(e) => setFormData({ ...formData, match_description: e.target.value })}
+                          bg={colors.cardBg}
+                          borderColor={colors.borderColor}
+                          color={colors.textPrimary}
+                        />
+                        <Text fontSize="xs" color={colors.textMuted} mt={1.5}>
+                          Optional. How this payment reads on your statement — if the same amount shows
+                          up in the Google Sheets import within a few days, it won't be added twice.
+                        </Text>
                       </Box>
                     )}
 

@@ -38,6 +38,7 @@ CREATE TABLE transactions (
   description TEXT,
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   balance DECIMAL(12, 2),
+  recurring_payment_id UUID,                            -- Set when generated from a recurring payment
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -91,8 +92,22 @@ CREATE TABLE recurring_payments (
   notes TEXT,
   business_days_only BOOLEAN DEFAULT false,              -- Adjust weekend dates to nearest weekday
   last_business_day_of_month BOOLEAN DEFAULT false,      -- Schedule on last business day of each month
+  auto_add BOOLEAN DEFAULT false,                        -- Create the transaction automatically when due
+  auto_add_from DATE,                                    -- Occurrences before this date are never generated
+  match_description TEXT,                                -- How the payment reads on the bank statement
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Link generated transactions back to their recurring payment (added here because
+-- recurring_payments is created after transactions).
+ALTER TABLE transactions
+ADD CONSTRAINT transactions_recurring_payment_id_fkey
+FOREIGN KEY (recurring_payment_id) REFERENCES recurring_payments(id) ON DELETE SET NULL;
+
+-- One transaction per recurring payment per date, so generation is idempotent.
+-- NULLs are distinct in Postgres, so manual/imported rows are unaffected.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_recurring_occurrence
+ON transactions (recurring_payment_id, date);
 
 -- Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

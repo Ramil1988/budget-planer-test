@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { fetchTransactionsFromGoogleSheets, validateTransactions, extractSheetId } from '../lib/importUtils';
+import { filterOutRecurringDuplicates } from '../lib/recurringAutoAdd';
 import { showNotification, checkBudgetAndNotify, getNotificationPermission } from '../lib/notifications';
 
 const AutoSyncContext = createContext();
@@ -216,10 +217,14 @@ export function AutoSyncProvider({ children }) {
       );
 
       // Filter out duplicates
-      const uniqueTransactions = newTransactions.filter(t => {
+      const notAlreadyImported = newTransactions.filter(t => {
         const signature = `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`;
         return !existingSet.has(signature);
       });
+
+      // Also drop rows the bank is reporting for a recurring payment that already
+      // recorded itself via auto-add (matched on its "bank description").
+      const uniqueTransactions = await filterOutRecurringDuplicates(supabase, user.id, notAlreadyImported);
 
       if (uniqueTransactions.length === 0) {
         setLastSyncResult({ success: true, message: 'All transactions already imported', imported: 0 });

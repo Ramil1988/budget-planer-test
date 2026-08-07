@@ -252,6 +252,14 @@ The backend is built with Netlify Functions, a serverless platform that runs eve
   - Budget categories secured via budget ownership check
 - See `backend/database/schema.sql` for complete schema definition
 
+**Recurring Payments Auto-Add:**
+- A recurring payment with `auto_add = true` records its own transaction when the due date arrives — no manual entry
+- Runs on the client at app open: `App.jsx` calls `generateDueRecurringTransactions()` from `frontend/src/lib/recurringAutoAdd.js` (no server cron, RLS applies)
+- Idempotency: generated transactions carry `transactions.recurring_payment_id`, with a unique index on `(recurring_payment_id, date)`. Insert uses `upsert(..., { onConflict: 'recurring_payment_id,date', ignoreDuplicates: true })`. Soft-deleted generated rows are **not** regenerated
+- No backfill: generation starts at `recurring_payments.auto_add_from` (set to today when the toggle is switched on), capped at 366 days of catch-up
+- `recurring_payments.match_description` = how the payment reads on the bank statement. Used to recognise the same payment coming from Google Sheets: same type + exact amount + description contains it + within 4 days. Applied in both directions — auto-add skips an occurrence the bank already reported, and all three import paths call `filterOutRecurringDuplicates()`: `ImportTransactions.jsx`, `AutoSyncContext.jsx`, and `netlify/functions/google-sheets-webhook.js` (own copy of the matcher, keep the 4-day window in sync). Without `match_description` nothing is cross-matched
+- Migration: `backend/database/migrations/008_recurring_auto_add.sql`
+
 **Auto-Seeding for New Users:**
 - Migration: `backend/database/migrations/002_auto_seed_new_users.sql`
 - Automatically creates for each new user:
