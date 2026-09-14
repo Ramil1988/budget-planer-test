@@ -110,23 +110,56 @@ const money = (amount) =>
 
 // Marks a category that is driven by recurring payments. Hovering (or tapping,
 // on touch devices) breaks down which recurrings feed it and what they cost.
+const RECURRING_PANEL_WIDTH = 240;
+
 const RecurringBadge = ({ info, colors }) => {
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const anchorRef = useRef(null);
+
+  // Close the panel if the page moves under it, since it's positioned in
+  // viewport coordinates (via a portal) rather than anchored to the badge.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
 
   if (!info) return null;
 
   const isFinePointer = () => window.matchMedia('(pointer: fine)').matches;
 
+  const openPanel = () => {
+    const rect = anchorRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const margin = 12;
+    const left = Math.min(
+      Math.max(margin, rect.left),
+      window.innerWidth - margin - RECURRING_PANEL_WIDTH
+    );
+    setCoords({ top: rect.bottom + 8, left });
+    setOpen(true);
+  };
+
   return (
     <Box
+      ref={anchorRef}
       position="relative"
       display="inline-flex"
-      onMouseEnter={() => isFinePointer() && setOpen(true)}
+      onMouseEnter={() => isFinePointer() && openPanel()}
       onMouseLeave={() => isFinePointer() && setOpen(false)}
       onClick={(e) => {
         // Don't let the tap fall through to the card's own click handler
         e.stopPropagation();
-        if (!isFinePointer()) setOpen(!open);
+        if (!isFinePointer()) {
+          if (open) setOpen(false);
+          else openPanel();
+        }
       }}
       cursor="pointer"
     >
@@ -144,50 +177,52 @@ const RecurringBadge = ({ info, colors }) => {
         🔁 {info.count}
       </Text>
 
-      {open && (
-        <Box
-          // Always absolute: the cards apply a transform on hover, which would
-          // make a position:fixed panel resolve against the card instead of the
-          // viewport.
-          position="absolute"
-          top="calc(100% + 8px)"
-          left="0"
-          bg={colors.cardBg}
-          border="1px solid"
-          borderColor="purple.400"
-          borderRadius="12px"
-          boxShadow="0 12px 32px rgba(0,0,0,0.35)"
-          p={3}
-          zIndex={999}
-          w="240px"
-        >
-            <Text fontSize="xs" fontWeight="700" color={colors.textMuted} mb={2} textTransform="uppercase" letterSpacing="0.05em">
-              Recurring payments
-            </Text>
-
-            <VStack align="stretch" gap={1.5}>
-              {info.items.map((item) => (
-                <Flex key={item.name} justify="space-between" gap={3} align="baseline">
-                  <Box minW="0">
-                    <Text fontSize="sm" color={colors.textPrimary} truncate>{item.name}</Text>
-                    <Text fontSize="10px" color={colors.textMuted} textTransform="capitalize">
-                      {item.frequency}
-                    </Text>
-                  </Box>
-                  <Text fontSize="sm" fontWeight="600" color={colors.textPrimary} whiteSpace="nowrap">
-                    {money(item.amount)}
-                  </Text>
-                </Flex>
-              ))}
-            </VStack>
-
-            <Flex justify="space-between" align="baseline" mt={2} pt={2} borderTop="1px solid" borderColor={colors.borderSubtle}>
-              <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>Total</Text>
-              <Text fontSize="sm" fontWeight="700" color="purple.400" whiteSpace="nowrap">
-                {money(info.monthly)}/mo
+      {open && coords && (
+        <Portal>
+          <Box
+            // Fixed + portalled to <body> so the panel positions itself in
+            // viewport coordinates, clamped to stay on-screen, instead of
+            // being clipped/misplaced by the card's own layout and transform.
+            position="fixed"
+            top={`${coords.top}px`}
+            left={`${coords.left}px`}
+            bg={colors.cardBg}
+            border="1px solid"
+            borderColor="purple.400"
+            borderRadius="12px"
+            boxShadow="0 12px 32px rgba(0,0,0,0.35)"
+            p={3}
+            zIndex={1400}
+            w={`${RECURRING_PANEL_WIDTH}px`}
+          >
+              <Text fontSize="xs" fontWeight="700" color={colors.textMuted} mb={2} textTransform="uppercase" letterSpacing="0.05em">
+                Recurring payments
               </Text>
-            </Flex>
-        </Box>
+
+              <VStack align="stretch" gap={1.5}>
+                {info.items.map((item) => (
+                  <Flex key={item.name} justify="space-between" gap={3} align="baseline">
+                    <Box minW="0">
+                      <Text fontSize="sm" color={colors.textPrimary} truncate>{item.name}</Text>
+                      <Text fontSize="10px" color={colors.textMuted} textTransform="capitalize">
+                        {item.frequency}
+                      </Text>
+                    </Box>
+                    <Text fontSize="sm" fontWeight="600" color={colors.textPrimary} whiteSpace="nowrap">
+                      {money(item.amount)}
+                    </Text>
+                  </Flex>
+                ))}
+              </VStack>
+
+              <Flex justify="space-between" align="baseline" mt={2} pt={2} borderTop="1px solid" borderColor={colors.borderSubtle}>
+                <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>Total</Text>
+                <Text fontSize="sm" fontWeight="700" color="purple.400" whiteSpace="nowrap">
+                  {money(info.monthly)}/mo
+                </Text>
+              </Flex>
+          </Box>
+        </Portal>
       )}
     </Box>
   );
