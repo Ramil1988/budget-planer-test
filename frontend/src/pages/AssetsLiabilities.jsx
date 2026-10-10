@@ -17,6 +17,7 @@ import {
 import { Dialog } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { getMonthlyEquivalent, getPaymentsPerYear, formatFrequency } from '../lib/recurringUtils';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
 
@@ -96,22 +97,6 @@ const formatNumberWithSpaces = (value) => {
 // Parse number from formatted string (e.g., "320 000" -> 320000)
 const parseFormattedNumber = (value) => {
   return value.replace(/\s/g, '');
-};
-
-// Convert recurring payment amount to monthly equivalent based on frequency
-const convertToMonthly = (amount, frequency) => {
-  const multipliers = {
-    daily: 365 / 12,
-    weekly: 52 / 12,
-    biweekly: 26 / 12,
-    'semi-monthly': 2,
-    monthly: 1,
-    quarterly: 1 / 3,
-    'semi-annually': 1 / 6,
-    annually: 1 / 12,
-  };
-  const multiplier = multipliers[frequency] || 1;
-  return parseFloat(amount) * multiplier;
 };
 
 // Payments of a liability's linked category, limited to those made since the
@@ -722,19 +707,8 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
     // Determine payment frequency from linked recurring payment
     const frequency = linkedRecurring?.frequency || 'monthly';
 
-    // Get periods per year and actual payment amount per period
-    const periodsPerYear = {
-      daily: 365,
-      weekly: 52,
-      biweekly: 26,
-      'semi-monthly': 24,
-      monthly: 12,
-      quarterly: 4,
-      'semi-annually': 2,
-      annually: 1,
-    };
-
-    const periods = periodsPerYear[frequency] || 12;
+    const frequencyInterval = linkedRecurring?.frequency_interval ?? 1;
+    const periods = getPaymentsPerYear(frequency, frequencyInterval);
 
     // Use actual payment amount (not converted monthly) if we have linked recurring
     const paymentPerPeriod = linkedRecurring?.amount
@@ -772,6 +746,7 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
       years: Math.floor(months / 12),
       remainingMonths: months % 12,
       frequency,
+      frequencyInterval,
       paymentPerPeriod,
       interestRate: interest_rate,
     };
@@ -804,11 +779,11 @@ const DebtPayoffCard = ({ liability, liabilityType, linkedCategory, linkedRecurr
         <Text fontSize="xs" color={colors.textMuted}>Add monthly payment to see projection</Text>
       ) : (
         <VStack align="stretch" gap={2}>
-          {projection.frequency && projection.frequency !== 'monthly' && (
+          {projection.frequency && (projection.frequency !== 'monthly' || projection.frequencyInterval > 1) && (
             <Flex justify="space-between">
               <Text fontSize="xs" color={colors.textMuted}>Payment</Text>
               <Text fontSize="xs" fontWeight="600" color="blue.500">
-                {formatCurrency(projection.paymentPerPeriod)} {projection.frequency}
+                {formatCurrency(projection.paymentPerPeriod)} {formatFrequency(projection.frequency, projection.frequencyInterval)}
               </Text>
             </Flex>
           )}
@@ -1170,7 +1145,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
         // Only auto-fill if current monthly_payment is 0 or was auto-filled before
         if (formData.monthly_payment === 0 || autoFilledPayment) {
           // Convert to monthly based on frequency
-          const monthlyAmount = convertToMonthly(recurringPayment.amount, recurringPayment.frequency);
+          const monthlyAmount = getMonthlyEquivalent(recurringPayment.amount, recurringPayment.frequency, recurringPayment.frequency_interval);
           updates.monthly_payment = Math.round(monthlyAmount * 100) / 100; // Round to 2 decimals
           setAutoFilledPayment(true);
         }
@@ -1358,7 +1333,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
                                 (rp) => rp.category_id === cat?.id && rp.is_active && rp.type === 'expense'
                               );
                               const monthlyAmount = recurringPayment
-                                ? convertToMonthly(recurringPayment.amount, recurringPayment.frequency)
+                                ? getMonthlyEquivalent(recurringPayment.amount, recurringPayment.frequency, recurringPayment.frequency_interval)
                                 : 0;
                               const amountHint = recurringPayment ? ` (${formatCurrency(monthlyAmount)}/mo)` : '';
                               return `${cat?.name || ''}${amountHint}`;
@@ -1426,7 +1401,7 @@ const LiabilityModal = ({ isOpen, onClose, liability, types, spendingCategories,
                               (rp) => rp.category_id === cat.id && rp.is_active && rp.type === 'expense'
                             );
                             const monthlyAmount = recurringPayment
-                              ? convertToMonthly(recurringPayment.amount, recurringPayment.frequency)
+                              ? getMonthlyEquivalent(recurringPayment.amount, recurringPayment.frequency, recurringPayment.frequency_interval)
                               : 0;
                             const amountHint = recurringPayment ? ` (${formatCurrency(monthlyAmount)}/mo)` : '';
                             return (
@@ -2126,7 +2101,7 @@ export default function AssetsLiabilities() {
       // Load recurring payments (for auto-filling monthly payment amounts)
       const { data: recurringData, error: recurringError } = await supabase
         .from('recurring_payments')
-        .select('id, name, amount, category_id, type, is_active, start_date, end_date, frequency')
+        .select('id, name, amount, category_id, type, is_active, start_date, end_date, frequency, frequency_interval')
         .eq('user_id', user.id)
         .eq('is_active', true);
 

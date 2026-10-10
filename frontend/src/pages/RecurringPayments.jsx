@@ -29,6 +29,8 @@ import {
   formatFrequency,
   formatDate,
   FREQUENCY_CONFIG,
+  MAX_FREQUENCY_INTERVAL,
+  isValidFrequencyInterval,
 } from '../lib/recurringUtils';
 
 // Current month as 'YYYY-MM' — the month the summary opens on.
@@ -36,6 +38,12 @@ const currentMonthKey = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
+
+// Express legacy presets in the units offered by the custom editor.
+const customSchedule = (frequency, interval = 1) => ({
+  custom_frequency: frequency === 'biweekly' ? 'weekly' : frequency === 'quarterly' ? 'monthly' : frequency,
+  frequency_interval: interval * (frequency === 'biweekly' ? 2 : frequency === 'quarterly' ? 3 : 1),
+});
 
 // Category colors
 const categoryColors = {
@@ -91,6 +99,8 @@ export default function RecurringPayments() {
     type: 'expense',
     category_id: '',
     frequency: 'monthly',
+    frequency_interval: 1,
+    custom_frequency: 'monthly',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     notes: '',
@@ -102,9 +112,7 @@ export default function RecurringPayments() {
 
   // Custom dropdown state
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const [frequencyDropdownOpen, setFrequencyDropdownOpen] = useState(false);
   const categoryDropdownRef = useRef(null);
-  const frequencyDropdownRef = useRef(null);
 
   // Load data on mount
   useEffect(() => {
@@ -118,9 +126,6 @@ export default function RecurringPayments() {
     const handleClickOutside = (event) => {
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
         setCategoryDropdownOpen(false);
-      }
-      if (frequencyDropdownRef.current && !frequencyDropdownRef.current.contains(event.target)) {
-        setFrequencyDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -158,6 +163,12 @@ export default function RecurringPayments() {
   // CRUD Operations
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const frequency = formData.frequency === 'custom' ? formData.custom_frequency : formData.frequency;
+    const interval = formData.frequency === 'custom' ? Number(formData.frequency_interval) : 1;
+    if (!isValidFrequencyInterval(interval)) {
+      setError(`Repeat interval must be a whole number from 1 to ${MAX_FREQUENCY_INTERVAL}.`);
+      return;
+    }
     setSaving(true);
     setError('');
 
@@ -176,13 +187,14 @@ export default function RecurringPayments() {
         amount: parseFloat(formData.amount),
         type: formData.type,
         category_id: formData.category_id || null,
-        frequency: formData.frequency,
+        frequency,
+        frequency_interval: interval,
         start_date: formData.start_date,
         end_date: formData.end_date || null,
         notes: formData.notes.trim() || null,
         is_active: true,
         business_days_only: formData.business_days_only,
-        last_business_day_of_month: formData.last_business_day_of_month,
+        last_business_day_of_month: !!FREQUENCY_CONFIG[frequency]?.months && formData.last_business_day_of_month,
         auto_add: formData.auto_add,
         auto_add_from: formData.auto_add ? autoAddFrom : null,
         match_description: formData.match_description.trim() || null,
@@ -250,6 +262,8 @@ export default function RecurringPayments() {
       type: activeTab,
       category_id: '',
       frequency: 'monthly',
+      frequency_interval: 1,
+      custom_frequency: 'monthly',
       start_date: new Date().toISOString().split('T')[0],
       end_date: '',
       notes: '',
@@ -268,7 +282,8 @@ export default function RecurringPayments() {
       amount: payment.amount.toString(),
       type: payment.type,
       category_id: payment.category_id || '',
-      frequency: payment.frequency,
+      frequency: (payment.frequency_interval ?? 1) > 1 ? 'custom' : payment.frequency,
+      ...customSchedule(payment.frequency, payment.frequency_interval ?? 1),
       start_date: payment.start_date,
       end_date: payment.end_date || '',
       notes: payment.notes || '',
@@ -304,6 +319,13 @@ export default function RecurringPayments() {
     if (selectedCategory && p.categories?.name !== selectedCategory) return false;
     return true;
   });
+
+  const formFrequency = formData.frequency === 'custom' ? formData.custom_frequency : formData.frequency;
+  const formInterval = formData.frequency === 'custom' ? formData.frequency_interval : 1;
+  const formNextDate = formData.start_date && isValidFrequencyInterval(formInterval)
+    ? getNextPaymentDate(formData.start_date, formFrequency, new Date(), formData.end_date || null,
+        formData.business_days_only, formData.last_business_day_of_month, formInterval)
+    : null;
 
   // Filter categories by type
   const filteredCategories = categories.filter(c => c.type === formData.type);
@@ -661,7 +683,7 @@ export default function RecurringPayments() {
         ) : (
           <VStack gap={{ base: 2, md: 3 }} align="stretch">
             {filteredPayments.map((payment) => {
-              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date, payment.business_days_only || false, payment.last_business_day_of_month || false);
+              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date, payment.business_days_only || false, payment.last_business_day_of_month || false, payment.frequency_interval);
               const daysUntil = nextDate ? Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
 
               return (
@@ -719,7 +741,7 @@ export default function RecurringPayments() {
                               {payment.categories?.name || 'Uncategorized'}
                             </Badge>
                             <Text fontSize="10px" color={colors.textMuted}>
-                              {formatFrequency(payment.frequency)}
+                              {formatFrequency(payment.frequency, payment.frequency_interval)}
                             </Text>
                             {payment.business_days_only && (
                               <Badge colorPalette="blue" variant="subtle" fontSize="10px">
@@ -822,7 +844,7 @@ export default function RecurringPayments() {
                             {payment.categories?.name || 'Uncategorized'}
                           </Badge>
                           <Text fontSize="xs" color={colors.textMuted}>
-                            {formatFrequency(payment.frequency)}
+                            {formatFrequency(payment.frequency, payment.frequency_interval)}
                           </Text>
                           {payment.business_days_only && (
                             <Badge colorPalette="blue" variant="subtle" size="sm">
@@ -1136,96 +1158,68 @@ export default function RecurringPayments() {
 
                     {/* Frequency */}
                     <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Frequency *</Text>
-                      <Box ref={frequencyDropdownRef} position="relative" w="100%">
-                        {/* Dropdown Trigger */}
-                        <Box
-                          onClick={() => setFrequencyDropdownOpen(!frequencyDropdownOpen)}
-                          cursor="pointer"
-                          px={3}
-                          py={2.5}
-                          h="42px"
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="space-between"
-                          borderRadius="8px"
-                          borderWidth="1px"
-                          borderColor={frequencyDropdownOpen ? 'blue.500' : colors.borderColor}
-                          bg={colors.cardBg}
-                          _hover={{ borderColor: 'blue.400' }}
-                          transition="all 0.2s"
-                        >
-                          <Text
-                            color={colors.textPrimary}
-                            fontSize="sm"
-                            noOfLines={1}
-                          >
-                            {FREQUENCY_CONFIG[formData.frequency]?.label || formData.frequency}
-                          </Text>
-                          <Box
-                            as="span"
-                            transform={frequencyDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                            transition="transform 0.2s"
-                            color={colors.textSecondary}
-                            fontSize="xs"
-                          >
-                            ▼
-                          </Box>
-                        </Box>
-
-                        {/* Dropdown List */}
-                        {frequencyDropdownOpen && (
-                          <Box
-                            position="absolute"
-                            top="100%"
-                            left={0}
-                            right={0}
-                            zIndex={1000}
-                            mt={1}
-                            bg={colors.cardBg}
-                            borderWidth="1px"
-                            borderColor={colors.borderColor}
-                            borderRadius="12px"
-                            boxShadow="lg"
-                            maxH={{ base: '280px', md: '320px' }}
-                            overflowY="auto"
-                          >
-                            <VStack gap={0} align="stretch" p={1}>
-                              {Object.entries(FREQUENCY_CONFIG).map(([key, config]) => {
-                                const isSelected = key === formData.frequency;
-                                return (
-                                  <HStack
-                                    key={key}
-                                    px={3}
-                                    py={2.5}
-                                    cursor="pointer"
-                                    bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                                    _hover={{ bg: colors.rowStripedBg }}
-                                    borderRadius="8px"
-                                    onClick={() => {
-                                      setFormData({ ...formData, frequency: key });
-                                      setFrequencyDropdownOpen(false);
-                                    }}
-                                    justify="space-between"
-                                    transition="background 0.1s"
-                                  >
-                                    <Text
-                                      color={colors.textPrimary}
-                                      fontSize="sm"
-                                      fontWeight={isSelected ? '600' : '400'}
-                                    >
-                                      {config.label}
-                                    </Text>
-                                    {isSelected && (
-                                      <Text color="blue.500" fontSize="sm">✓</Text>
-                                    )}
-                                  </HStack>
-                                );
-                              })}
-                            </VStack>
-                          </Box>
-                        )}
+                      <Text as="label" htmlFor="recurring-frequency" display="block" fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Frequency *</Text>
+                      <Box
+                        as="select"
+                        id="recurring-frequency"
+                        value={formData.frequency}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          frequency: e.target.value,
+                          ...(e.target.value === 'custom' ? customSchedule(formData.frequency) : {}),
+                          last_business_day_of_month: e.target.value === 'custom'
+                            ? !!FREQUENCY_CONFIG[formData.frequency]?.months && formData.last_business_day_of_month
+                            : !!FREQUENCY_CONFIG[e.target.value]?.months && formData.last_business_day_of_month,
+                        })}
+                        w="100%" h="42px" px={3} borderRadius="8px" borderWidth="1px"
+                        borderColor={colors.borderColor} bg={colors.cardBg} color={colors.textPrimary}
+                        fontSize="sm" _focusVisible={{ outline: '2px solid', outlineColor: 'blue.500' }}
+                      >
+                        {Object.entries(FREQUENCY_CONFIG).map(([key, config]) => (
+                          <option key={key} value={key}>{config.label}</option>
+                        ))}
+                        <option value="custom">Custom...</option>
                       </Box>
+                      {formData.frequency === 'custom' && (
+                        <Box mt={3} p={3} borderRadius="10px" bg={colors.rowStripedBg}>
+                          <Text as="label" htmlFor="recurring-interval" display="block" fontWeight="600" fontSize="sm" mb={2} color={colors.textSecondary}>Repeat every</Text>
+                          <HStack gap={3}>
+                            <Input
+                              id="recurring-interval"
+                              type="number" min={1} max={MAX_FREQUENCY_INTERVAL} step={1} required
+                              inputMode="numeric" w="90px" flexShrink={0}
+                              value={formData.frequency_interval}
+                              onChange={(e) => setFormData({ ...formData, frequency_interval: e.target.value })}
+                              bg={colors.cardBg} borderColor={colors.borderColor} color={colors.textPrimary}
+                            />
+                            <Box
+                              as="select" aria-label="Repeat period" flex={1} minW={0}
+                              value={formData.custom_frequency}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                custom_frequency: e.target.value,
+                                last_business_day_of_month: !!FREQUENCY_CONFIG[e.target.value]?.months && formData.last_business_day_of_month,
+                              })}
+                              h="40px" px={3} borderRadius="8px" borderWidth="1px"
+                              bg={colors.cardBg} borderColor={colors.borderColor} color={colors.textPrimary}
+                              _focusVisible={{ outline: '2px solid', outlineColor: 'blue.500' }}
+                            >
+                              <option value="daily">day(s)</option>
+                              <option value="weekly">week(s)</option>
+                              <option value="monthly">month(s)</option>
+                              <option value="yearly">year(s)</option>
+                            </Box>
+                          </HStack>
+                          <Text fontSize="xs" color={colors.textMuted} mt={2}>
+                            Repeats from Start Date. Choose a known payment date to keep the right schedule.
+                          </Text>
+                          {formNextDate && (
+                            <Text fontSize="sm" color={colors.textPrimary} mt={2} aria-live="polite">
+                              {formatFrequency(formFrequency, formInterval)} · Next: {formatDate(formNextDate)}
+                            </Text>
+                          )}
+                        </Box>
+                      )}
                     </Box>
 
                     {/* Dates */}
@@ -1234,6 +1228,7 @@ export default function RecurringPayments() {
                         <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Start Date *</Text>
                         <Input
                           type="date"
+                          aria-label="Start Date"
                           value={formData.start_date}
                           onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                           required
@@ -1301,7 +1296,7 @@ export default function RecurringPayments() {
                     </Box>
 
                     {/* Last Business Day of Month - only show for monthly/quarterly/yearly */}
-                    {['monthly', 'quarterly', 'yearly'].includes(formData.frequency) && (
+                    {!!FREQUENCY_CONFIG[formFrequency]?.months && (
                       <Box>
                         <Flex
                           align="center"
@@ -1339,7 +1334,7 @@ export default function RecurringPayments() {
                               Last business day of month
                             </Text>
                             <Text fontSize="xs" color={formData.last_business_day_of_month ? 'purple.600' : colors.textMuted}>
-                              Always schedule on the last weekday (Mon-Fri) of each month
+                              Schedule on the last weekday (Mon-Fri) of each payment month
                             </Text>
                           </Box>
                         </Flex>

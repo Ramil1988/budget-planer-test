@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "playwright test",
+    "test:unit": "node --test src/lib/recurringUtils.test.js",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",

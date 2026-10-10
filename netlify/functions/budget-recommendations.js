@@ -2,6 +2,7 @@
 // Analyzes historical spending data and provides actionable budget suggestions
 
 import { createClient } from '@supabase/supabase-js';
+import { getPaymentDatesInRange, getMonthlyEquivalent } from '../../frontend/src/lib/recurringUtils.js';
 
 // Create Supabase client with service role key for bypassing RLS
 const supabase = createClient(
@@ -306,7 +307,7 @@ export async function handler(event) {
     try {
       const { data, error: recurringError } = await supabase
         .from('recurring_payments')
-        .select('category_id, amount, frequency, start_date, end_date, business_days_only, last_business_day_of_month')
+        .select('category_id, amount, frequency, frequency_interval, start_date, end_date, business_days_only, last_business_day_of_month')
         .eq('user_id', userId)
         .eq('is_active', true)
         .eq('type', 'expense');
@@ -318,48 +319,6 @@ export async function handler(event) {
       // If recurring_payments table doesn't exist, continue without it
       console.log('Could not fetch recurring payments:', e.message);
     }
-
-    // Helper function to calculate payment dates in a range (simplified version)
-    const getPaymentDatesInRange = (startDate, frequency, rangeStart, rangeEnd, endDate) => {
-      const dates = [];
-      const start = new Date(startDate);
-      const end = endDate ? new Date(endDate) : null;
-      const rStart = new Date(rangeStart);
-      const rEnd = new Date(rangeEnd);
-
-      // Get frequency interval in days
-      let intervalDays = 30; // default monthly
-      switch (frequency) {
-        case 'weekly': intervalDays = 7; break;
-        case 'biweekly': intervalDays = 14; break;
-        case 'monthly': intervalDays = 30; break;
-        case 'quarterly': intervalDays = 91; break;
-        case 'yearly':
-        case 'annually': intervalDays = 365; break;
-      }
-
-      // For monthly, use month-based calculation
-      if (frequency === 'monthly') {
-        let current = new Date(start);
-        while (current <= rEnd) {
-          if (current >= rStart && (!end || current <= end)) {
-            dates.push(new Date(current));
-          }
-          current.setMonth(current.getMonth() + 1);
-        }
-      } else {
-        // For other frequencies, use day-based calculation
-        let current = new Date(start);
-        while (current <= rEnd) {
-          if (current >= rStart && (!end || current <= end)) {
-            dates.push(new Date(current));
-          }
-          current.setDate(current.getDate() + intervalDays);
-        }
-      }
-
-      return dates;
-    };
 
     // Calculate recurring payments for the target month
     // For current month: remaining payments from today until end of month
@@ -377,23 +336,7 @@ export async function handler(event) {
         categoriesWithRecurring.add(rp.category_id);
 
         // Calculate monthly equivalent of recurring amount
-        let monthlyAmount = Number(rp.amount);
-        switch (rp.frequency) {
-          case 'weekly':
-            monthlyAmount *= 4.33;
-            break;
-          case 'biweekly':
-            monthlyAmount *= 2.17;
-            break;
-          case 'yearly':
-          case 'annually':
-            monthlyAmount /= 12;
-            break;
-          case 'quarterly':
-            monthlyAmount /= 3;
-            break;
-          // monthly is default, no change needed
-        }
+        const monthlyAmount = getMonthlyEquivalent(rp.amount, rp.frequency, rp.frequency_interval);
         recurringAmountsByCategory[rp.category_id] = (recurringAmountsByCategory[rp.category_id] || 0) + monthlyAmount;
 
         // Calculate upcoming/scheduled payments for the target month
@@ -402,7 +345,10 @@ export async function handler(event) {
           rp.frequency,
           recurringStartDate,
           endOfMonth,
-          rp.end_date
+          rp.end_date,
+          rp.business_days_only || false,
+          rp.last_business_day_of_month || false,
+          rp.frequency_interval
         );
         const upcomingAmount = upcomingDates.length * Number(rp.amount);
         if (upcomingAmount > 0) {

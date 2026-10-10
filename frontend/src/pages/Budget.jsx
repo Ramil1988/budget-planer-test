@@ -18,7 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
-import { getPaymentDatesInRange } from '../lib/recurringUtils';
+import { getPaymentDatesInRange, getMonthlyEquivalent, formatFrequency } from '../lib/recurringUtils';
 import BudgetRecommendations from '../components/BudgetRecommendations';
 
 // Circular Progress Ring Component
@@ -93,16 +93,6 @@ const ProgressBar = ({ percent, height = '8px', showOverflow = true }) => {
       )}
     </Box>
   );
-};
-
-// Multipliers to express any recurring frequency as a monthly cost
-const FREQ_TO_MONTHLY = {
-  daily: 365 / 12,
-  weekly: 52 / 12,
-  biweekly: 26 / 12,
-  monthly: 1,
-  quarterly: 1 / 3,
-  yearly: 1 / 12,
 };
 
 const money = (amount) =>
@@ -426,7 +416,8 @@ export default function Budget() {
         endOfMonth,
         payment.end_date,
         payment.business_days_only || false,
-        payment.last_business_day_of_month || false
+        payment.last_business_day_of_month || false,
+        payment.frequency_interval
       );
 
       const totalAmount = dates.length * Number(payment.amount);
@@ -979,7 +970,7 @@ export default function Budget() {
       if (!p.category_id) continue;
       if (p.end_date && p.end_date < todayStr) continue;
 
-      const monthly = Number(p.amount) * (FREQ_TO_MONTHLY[p.frequency] ?? 1);
+      const monthly = getMonthlyEquivalent(p.amount, p.frequency, p.frequency_interval);
 
       if (!map[p.category_id]) map[p.category_id] = { count: 0, monthly: 0, items: [] };
       map[p.category_id].count += 1;
@@ -987,7 +978,7 @@ export default function Budget() {
       map[p.category_id].items.push({
         name: p.name,
         amount: Number(p.amount),
-        frequency: p.frequency,
+        frequency: formatFrequency(p.frequency, p.frequency_interval),
         monthly,
       });
     }

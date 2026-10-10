@@ -14,6 +14,34 @@ export const FREQUENCY_CONFIG = {
   yearly: { months: 12, label: 'Yearly' },
 };
 
+// A missing interval is a legacy payment that repeats once per frequency.
+export const MAX_FREQUENCY_INTERVAL = 999;
+
+export function isValidFrequencyInterval(value) {
+  const interval = Number(value);
+  return Number.isInteger(interval) && interval >= 1 && interval <= MAX_FREQUENCY_INTERVAL;
+}
+
+function getFrequencyConfig(frequency, frequencyInterval = 1) {
+  const base = FREQUENCY_CONFIG[frequency];
+  const interval = frequencyInterval ?? 1;
+  if (!base || !isValidFrequencyInterval(interval)) return null;
+  return base.days
+    ? { days: base.days * Number(interval) }
+    : { months: base.months * Number(interval) };
+}
+
+// Keep the existing annual estimates for weekly/biweekly budget averages.
+export function getPaymentsPerYear(frequency, frequencyInterval = 1) {
+  const periods = { daily: 365, weekly: 52, biweekly: 26, monthly: 12, quarterly: 4, yearly: 1 };
+  const interval = frequencyInterval ?? 1;
+  return isValidFrequencyInterval(interval) ? (periods[frequency] ?? 12) / Number(interval) : 0;
+}
+
+export function getMonthlyEquivalent(amount, frequency, frequencyInterval = 1) {
+  return Number(amount) * getPaymentsPerYear(frequency, frequencyInterval) / 12;
+}
+
 /**
  * Adjust a date to a business day if it falls on a weekend
  * Saturday -> Friday (subtract 1 day)
@@ -90,97 +118,53 @@ export function parseLocalDate(date) {
  * @param {Date|string|null} endDate - Optional end date (null = no end)
  * @param {boolean} businessDaysOnly - If true, adjust weekend dates to nearest business day
  * @param {boolean} lastBusinessDayOfMonth - If true, always use last business day of month (overrides start day)
+ * @param {number} frequencyInterval - Repeat every N frequency periods (default: 1)
  * @returns {Date|null} - Next payment date or null if ended
  */
-export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false) {
+export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false, frequencyInterval = 1) {
   const start = parseLocalDate(startDate);
   const from = parseLocalDate(fromDate);
   const end = endDate ? parseLocalDate(endDate) : null;
+  const config = getFrequencyConfig(frequency, frequencyInterval);
+  if (!config || !Number.isFinite(+start) || !Number.isFinite(+from) || (end && !Number.isFinite(+end))) return null;
 
-  const config = FREQUENCY_CONFIG[frequency];
-  if (!config) return null;
+  const lastBusinessDay = lastBusinessDayOfMonth && !!config.months;
+  const searchFrom = new Date(from);
+  // Include a Sunday that shifts into Monday; a future Saturday can also land today.
+  if (businessDaysOnly && !lastBusinessDay) searchFrom.setDate(searchFrom.getDate() - 2);
 
-  // Handle "last business day of month" for month-based frequencies
-  if (lastBusinessDayOfMonth && config.months) {
-    // Calculate the target month based on elapsed periods
-    const monthsDiff = (from.getFullYear() - start.getFullYear()) * 12 +
-                       (from.getMonth() - start.getMonth());
-    const periodsElapsed = Math.floor(monthsDiff / config.months);
-
-    // Get the target year/month for the current period
-    let targetYear = start.getFullYear();
-    let targetMonth = start.getMonth() + periodsElapsed * config.months;
-
-    // Normalize year/month
-    targetYear += Math.floor(targetMonth / 12);
-    targetMonth = targetMonth % 12;
-
-    let nextDate = getLastBusinessDayOfMonth(targetYear, targetMonth);
-
-    // If this date is in the past, move to next period
-    if (nextDate < from) {
-      targetMonth += config.months;
-      targetYear += Math.floor(targetMonth / 12);
-      targetMonth = targetMonth % 12;
-      nextDate = getLastBusinessDayOfMonth(targetYear, targetMonth);
-    }
-
-    // Check end date
-    if (end && nextDate > end) return null;
-
-    return nextDate;
-  }
-
-  // If start date is in the future, that's the next payment
-  if (start >= from) {
-    if (end && start > end) return null;
-    const result = new Date(start);
-    return businessDaysOnly ? adjustToBusinessDay(result) : result;
-  }
-
-  let nextDate = new Date(start);
-
+  let period;
   if (config.days) {
-    // Day-based frequencies (daily, weekly, biweekly)
-    // Use time difference to calculate days more accurately
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const daysDiff = Math.floor((from.getTime() - start.getTime()) / msPerDay);
-    const periodsElapsed = Math.floor(daysDiff / config.days);
-
-    // Calculate next date by adding days to start date
-    nextDate = new Date(start);
-    nextDate.setDate(start.getDate() + periodsElapsed * config.days);
-
-    // If this date is in the past, move to next period (keep today's payments)
-    if (nextDate < from) {
-      nextDate.setDate(nextDate.getDate() + config.days);
-    }
-  } else if (config.months) {
-    // Month-based frequencies (monthly, quarterly, yearly)
-    const monthsDiff = (from.getFullYear() - start.getFullYear()) * 12 +
-                       (from.getMonth() - start.getMonth());
-    const periodsElapsed = Math.floor(monthsDiff / config.months);
-
-    // Start from the original date and add months
-    // Use periodsElapsed (not +1) to check current period first
-    nextDate = new Date(start);
-    nextDate.setMonth(start.getMonth() + periodsElapsed * config.months);
-
-    // If this date is in the past, move to next period
-    if (nextDate < from) {
-      nextDate.setMonth(nextDate.getMonth() + config.months);
-    }
+    // Calendar days, independent of 23/25-hour days at daylight-saving changes.
+    const dayNumber = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+    period = Math.max(0, Math.floor((dayNumber(searchFrom) - dayNumber(start)) / config.days));
+  } else {
+    const months = (searchFrom.getFullYear() - start.getFullYear()) * 12 + searchFrom.getMonth() - start.getMonth();
+    period = Math.max(0, Math.floor(months / config.months));
   }
 
-  // Apply business day adjustment if needed
-  if (businessDaysOnly) {
-    nextDate = adjustToBusinessDay(nextDate);
+  while (true) {
+    let scheduled;
+    if (config.days) {
+      scheduled = new Date(start);
+      scheduled.setDate(start.getDate() + period * config.days);
+    } else {
+      const targetMonth = start.getMonth() + period * config.months;
+      if (lastBusinessDay) {
+        scheduled = getLastBusinessDayOfMonth(start.getFullYear(), targetMonth);
+      } else {
+        // Clamp short months, always retaining the original day for later periods.
+        const lastDay = new Date(start.getFullYear(), targetMonth + 1, 0).getDate();
+        scheduled = new Date(start.getFullYear(), targetMonth, Math.min(start.getDate(), lastDay));
+      }
+    }
+    if (!Number.isFinite(+scheduled) || (end && scheduled > end)) return null;
+    const adjusted = businessDaysOnly && !lastBusinessDay ? adjustToBusinessDay(scheduled) : scheduled;
+    if (scheduled >= start && adjusted >= from) {
+      return end && adjusted > end ? null : adjusted;
+    }
+    period++;
   }
-
-  // Check end date
-  if (end && nextDate > end) return null;
-
-  return nextDate;
 }
 
 /**
@@ -194,7 +178,7 @@ export function getNextPaymentDate(startDate, frequency, fromDate = new Date(), 
  * @param {boolean} lastBusinessDayOfMonth - If true, always use last business day of month
  * @returns {Date[]} - Array of payment dates within the range
  */
-function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false, filterBy = 'adjusted') {
+function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false, filterBy = 'adjusted', frequencyInterval = 1) {
   const occurrences = [];
   const start = parseLocalDate(startDate);
   const rStart = parseLocalDate(rangeStart);
@@ -203,7 +187,7 @@ function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate 
   const end = endDate ? parseLocalDate(endDate) : null;
 
   // For lastBusinessDayOfMonth, dates are already calculated correctly, no need for post-adjustment
-  const skipBusinessDayAdjustment = lastBusinessDayOfMonth;
+  const skipBusinessDayAdjustment = lastBusinessDayOfMonth && !!FREQUENCY_CONFIG[frequency]?.months;
 
   // IMPORTANT: Get dates WITHOUT business day adjustment first to ensure proper loop advancement.
   // If we adjust to business days inside the loop, weekend dates get pulled back to Friday,
@@ -225,7 +209,7 @@ function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate 
     searchTo.setDate(searchTo.getDate() + 2);
     searchTo.setHours(23, 59, 59, 999);
   }
-  let currentDate = getNextPaymentDate(startDate, frequency, searchFrom, endDate, false, lastBusinessDayOfMonth);
+  let currentDate = getNextPaymentDate(startDate, frequency, searchFrom, endDate, false, lastBusinessDayOfMonth, frequencyInterval);
 
   // If no next date (ended), return empty
   if (!currentDate) return occurrences;
@@ -250,7 +234,7 @@ function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate 
     // Get next date (from day after current date)
     const nextDay = new Date(currentDate);
     nextDay.setDate(nextDay.getDate() + 1);
-    currentDate = getNextPaymentDate(startDate, frequency, nextDay, endDate, false, lastBusinessDayOfMonth);
+    currentDate = getNextPaymentDate(startDate, frequency, nextDay, endDate, false, lastBusinessDayOfMonth, frequencyInterval);
 
     // Safety: prevent infinite loops (max ~1 year of daily payments)
     if (rawDates.length > 366) {
@@ -294,8 +278,8 @@ function collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate 
  * Get all payment dates in a range (business-day adjusted where applicable).
  * @returns {Date[]} - Adjusted payment dates within the range
  */
-export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false) {
-  return collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate, businessDaysOnly, lastBusinessDayOfMonth)
+export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEnd, endDate = null, businessDaysOnly = false, lastBusinessDayOfMonth = false, frequencyInterval = 1) {
+  return collectOccurrences(startDate, frequency, rangeStart, rangeEnd, endDate, businessDaysOnly, lastBusinessDayOfMonth, 'adjusted', frequencyInterval)
     .map(o => o.date);
 }
 
@@ -323,7 +307,8 @@ export function getUpcomingPayments(recurringPayments, daysAhead = 30) {
       endRange,
       payment.end_date,
       payment.business_days_only || false,
-      payment.last_business_day_of_month || false
+      payment.last_business_day_of_month || false,
+      payment.frequency_interval
     );
 
     for (const date of dates) {
@@ -372,7 +357,8 @@ export function getMonthlyProjection(recurringPayments, month) {
       payment.end_date,
       payment.business_days_only || false,
       payment.last_business_day_of_month || false,
-      'scheduled'
+      'scheduled',
+      payment.frequency_interval
     );
 
     for (const { date } of occurrences) {
@@ -403,8 +389,17 @@ export function getMonthlyProjection(recurringPayments, month) {
  * @param {string} frequency - Frequency key
  * @returns {string} - Human-readable label
  */
-export function formatFrequency(frequency) {
-  return FREQUENCY_CONFIG[frequency]?.label || frequency;
+export function formatFrequency(frequency, frequencyInterval = 1) {
+  if (Number(frequencyInterval ?? 1) === 1) return FREQUENCY_CONFIG[frequency]?.label || frequency;
+  const config = getFrequencyConfig(frequency, frequencyInterval);
+  if (!config) return frequency;
+  const count = config.months
+    ? (config.months % 12 === 0 ? config.months / 12 : config.months)
+    : (config.days % 7 === 0 ? config.days / 7 : config.days);
+  const unit = config.months
+    ? (config.months % 12 === 0 ? 'year' : 'month')
+    : (config.days % 7 === 0 ? 'week' : 'day');
+  return `Every ${count} ${unit}${count === 1 ? '' : 's'}`;
 }
 
 /**

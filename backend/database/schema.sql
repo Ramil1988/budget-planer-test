@@ -86,6 +86,7 @@ CREATE TABLE recurring_payments (
   type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly')),
+  frequency_interval INTEGER NOT NULL DEFAULT 1 CHECK (frequency_interval BETWEEN 1 AND 999),
   start_date DATE NOT NULL,
   end_date DATE,
   is_active BOOLEAN DEFAULT true,

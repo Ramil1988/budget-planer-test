@@ -146,3 +146,23 @@ DROP POLICY IF EXISTS "own_data" ON assets;
 - Timestamps are automatically managed via triggers
 - Indexes are created for optimal query performance
 - Auto-seeding triggers run automatically on new user signup
+
+## Custom recurring intervals
+
+Apply `20261010011921_recurring_frequency_interval.sql` before deploying the custom frequency UI.
+It adds `recurring_payments.frequency_interval` (integer 1–999, default 1). Existing
+frequencies and row-level security policies stay unchanged. A water bill paid every
+two months uses `frequency = 'monthly'` and `frequency_interval = 2`; `start_date`
+anchors which months receive the payment.
+
+Verify after applying:
+
+```sql
+SELECT column_default, is_nullable, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'recurring_payments'
+  AND column_name = 'frequency_interval';
+
+SELECT count(*) AS invalid_intervals FROM public.recurring_payments
+WHERE frequency_interval IS NULL OR frequency_interval NOT BETWEEN 1 AND 999;
+```

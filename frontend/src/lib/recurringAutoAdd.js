@@ -106,7 +106,8 @@ export async function generateDueRecurringTransactions(supabase, userId) {
       todayKey,
       payment.end_date,
       payment.business_days_only || false,
-      payment.last_business_day_of_month || false
+      payment.last_business_day_of_month || false,
+      payment.frequency_interval
     );
 
     for (const date of dates) {

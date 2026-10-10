@@ -395,7 +395,8 @@ const MiniCalendar = ({ recurringPayments, onDayClick, selectedDate, formatCurre
       monthEnd,
       payment.end_date,
       payment.business_days_only || false,
-      payment.last_business_day_of_month || false
+      payment.last_business_day_of_month || false,
+      payment.frequency_interval
     );
     dates.forEach(date => {
       const key = date.getDate();
@@ -1294,7 +1295,8 @@ export default function Dashboard() {
                         monthEnd,
                         payment.end_date,
                         payment.business_days_only || false,
-                        payment.last_business_day_of_month || false
+                        payment.last_business_day_of_month || false,
+                        payment.frequency_interval
                       );
                       dates.forEach(date => {
                         // For current month, only count dates >= today
@@ -1338,7 +1340,8 @@ export default function Dashboard() {
                           searchEnd,
                           primarySalary.end_date,
                           primarySalary.business_days_only || false,
-                          primarySalary.last_business_day_of_month || false
+                          primarySalary.last_business_day_of_month || false,
+                          primarySalary.frequency_interval
                         );
                         for (const date of dates) {
                           if (date > today && (!nextSalaryDate || date < nextSalaryDate)) {
@@ -1360,7 +1363,8 @@ export default function Dashboard() {
                             nextSalaryDate,
                             payment.end_date,
                             payment.business_days_only || false,
-                            payment.last_business_day_of_month || false
+                            payment.last_business_day_of_month || false,
+                            payment.frequency_interval
                           );
                           dates.forEach(date => {
                             if (date >= today && date <= nextSalaryDate) {
@@ -1445,7 +1449,7 @@ export default function Dashboard() {
                               {payment.name}
                             </Text>
                             <Text fontSize="xs" color={colors.textMuted}>
-                              {payment.categories?.name || 'Uncategorized'} • {formatFrequency(payment.frequency)}
+                              {payment.categories?.name || 'Uncategorized'} • {formatFrequency(payment.frequency, payment.frequency_interval)}
                             </Text>
                           </Box>
                         </HStack>
