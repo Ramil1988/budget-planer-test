@@ -607,12 +607,10 @@ export default function RecurringPayments() {
 
         {/* Category Total when filtered */}
         {selectedCategory && filteredPayments.length > 0 && (() => {
-          // What this category actually costs in the selected month, counting each
-          // occurrence — same basis as the summary cards above.
-          const occurrences = projection.payments.filter(
-            p => p.type === activeTab && p.categories?.name === selectedCategory
-          );
-          const monthlyTotal = occurrences.reduce((sum, p) => sum + Number(p.amount), 0);
+          // The total of the recurring payments listed below, not a month slice —
+          // a payment that is not due in the selected month still belongs to the
+          // category and still has to show up in its total.
+          const categoryTotal = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
           return (
             <Flex
               align="center"
@@ -635,7 +633,7 @@ export default function RecurringPayments() {
                   {selectedCategory}
                 </Text>
                 <Text fontSize="sm" color={colors.textMuted}>
-                  ({occurrences.length} {occurrences.length === 1 ? 'payment' : 'payments'})
+                  ({filteredPayments.length} {filteredPayments.length === 1 ? 'payment' : 'payments'})
                 </Text>
               </HStack>
               <Text
@@ -643,8 +641,8 @@ export default function RecurringPayments() {
                 fontWeight="700"
                 color={activeTab === 'expense' ? '#E11D48' : '#059669'}
               >
-                {activeTab === 'expense' ? '-' : '+'}{formatCurrency(monthlyTotal)}
-                <Text as="span" fontSize="xs" fontWeight="500" color={colors.textMuted}> in {summaryMonthLabel}</Text>
+                {activeTab === 'expense' ? '-' : '+'}{formatCurrency(categoryTotal)}
+                <Text as="span" fontSize="xs" fontWeight="500" color={colors.textMuted}> total</Text>
               </Text>
             </Flex>
           );
