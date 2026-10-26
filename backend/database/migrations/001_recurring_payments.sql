@@ -23,6 +23,11 @@ ALTER TABLE recurring_payments ENABLE ROW LEVEL SECURITY;
 -- Create RLS policy
 CREATE POLICY "own_data" ON recurring_payments FOR ALL USING (auth.uid() = user_id);
 
+-- Grant Data API access (required for tables created after 30 October 2026)
+-- The frontend manages recurring payments; budget-recommendations.js only reads them.
+GRANT SELECT, INSERT, UPDATE, DELETE ON recurring_payments TO authenticated;
+GRANT SELECT ON recurring_payments TO service_role;
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_recurring_payments_user_id ON recurring_payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_recurring_payments_active ON recurring_payments(user_id, is_active);

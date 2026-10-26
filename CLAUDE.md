@@ -331,6 +331,8 @@ export const handler = async (event, context) => {
 
 **Security:**
 - Always use Row Level Security (RLS) policies (already enabled in schema)
+- **Data API grants are a separate control from RLS.** Since **30 Oct 2026** Supabase grants `anon`/`authenticated`/`service_role` nothing on new `public` tables, so every new table needs an explicit `GRANT` or supabase-js fails with `42501 permission denied for table`. Put the grants in the same migration that creates the table; `backend/database/migrations/009_data_api_grants.sql` holds the full matrix. Scope them to what the code does — `anon` gets nothing, `service_role` only the tables `netlify/functions/*.js` touch — and never use `GRANT ALL`.
+- **GOTCHA:** the balance triggers (`update_balance`, `update_spent`, `update_liability_on_transaction`) are plain `plpgsql`, **not** `SECURITY DEFINER`, so they run as the role that wrote the row. Any role allowed to write `transactions` also needs `UPDATE` on `accounts`, `UPDATE` on `budget_categories` and `SELECT, UPDATE` on `liabilities`. The auto-seed functions *are* `SECURITY DEFINER` and need no grants.
 - Validate Supabase JWT tokens in Netlify Functions
 - Never expose database credentials in frontend code
 - Supabase client handles SQL injection prevention automatically

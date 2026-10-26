@@ -264,6 +264,48 @@ BudgetWise uses **Supabase** as its Backend-as-a-Service platform, providing Pos
 - User authentication handled by Supabase
 - Backend validates Supabase JWT tokens for API requests
 
+**Data API Grants**
+
+Grants and RLS are two separate controls, and a table needs both:
+
+| | Decides |
+|---|---|
+| `GRANT` | whether a role may touch the table at all |
+| RLS policy | which rows that role then sees |
+
+Supabase used to grant `anon`, `authenticated` and `service_role` full access to
+every new table in `public` automatically, which hid the first control. Since
+**30 October 2026** it does not: a table created after that date is invisible to
+the Data API until it is granted explicitly, and a missing grant fails with
+`42501 permission denied for table` no matter how correct the policies are.
+The change also applies to a rebuilt database, a preview branch and a local
+`supabase db reset`.
+
+So every table-creating SQL file in this repo carries its own grants, and
+`backend/database/migrations/009_data_api_grants.sql` restates the whole matrix
+for databases that were created before the change. Privileges are the ones the
+code actually uses:
+
+- **`authenticated`** — the tables `frontend/src` reaches through supabase-js.
+  Full CRUD on the records the UI manages; no `DELETE` on `accounts`, `budgets`,
+  `categories` or `user_settings`, which the UI never deletes.
+- **`service_role`** — only what `netlify/functions/*.js` reaches with the
+  service key. `dismissed_suggestions` (full CRUD, used by `dismissed-suggestions.js`),
+  read/insert on the tables `google-sheets-webhook.js` writes, read-only for
+  `budget-recommendations.js`.
+- **`anon`** — nothing. No table is read before sign-in.
+- **`profiles`** — granted to no API role. It is written only by
+  `seed_new_user_data()`, a `SECURITY DEFINER` function.
+
+**Gotcha: triggers need grants too.** The triggers in `schema.sql` and
+migrations 005/007 are plain `plpgsql` functions, *not* `SECURITY DEFINER`, so
+they run as whichever role wrote the row. Inserting a transaction therefore
+requires `UPDATE` on `accounts` (`update_balance()`), `UPDATE` on
+`budget_categories` (`update_spent()`) and `SELECT, UPDATE` on `liabilities`
+(`update_liability_on_transaction()`) — privileges no query in the codebase asks
+for. These are granted and commented as "via trigger". The auto-seed functions
+are `SECURITY DEFINER` and need nothing.
+
 ### Data Relationships
 
 ```

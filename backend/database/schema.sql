@@ -133,6 +133,37 @@ CREATE POLICY "own_data" ON user_settings FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "own_data" ON merchant_mappings FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "own_data" ON recurring_payments FOR ALL USING (auth.uid() = user_id);
 
+-- Data API grants
+-- Since 30 October 2026 Supabase gives the Data API roles no privileges on new
+-- public tables, so each one has to be granted explicitly. Grants decide whether
+-- a role may touch a table; the RLS policies above decide which rows it sees.
+-- anon gets nothing: no table is read before sign-in.
+-- accounts.balance, budget_categories.spent and liabilities.outstanding_balance
+-- are maintained by the plain (not SECURITY DEFINER) triggers below, which run
+-- as the role that wrote the transaction - hence the UPDATE grants marked
+-- "via trigger".
+GRANT SELECT, INSERT, UPDATE ON accounts TO authenticated;  -- UPDATE via trigger
+GRANT SELECT, INSERT, UPDATE ON categories TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON transactions TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON budgets TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON budget_categories TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON user_settings TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON merchant_mappings TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON recurring_payments TO authenticated;
+
+-- service_role, used by netlify/functions/*.js
+GRANT SELECT, INSERT, UPDATE ON accounts TO service_role;  -- UPDATE via trigger
+GRANT SELECT, INSERT ON categories TO service_role;
+GRANT SELECT, INSERT ON transactions TO service_role;
+GRANT SELECT ON user_settings TO service_role;
+GRANT SELECT ON merchant_mappings TO service_role;
+GRANT SELECT ON budgets TO service_role;
+GRANT SELECT ON recurring_payments TO service_role;
+GRANT SELECT, UPDATE ON budget_categories TO service_role;  -- update_spent() trigger
+
+-- profiles is written only by seed_new_user_data(), a SECURITY DEFINER function,
+-- and is never read through the Data API, so it is granted to no API role.
+
 -- Functions (only if they don't exist)
 CREATE OR REPLACE FUNCTION update_balance()
 RETURNS TRIGGER AS $$

@@ -83,6 +83,23 @@ CREATE POLICY "own_data" ON assets FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "own_data" ON liabilities FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "own_data" ON net_worth_snapshots FOR ALL USING (auth.uid() = user_id);
 
+-- Grant Data API access (required for tables created after 30 October 2026)
+-- Only the frontend touches these tables, as the signed-in user. The categories
+-- and types are seeded per user and never edited or removed in the UI, so they
+-- need no UPDATE or DELETE.
+GRANT SELECT, INSERT ON asset_categories TO authenticated;
+GRANT SELECT, INSERT ON liability_types TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON assets TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON liabilities TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON net_worth_snapshots TO authenticated;
+
+-- Migration 005 links liabilities to a spending category and maintains
+-- outstanding_balance from a plain (not SECURITY DEFINER) trigger on
+-- transactions, so whichever role writes the transaction needs to read and
+-- update liabilities. google-sheets-webhook.js writes transactions as
+-- service_role; nothing else there reaches these tables.
+GRANT SELECT, UPDATE ON liabilities TO service_role;
+
 -- Create trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

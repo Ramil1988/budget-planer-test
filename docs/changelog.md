@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Explicit Data API grants on every table (2026-10-26):**
+  - From **30 October 2026** Supabase stops giving `anon`, `authenticated` and `service_role` automatic privileges on new tables in the `public` schema. A table created after that date — including by a rebuilt database, a preview branch or a local `supabase db reset` — is unreachable through supabase-js until it is granted explicitly, failing with `42501 permission denied for table` however correct its RLS policies are
+  - `backend/database/migrations/007_dismissed_suggestions.sql` was the clearest exposure: it created the table and three RLS policies but no grants, so on any database built from it after the cutoff `netlify/functions/dismissed-suggestions.js` would have lost all four of its operations. `schema.sql`, `001_recurring_payments.sql` and `003_assets_liabilities.sql` had the same gap
+  - Every table-creating file now grants its own tables, and new `009_data_api_grants.sql` restates the full matrix for databases created before the change (safe to re-run; `GRANT` on an already-granted privilege is a no-op)
+  - Privileges are scoped to what the code actually does: `authenticated` gets the operations `frontend/src` performs (no `DELETE` on `accounts`, `budgets`, `categories` or `user_settings`, which the UI never deletes), `service_role` only the tables `netlify/functions/*.js` touch, `anon` nothing at all, and `profiles` nothing — it is written solely by the `SECURITY DEFINER` seed function
+  - **Found while auditing:** the balance triggers are plain `plpgsql`, not `SECURITY DEFINER`, so they run as whichever role wrote the row. Writing a transaction needs `UPDATE` on `accounts`, `UPDATE` on `budget_categories` and `SELECT, UPDATE` on `liabilities` — privileges no query in the codebase asks for, and the first thing that would have broken under a naive "grant what the queries use" reading
+  - No RLS setting, policy or constraint was changed, and no `GRANT ALL` was used
+  - Verified on a throwaway PostgreSQL 17 database set up to mimic the post-cutoff behaviour (roles present, no default privileges): **77/77** access and denial assertions pass, on both an upgraded existing install and a fresh one, which end up with byte-identical privilege matrices
+
 ### Fixed
 - **"Period total" was $0.00 whenever the visible rows were all income (2026-08-06):**
   - The footer picked which side to total from the **Type dropdown** alone, so a search like `Cashback` with `All types` selected totalled expenses — of which there were none — and showed `$0.00` above eight income rows

@@ -59,7 +59,20 @@ FOR DELETE
 USING (auth.uid() = user_id);
 
 -- ============================================================================
--- STEP 4: Optional cleanup function (auto-delete old dismissals)
+-- STEP 4: Grant Data API access
+-- ============================================================================
+-- Required for tables created after 30 October 2026: Supabase no longer gives
+-- the Data API roles any privileges on new public tables, so a missing grant
+-- fails with 42501 "permission denied for table" even with the policies above.
+--
+-- The table is reached only through netlify/functions/dismissed-suggestions.js,
+-- which uses the service role key: SELECT, upsert (INSERT + UPDATE) and DELETE.
+-- The policies above cover the signed-in user, but nothing in the frontend
+-- queries this table directly, so authenticated and anon get no privileges.
+GRANT SELECT, INSERT, UPDATE, DELETE ON dismissed_suggestions TO service_role;
+
+-- ============================================================================
+-- STEP 5: Optional cleanup function (auto-delete old dismissals)
 -- ============================================================================
 -- This can be called periodically to clean up dismissals older than 6 months
 

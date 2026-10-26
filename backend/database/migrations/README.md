@@ -16,6 +16,7 @@ Automatically seeds default data for new users:
 - Creates 300+ merchant mappings for auto-categorization
 - Backfills existing users
 
+
 ### 003_assets_liabilities.sql
 Creates tables for Assets & Liabilities tracker:
 - `asset_categories` - Categories for assets (Real Estate, Cash, RRSP, etc.)
@@ -39,6 +40,18 @@ Links liabilities to spending categories for automatic balance tracking:
 - Creates trigger `liability_update_on_transaction_delete` - restores liability balance when payment transaction is deleted
 - Creates trigger `liability_update_on_transaction_update` - adjusts liability balance when transaction amount/category changes
 - Use case: Link "Mortgage" liability to "Mortgage" spending category, and the balance auto-reduces on payments
+
+### 009_data_api_grants.sql
+Grants the Data API roles explicit privileges on every table (required since Supabase's
+30 October 2026 change, see "Data API Grants" in `docs/architecture.md`):
+- `authenticated` — the tables the frontend uses, CRUD limited to the operations it performs
+- `service_role` — only the tables `netlify/functions/*.js` touch
+- `anon` — nothing; `profiles` — nothing
+- Leaves every RLS setting and policy untouched, and is safe to re-run
+- Needed only for databases created **before** the change; the table-creating files
+  (`schema.sql`, `001_recurring_payments.sql`, `003_assets_liabilities.sql`,
+  `007_dismissed_suggestions.sql`) now grant their own tables, so a fresh install
+  ends up with the same privileges without it
 
 ## How to Apply Migrations
 
@@ -87,6 +100,9 @@ psql "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
 3. `003_assets_liabilities.sql` (creates tables)
 4. `004_auto_seed_assets_liabilities.sql` (auto-seeds data)
 5. `005_link_liabilities_to_categories.sql` (links liabilities to spending categories)
+6. `007_dismissed_suggestions.sql` (creates the dismissed-suggestions table)
+7. `009_data_api_grants.sql` (**last** — grants Data API access on every table, so it
+   has to run after everything that creates one)
 
 ## Verification
 
@@ -106,6 +122,31 @@ AND tablename IN ('assets', 'liabilities', 'asset_categories', 'liability_types'
 -- Check auto-seeded categories (for a test user)
 SELECT * FROM asset_categories LIMIT 10;
 SELECT * FROM liability_types LIMIT 10;
+```
+
+After `009_data_api_grants.sql`, check what each Data API role may do:
+
+```sql
+-- Privilege matrix (expect 23 rows: authenticated on 13 tables, service_role on 10)
+SELECT grantee, table_name, string_agg(DISTINCT privilege_type, ',' ORDER BY privilege_type) AS privs
+FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated', 'service_role')
+GROUP BY grantee, table_name
+ORDER BY grantee, table_name;
+
+-- anon must have no table privileges at all (expect 0)
+SELECT count(*) FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND grantee = 'anon';
+
+-- Tables no API role can reach (expect only: profiles)
+SELECT c.relname
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+  AND NOT EXISTS (
+    SELECT 1 FROM information_schema.role_table_grants g
+    WHERE g.table_schema = 'public' AND g.table_name = c.relname
+      AND g.grantee IN ('anon', 'authenticated', 'service_role'))
+ORDER BY 1;
 ```
 
 ## Rollback
@@ -133,6 +174,14 @@ This means the table/function already exists. You can safely ignore this error o
 ### Error: "permission denied"
 Make sure you're running the SQL as a superuser or database owner.
 
+### App error: `42501 permission denied for table <name>`
+The app, not the migration. The table exists and its RLS policies are fine, but the
+Data API role has no `GRANT` on it — the default since Supabase's 30 October 2026
+change. Add the grants the table actually needs (see `009_data_api_grants.sql` for the
+pattern and `docs/architecture.md` for which role needs what) rather than reaching for
+`GRANT ALL`, and never "fix" it by disabling RLS: the two are separate controls and
+removing RLS exposes every user's rows to every other user.
+
 ### Error: "RLS policy already exists"
 Drop the existing policy first:
 ```sql
@@ -146,6 +195,7 @@ DROP POLICY IF EXISTS "own_data" ON assets;
 - Timestamps are automatically managed via triggers
 - Indexes are created for optimal query performance
 - Auto-seeding triggers run automatically on new user signup
+- Every new table needs explicit `GRANT`s for the Data API roles it is used by, in the same migration that creates it
 
 ## Custom recurring intervals
 
