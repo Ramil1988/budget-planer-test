@@ -23,6 +23,13 @@ import { supabase } from '../lib/supabaseClient';
 import PageContainer from '../components/PageContainer';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
 
+function csvTextCell(value) {
+  const text = String(value ?? '');
+  const formulaLike = /^(?:[\t\r\n]|\s*[=+\-@＝＋－＠])/u.test(text);
+  const safeText = formulaLike ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
+}
+
 export default function Transactions() {
   const { user } = useAuth();
   const colors = useDarkModeColors();
@@ -636,21 +643,21 @@ export default function Transactions() {
     // CSV header
     const headers = ['Date', 'Category', 'Description', 'Amount', 'Type', 'Bank'];
 
-    // CSV rows
+    // Quote every text field and keep amounts as numbers in spreadsheets.
     const rows = filteredTransactions.map(t => [
-      t.date,
-      t.category,
-      `"${(t.description || '').replace(/"/g, '""')}"`, // Escape quotes in description
+      csvTextCell(t.date),
+      csvTextCell(t.category),
+      csvTextCell(t.description),
       t.amount.toFixed(2),
-      t.type,
-      t.bank || '',
+      csvTextCell(t.type),
+      csvTextCell(t.bank),
     ]);
 
     // Combine headers and rows
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.join(','))
-    ].join('\n');
+    ].join('\r\n');
 
     // Generate filename with period info
     let periodLabel = 'all-time';

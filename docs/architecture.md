@@ -346,6 +346,26 @@ The backend is built with NestJS, providing a RESTful API for the frontend to co
 - `src/app.controller.ts` - Health check endpoint
 - `src/app.service.ts` - Basic service logic
 
+### Budget Assistant (2026-11-20)
+
+The assistant is one Netlify Function, `netlify/functions/budget-assistant.mjs`, with its logic split across `netlify/functions/_lib/assistant-*.mjs`.
+
+```
+BudgetAssistant.jsx ──POST + Supabase JWT──▶ budget-assistant.mjs ──▶ OpenAI Responses API
+                                                   │                        │ tool calls
+                                                   ▼                        ▼
+                                      supabase-js (anon key + user JWT) ◀── _lib/assistant-data.mjs
+                                                   │
+                                                   ▼
+                                         Postgres, filtered by RLS
+```
+
+- **Identity:** the function never uses the service-role key. It creates a supabase-js client from the anon key and the caller's JWT, so every read and write is filtered by the same RLS policies as the browser. A non-public key is rejected at startup with `503`
+- **Modes:** `chat` and `prepare_import` use the model. `suggestions`, `budget_review`, `financial_summary`, `category_comparison`, `category_drilldown` and `upcoming_payments` are deterministic database reports that need no OpenAI key
+- **Writes:** `create_transaction`, `create_account`, `create_category` and `create_recurring_payment` are exposed as tools only in the first tool round. CSV/screenshot imports and reviewed transactions are two-step — the server signs an expiring proposal (HMAC) and writes only when the browser returns it via `commit_import` / `confirm_transaction`. `BUDGET_ASSISTANT_READ_ONLY=true` turns all writes off
+- **Limits:** 16 messages per request, 3 tool rounds, 5 tool calls per round, 20 requests per minute per IP, `store: false` on the OpenAI call. Conversation history lives only in the open browser session
+- **Frontend refresh:** `App.jsx` keeps a `dataVersion` counter used as the `key` on `<Routes>`. The assistant increments it after a successful write, remounting the current page so it refetches
+
 ### Planned API Endpoints
 
 **(To be implemented)**

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   getNextPaymentDate, getPaymentDatesInRange, getUpcomingPayments,
   getMonthlyProjection, formatFrequency, getMonthlyEquivalent,
-  getPaymentsPerYear, isValidFrequencyInterval,
+  getPaymentsPerYear, isValidFrequencyInterval, getPaymentsUntilSalary,
 } from './recurringUtils.js';
 import { generateDueRecurringTransactions } from './recurringAutoAdd.js';
 
@@ -121,4 +121,52 @@ test('auto-add generates only due custom occurrences and remains idempotent', as
   assert.deepEqual(transactions.map(tx => tx.date), ['2026-01-30', '2026-03-30', '2026-05-30']);
   assert.equal(await generateDueRecurringTransactions(supabase, 'test-user'), 0);
   assert.equal(transactions.length, 3);
+});
+
+test('until-salary forecast chooses the largest upcoming salary and includes bills due today and on payday', () => {
+  const scheduled = (name, type, amount, date, options = {}) => ({
+    name, type, amount, start_date: date, frequency: 'monthly', is_active: true, ...options,
+  });
+  const plan = getPaymentsUntilSalary([
+    scheduled('Previous salary', 'income', 6000, '2026-09-28', { end_date: '2026-10-31' }),
+    scheduled('Side paycheck', 'income', 500, '2026-11-21'),
+    scheduled('Employer payroll', 'income', 2710.25, '2026-11-28', { business_days_only: true }),
+    scheduled('Today bill', 'expense', 10.10, '2026-11-20'),
+    scheduled('Internet', 'expense', 59.01, '2026-11-25'),
+    scheduled('Payday bill', 'expense', 82.50, '2026-11-28', { business_days_only: true }),
+    scheduled('After payday', 'expense', 400, '2026-11-28'),
+    scheduled('Paused charge', 'expense', 70, '2026-11-24', { is_active: false }),
+  ], '2026-11-20');
+
+  assert.deepEqual(plan.salary, { date: '2026-11-27', name: 'Employer payroll' });
+  assert.equal(plan.throughDate, '2026-11-27');
+  assert.equal(plan.daysUntilSalary, 7);
+  assert.equal(plan.totalCents, 15161);
+  assert.deepEqual(plan.expenses.map(({ date }) => date), ['2026-11-20', '2026-11-25', '2026-11-27']);
+});
+
+test('an explicit cutoff works without a salary and long ranges count all daily bills once', () => {
+  const daily = { name: 'Daily bill', type: 'expense', amount: 0.10, start_date: '2026-01-01', frequency: 'daily', is_active: true };
+  const withoutCutoff = getPaymentsUntilSalary([daily], '2026-01-01');
+  assert.deepEqual(withoutCutoff, { salary: null, throughDate: null, daysUntilSalary: null, expenses: [], totalCents: null });
+
+  const plan = getPaymentsUntilSalary([daily], '2026-01-01', '2026-12-31');
+  assert.equal(plan.salary, null);
+  assert.equal(plan.throughDate, '2026-12-31');
+  assert.equal(plan.totalCents, 3650);
+  assert.equal(plan.expenses.length, 365);
+});
+
+test('the next salary stays strictly after today and the day difference ignores daylight saving', () => {
+  const payroll = {
+    name: 'Основная зарплата', type: 'income', amount: 3000, is_active: true,
+    frequency: 'weekly', start_date: '2026-03-07',
+  };
+  const plan = getPaymentsUntilSalary([payroll], '2026-03-07');
+  assert.equal(plan.salary?.date, '2026-03-14');
+  assert.equal(plan.daysUntilSalary, 7);
+
+  const autumn = getPaymentsUntilSalary([{ ...payroll, start_date: '2026-10-31' }], '2026-10-31');
+  assert.equal(autumn.salary?.date, '2026-11-07');
+  assert.equal(autumn.daysUntilSalary, 7);
 });

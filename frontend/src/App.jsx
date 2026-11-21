@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Box, Flex } from '@chakra-ui/react'
 import { useAuth } from './contexts/AuthContext'
 import { supabase } from './lib/supabaseClient'
 import { generateDueRecurringTransactions } from './lib/recurringAutoAdd'
 import Header from './components/Header'
+import BudgetAssistant from './components/BudgetAssistant'
 import Footer from './components/Footer'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
@@ -27,6 +28,7 @@ import SettingsTabs from './components/SettingsTabs'
 function App() {
   const { user } = useAuth()
   const autoAddRunFor = useRef(null)
+  const [dataVersion, setDataVersion] = useState(0)
 
   // Recurring payments marked "add automatically" record themselves once their date
   // arrives. Runs once per session — generation is idempotent, so a missed run just
@@ -42,7 +44,7 @@ function App() {
     <Flex direction="column" minH="100vh" overflowX="hidden" w="100%">
       <Header />
       <Box as="main" flex="1" w="100%" overflowX="hidden">
-        <Routes>
+        <Routes key={dataVersion}>
         {/* Public routes */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
@@ -144,6 +146,9 @@ function App() {
         </Routes>
       </Box>
       <Footer />
+      {user && (
+        <BudgetAssistant key={user.id} dataVersion={dataVersion} onDataChanged={() => setDataVersion((version) => version + 1)} />
+      )}
     </Flex>
   )
 }

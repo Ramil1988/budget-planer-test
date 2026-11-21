@@ -1,0 +1,1012 @@
+.budget-assistant__message[data-has-visuals="true"] {
+  width: 100%;
+}
+
+.assistant-visuals {
+  --assistant-visual-expense: #566f91;
+  --assistant-visual-limit: #85978c;
+  --assistant-visual-category-lightness: 43%;
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.dark .assistant-visuals {
+  --assistant-visual-expense: #9eb9e0;
+  --assistant-visual-limit: #96ac9d;
+  --assistant-visual-category-lightness: 67%;
+}
+
+.assistant-visuals__panel {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 10px;
+  background: var(--assistant-surface);
+  color: var(--assistant-ink);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.assistant-visuals__panel h3,
+.assistant-visuals__panel h4,
+.assistant-visuals__panel p,
+.assistant-visuals__panel ul,
+.assistant-visuals__panel dl,
+.assistant-visuals__panel dd {
+  margin: 0;
+}
+
+.assistant-visuals__panel h3 {
+  color: var(--assistant-ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.assistant-visuals__panel h4 {
+  color: var(--assistant-ink);
+  font-size: 0.8125rem;
+  font-weight: 750;
+}
+
+.assistant-visuals__panel header p,
+.assistant-visuals__panel small,
+.assistant-visuals__caption {
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__panel small {
+  display: block;
+}
+
+.assistant-visuals__comparison,
+.assistant-visuals__ranking,
+.assistant-visuals__ranking ul {
+  display: grid;
+  gap: 7px;
+}
+
+.assistant-visuals__stat {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.assistant-visuals__stat dt {
+  color: var(--assistant-muted);
+}
+
+.assistant-visuals__stat dd {
+  display: grid;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.assistant-visuals__stat[data-tone="over"] strong {
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__stat:not([data-tone]) {
+  padding-top: 6px;
+  border-top: 1px solid var(--assistant-border);
+}
+
+.assistant-visuals__bar {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--assistant-tint);
+}
+
+.assistant-visuals__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--assistant-accent);
+}
+
+.assistant-visuals__bar-fill[data-tone="expense"] {
+  background: var(--assistant-visual-expense);
+}
+
+.assistant-visuals__bar-fill[data-tone="limit"] {
+  background: var(--assistant-visual-limit);
+}
+
+.assistant-visuals__bar-fill[data-tone="over"] {
+  background: var(--assistant-issue);
+}
+
+.assistant-visuals__bar-fill[data-tone="category"] {
+  background: hsl(var(--assistant-visual-hue) 38% var(--assistant-visual-category-lightness));
+}
+
+.assistant-visuals__ranking {
+  padding-top: 9px;
+  border-top: 1px solid var(--assistant-border);
+}
+
+.assistant-visuals__ranking ul {
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-visuals__ranking li {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.assistant-visuals__rank-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__rank-heading strong {
+  max-width: 16ch;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.assistant-visuals__change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assistant-visuals__change-actions button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 7px;
+  background: var(--assistant-tint);
+  color: var(--assistant-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assistant-visuals__change-actions button:is(:hover, [aria-expanded="true"]):not(:disabled) {
+  background: var(--assistant-strong-tint);
+}
+
+.assistant-visuals__change-actions button:disabled {
+  opacity: 0.55;
+}
+
+.assistant-visuals__change-actions svg {
+  width: 14px;
+  height: 14px;
+}
+
+.assistant-visuals__comparison-month {
+  display: grid;
+  gap: 4px;
+}
+
+.assistant-visuals__comparison-month label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assistant-visuals__comparison-month input,
+.assistant-visuals__projection-balance-form input {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 7px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 7px;
+  background: var(--assistant-paper);
+  color: var(--assistant-ink);
+  font: inherit;
+}
+
+.dark :is(.assistant-visuals__comparison-month, .assistant-visuals__projection-balance-form) input {
+  color-scheme: dark;
+}
+
+.assistant-visuals__comparison-month p {
+  margin: 0;
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__change-periods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assistant-visuals__change-periods > div {
+  padding: 7px;
+  border-radius: 7px;
+  background: var(--assistant-paper);
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__change-periods dt,
+.assistant-visuals__change-axis {
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+}
+
+.assistant-visuals__change-total {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3px 10px;
+}
+
+.assistant-visuals__change-total dt {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assistant-visuals__change-periods strong,
+.assistant-visuals__change-caption strong,
+.assistant-visuals__change-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__change-chart,
+.assistant-visuals__change-plot,
+.assistant-visuals__change-plot > ul {
+  display: grid;
+  gap: 7px;
+}
+
+.assistant-visuals__change-plot > ul {
+  gap: 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-visuals__change-chart-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.assistant-visuals__change-chart-header button,
+.assistant-visuals__change-category {
+  min-height: 28px;
+  padding: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--assistant-accent);
+  font: inherit;
+  font-weight: 700;
+  text-align: start;
+}
+
+.assistant-visuals__change-chart-header button {
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__change-axis {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  padding-inline: 7px;
+}
+
+.assistant-visuals__change-axis span:last-child {
+  text-align: end;
+}
+
+.assistant-visuals__change-row {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+button.assistant-visuals__change-row:is(:hover, [aria-expanded="true"]),
+.assistant-visuals__change-category:is(:hover, [aria-expanded="true"]),
+.assistant-visuals__change-chart-header button:hover {
+  background: var(--assistant-tint);
+}
+
+.assistant-visuals__change-row:focus-visible,
+.assistant-visuals__change-category:focus-visible,
+.assistant-visuals__change-chart-header button:focus-visible {
+  outline: 2px solid var(--assistant-accent);
+  outline-offset: -2px;
+}
+
+.assistant-visuals__change-label,
+.assistant-visuals__change-category {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.assistant-visuals__change-label svg,
+.assistant-visuals__change-category svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  color: var(--assistant-accent);
+}
+
+.assistant-visuals__change-row[aria-expanded="true"] .assistant-visuals__change-label svg,
+.assistant-visuals__change-category[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.assistant-visuals__change-details {
+  min-width: 0;
+  margin: 4px 0 8px;
+  text-align: start;
+}
+
+.assistant-visuals__change-caption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 3px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__change-caption strong {
+  min-width: 0;
+  max-width: 20ch;
+  text-align: end;
+}
+
+.assistant-visuals__change-caption small {
+  display: inline;
+  white-space: nowrap;
+}
+
+.assistant-visuals__change-budget-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-top: 5px;
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__change-over-budget {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--assistant-issue-surface);
+  color: var(--assistant-issue);
+  font-size: 0.6875rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.assistant-visuals__change-track {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: 5px;
+  background: var(--assistant-tint);
+}
+
+.assistant-visuals__change-track::before {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  width: 1px;
+  background: var(--assistant-muted);
+  content: '';
+}
+
+.assistant-visuals__change-fill {
+  position: absolute;
+  inset-block: 0;
+}
+
+.assistant-visuals__change-chart [data-direction="increase"] .assistant-visuals__change-fill {
+  left: 50%;
+  border-radius: 0 5px 5px 0;
+  background: var(--assistant-issue);
+}
+
+.assistant-visuals__change-chart [data-direction="decrease"] .assistant-visuals__change-fill {
+  right: 50%;
+  border-radius: 5px 0 0 5px;
+  background: var(--assistant-accent);
+}
+
+.assistant-visuals__change-table {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.assistant-visuals__change-table:focus-visible {
+  outline: 2px solid var(--assistant-accent);
+  outline-offset: -2px;
+}
+
+.assistant-visuals__change-table > table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__change-table > table > caption {
+  padding-bottom: 4px;
+  font-weight: 700;
+  text-align: start;
+}
+
+.assistant-visuals__change-table > table > :is(thead, tbody) > tr > :is(th, td) {
+  padding: 4px;
+  border-bottom: 1px solid var(--assistant-border);
+  vertical-align: top;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__change-table > table > tbody > tr > .assistant-visuals__change-details-cell {
+  padding: 0;
+  text-align: start;
+}
+
+.assistant-visuals__change-table > table > :is(thead, tbody) > tr > th:first-child {
+  width: 34%;
+  text-align: start;
+}
+
+.assistant-visuals__change-table > table > thead > tr > th:last-child {
+  width: 27%;
+}
+
+.assistant-visuals__payment-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: 7px;
+}
+
+.assistant-visuals__payment-totals > div {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 7px;
+  background: var(--assistant-paper);
+}
+
+.assistant-visuals__payment-totals dt {
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__payment-totals dd,
+.assistant-visuals__payment-lane,
+.assistant-visuals__payment-schedule strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__payment-totals dd {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__payment-totals [data-kind="income"] dd,
+.assistant-visuals__payment-schedule strong[data-kind="income"] {
+  color: var(--assistant-accent);
+}
+
+.assistant-visuals__payment-coverage {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 7px;
+  background: var(--assistant-paper);
+}
+
+.assistant-visuals__payment-coverage-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 3px 8px;
+}
+
+.assistant-visuals__payment-coverage-heading strong {
+  color: var(--assistant-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__payment-coverage[data-short="true"] strong {
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__payment-coverage-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--assistant-tint);
+}
+
+.assistant-visuals__payment-coverage[data-short="true"] .assistant-visuals__payment-coverage-track {
+  background: var(--assistant-issue);
+}
+
+.assistant-visuals__payment-coverage-track span {
+  display: block;
+  height: 100%;
+  background: var(--assistant-accent);
+}
+
+.assistant-visuals__payment-coverage p {
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+}
+
+.assistant-visuals__payment-projection {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 7px;
+  background: var(--assistant-paper);
+}
+
+.assistant-visuals__projection-top-up {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: var(--assistant-tint);
+}
+
+.assistant-visuals__projection-top-up[data-needed="true"] {
+  background: var(--assistant-issue-surface);
+}
+
+.assistant-visuals__projection-top-up strong {
+  color: var(--assistant-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__projection-top-up[data-needed="true"] strong {
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__projection-top-up p {
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+}
+
+.assistant-visuals__projection-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: 4px 8px;
+}
+
+.assistant-visuals__projection-totals dt,
+.assistant-visuals__projection-lowest,
+.assistant-visuals__projection-chart {
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+}
+
+.assistant-visuals__projection-totals dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.assistant-visuals__projection-balance-form,
+.assistant-visuals__projection-balance-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.assistant-visuals__projection-balance-form label {
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assistant-visuals__projection-totals [data-negative="true"] dd,
+.assistant-visuals__projection-table tr[data-negative="true"] td:last-child {
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__projection-chart {
+  --projection-height: 78px;
+  --projection-min-day: 1.75rem;
+  display: grid;
+  grid-template-columns: minmax(4ch, auto) minmax(0, 1fr);
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__projection-axis {
+  position: relative;
+  width: 8ch;
+  height: var(--projection-height);
+}
+
+.assistant-visuals__projection-axis span {
+  position: absolute;
+  inset-inline-end: 0;
+}
+
+.assistant-visuals__projection-axis span:not(.assistant-visuals__projection-axis-zero):first-child {
+  top: 0;
+}
+
+.assistant-visuals__projection-axis span:not(.assistant-visuals__projection-axis-zero):last-child {
+  bottom: 0;
+}
+
+.assistant-visuals__projection-axis-zero {
+  bottom: clamp(0px, calc(var(--projection-zero) - 0.5em), calc(100% - 1em));
+}
+
+.assistant-visuals__projection-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.assistant-visuals__projection-plot,
+.assistant-visuals__projection-dates {
+  display: grid;
+  grid-template-columns: repeat(var(--projection-day-count), minmax(var(--projection-min-day), 1fr));
+  min-width: calc(var(--projection-day-count) * var(--projection-min-day));
+}
+
+.assistant-visuals__projection-plot {
+  position: relative;
+  height: var(--projection-height);
+  background: var(--assistant-surface);
+}
+
+.assistant-visuals__projection-plot::before,
+.assistant-visuals__projection-plot::after {
+  position: absolute;
+  inset-inline: 0;
+  pointer-events: none;
+  content: '';
+}
+
+.assistant-visuals__projection-plot::before {
+  bottom: 0;
+  height: var(--projection-zero);
+  background: var(--assistant-issue-surface);
+}
+
+.assistant-visuals__projection-plot::after {
+  bottom: var(--projection-zero);
+  border-top: 1px solid var(--assistant-muted);
+  opacity: 0.6;
+}
+
+.assistant-visuals__projection-plot > button {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.assistant-visuals__projection-plot > button:is(:hover, [aria-expanded="true"]) {
+  background: var(--assistant-tint);
+}
+
+.assistant-visuals__projection-plot > button:focus-visible {
+  z-index: 1;
+  outline-offset: -1px;
+}
+
+.assistant-visuals__projection-plot > button > span {
+  position: absolute;
+  inset-inline: 11%;
+  border-radius: 2px 2px 0 0;
+  background: var(--assistant-accent);
+}
+
+.assistant-visuals__projection-plot > button[data-negative="true"] > span {
+  border-radius: 0 0 2px 2px;
+  background: var(--assistant-issue);
+}
+
+.assistant-visuals__projection-plot > button[data-first="true"] > span {
+  outline: 1px solid var(--assistant-issue);
+}
+
+.assistant-visuals__projection-dates {
+  padding-block: 4px 2px;
+}
+
+.assistant-visuals__projection-tick {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+}
+
+.assistant-visuals__projection-tick time {
+  font-size: 0.625rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.assistant-visuals__projection-date-button {
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.assistant-visuals__projection-date-button:is(:hover, [aria-expanded="true"]) {
+  text-decoration-style: solid;
+}
+
+.assistant-visuals__projection-day-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.assistant-visuals__projection-day-select select {
+  flex: 1 1 12ch;
+  min-width: 0;
+  min-height: 36px;
+  padding: 5px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 6px;
+  background: var(--assistant-surface);
+  color: var(--assistant-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__projection-day {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 7px;
+  background: var(--assistant-surface);
+}
+
+.assistant-visuals__projection-explanation,
+.assistant-visuals__projection-refresh {
+  display: grid;
+  gap: 4px;
+}
+
+.assistant-visuals__projection-explanation {
+  padding: 6px 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 6px;
+  background: var(--assistant-issue-surface);
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__projection-explanation p {
+  color: var(--assistant-ink);
+  font-weight: 400;
+}
+
+.assistant-visuals__projection-movements {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-visuals__projection-movements > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  min-width: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--assistant-border);
+}
+
+.assistant-visuals__projection-movements strong {
+  color: var(--assistant-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__projection-movements strong[data-negative="true"] {
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__projection-table {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.assistant-visuals__projection-table table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__projection-table caption {
+  color: var(--assistant-muted);
+  text-align: start;
+}
+
+.assistant-visuals__projection-table :is(th, td) {
+  padding: 3px 2px;
+  border-bottom: 1px solid var(--assistant-border);
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__projection-table tr > :first-child {
+  text-align: start;
+}
+
+.assistant-visuals__projection-table td:last-child {
+  font-weight: 750;
+}
+
+.assistant-visuals__payment-chart,
+.assistant-visuals__payment-agenda {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.assistant-visuals__payment-chart-heading,
+.assistant-visuals__payment-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 9px;
+}
+
+.assistant-visuals__payment-chart-heading {
+  justify-content: space-between;
+}
+
+.assistant-visuals__payment-key {
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+}
+
+.assistant-visuals__payment-key span::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-inline-end: 4px;
+  border-radius: 50%;
+  background: var(--assistant-accent);
+  content: '';
+}
+
+.assistant-visuals__payment-key [data-kind="expense"]::before {
+  background: var(--assistant-visual-expense);
+}
+
+.assistant-visuals__payment-chart ul,
+.assistant-visuals__payment-schedule,
+.assistant-visuals__payment-schedule ul {
+  display: grid;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-visuals__payment-chart ul {
+  gap: 6px;
+}
+
+.assistant-visuals__payment-week {
+  display: grid;
+  grid-template-columns: 12ch minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+}
+
+.assistant-visuals__payment-week > span {
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__payment-lane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 11ch;
+  align-items: center;
+  gap: 5px;
+  overflow-wrap: anywhere;
+  text-align: end;
+}
+
+.assistant-visuals__payment-sr-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.assistant-visuals__payment-schedule > li {
+  min-width: 0;
+  padding: 6px 0 3px;
+  border-top: 1px solid var(--assistant-border);
+}
+
+.assistant-visuals__payment-schedule time {
+  color: var(--assistant-muted);
+  font-size: 0.6875rem;
+  font-weight: 750;
+}
+
+.assistant-visuals__payment-schedule ul {
+  gap: 4px;
+}
+
+.assistant-visuals__payment-schedule ul li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__payment-agenda summary,
+.assistant-visuals__payment-projection summary {
+  width: fit-content;
+  padding: 5px 0;
+  color: var(--assistant-accent);
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .assistant-visuals__change-actions button,
+  button.assistant-visuals__change-row,
+  .assistant-visuals__projection-day-select select {
+    min-height: 44px;
+  }
+}

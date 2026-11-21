@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Flex,
@@ -330,10 +331,11 @@ export default function Budget() {
   const [categories, setCategories] = useState([]);
   const [budgetLimits, setBudgetLimits] = useState({});
   const [budgetData, setBudgetData] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const monthParam = searchParams.get('month');
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const selectedMonth = /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? '') ? monthParam : defaultMonth;
   const [activeTab, setActiveTab] = useState('tracking');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [categoryTransactions, setCategoryTransactions] = useState([]);
@@ -348,6 +350,14 @@ export default function Budget() {
   const [committedLimits, setCommittedLimits] = useState({}); // Used for sorting - only updates on blur
   const [categorySearch, setCategorySearch] = useState(''); // Search filter for categories
   const [recommendationsKey, setRecommendationsKey] = useState(0); // Key to force refresh recommendations
+
+  const changeMonth = (event) => {
+    const month = event.target.value;
+    if (!month) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('month', month);
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     if (user) {
@@ -600,6 +610,7 @@ export default function Budget() {
         .select('category_id, amount')
         .eq('user_id', user.id)
         .eq('type', 'expense')
+        .is('deleted_at', null)
         .gte('date', startDate)
         .lte('date', endDate);
 
@@ -805,6 +816,7 @@ export default function Budget() {
         .eq('user_id', user.id)
         .eq('category_id', categoryId)
         .eq('type', 'expense')
+        .is('deleted_at', null)
         .gte('date', startDate)
         .lte('date', endDate)
         .order('date', { ascending: false });
@@ -1031,7 +1043,7 @@ export default function Budget() {
           <Input
             type="month"
             value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
+            onChange={changeMonth}
             size="md"
             w={{ base: '100%', sm: '200px' }}
             bg={colors.cardBg}

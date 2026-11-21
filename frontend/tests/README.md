@@ -96,9 +96,19 @@ The test configuration is defined in `playwright.config.js` at the root of the f
 Tests run against `http://localhost:5173` (Vite dev server)
 
 ### Test Credentials
-Test credentials are stored in `test-utils.js`:
-- Email: `complianceramsharapov@gmail.com`
-- Password: `@Ramilka1988`
+Authenticated specs read the test account from the environment. Export both before running them:
+
+```bash
+export BUDGETWISE_TEST_EMAIL="..."
+export BUDGETWISE_TEST_PASSWORD="..."
+```
+
+`loginUser()` in `test-utils.js` throws a clear error if either is missing.
+
+Every test signs in through the login form, so a run across several browsers at once can hit
+Supabase Auth's sign-in rate limit. The symptom is a `waitForURL('/dashboard')` timeout with
+"Request rate limit reached" on the login page. Run one project at a time
+(`npx playwright test --project=chromium`) or lower `--workers`.
 
 ## Test Coverage
 

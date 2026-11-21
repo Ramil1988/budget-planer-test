@@ -283,6 +283,89 @@ export function getPaymentDatesInRange(startDate, frequency, rangeStart, rangeEn
     .map(o => o.date);
 }
 
+function paymentDates(payment, start, end) {
+  return getPaymentDatesInRange(
+    payment.start_date,
+    payment.frequency,
+    start,
+    end,
+    payment.end_date,
+    payment.business_days_only,
+    payment.last_business_day_of_month,
+    payment.frequency_interval
+  );
+}
+
+function calendarDateKey(date) {
+  const dateParts = [date.getFullYear(), date.getMonth() + 1, date.getDate()];
+  return dateParts.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
+}
+
+function hasSalaryLabel(payment) {
+  const category = (payment.categories?.name || '').trim().toLowerCase();
+  const name = (payment.name || '').toLowerCase();
+  const recognized = new Set(['salary', 'payroll', 'paycheck', 'paycheque', 'зарплата']);
+  return recognized.has(category) || name.includes('salary') ||
+    name.split(/[^\p{L}]+/u).some((word) => recognized.has(word) || word.startsWith('зарплат'));
+}
+
+/**
+ * Find the main upcoming salary and scheduled expenses through that payday.
+ * Salary must occur after today. Expense dates include today and the cutoff date.
+ * `endDate` selects a user-supplied cutoff while leaving the salary lookup available.
+ */
+export function getPaymentsUntilSalary(recurringPayments, asOf, endDate = null) {
+  const today = parseLocalDate(asOf);
+  const searchEnd = new Date(today.getFullYear(), today.getMonth() + 3, 0);
+  let salary = null;
+
+  for (const payment of recurringPayments) {
+    if (!payment.is_active || payment.type !== 'income' || !hasSalaryLabel(payment)) continue;
+    const amount = Number(payment.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || (salary && amount < salary.amount)) continue;
+    const next = paymentDates(payment, today, searchEnd).find((date) => date > today);
+    if (!next) continue;
+    if (!salary || amount > salary.amount || next < salary.date) {
+      salary = { date: next, name: payment.name, amount };
+    }
+  }
+
+  const cutoff = endDate == null ? salary?.date : parseLocalDate(endDate);
+  if (!cutoff) return { salary: null, throughDate: null, daysUntilSalary: null, expenses: [], totalCents: null };
+
+  const expenses = [];
+  let totalCents = 0;
+  for (const payment of recurringPayments) {
+    if (!payment.is_active || payment.type !== 'expense') continue;
+    const cents = Math.round(Number(payment.amount) * 100);
+    if (!Number.isSafeInteger(cents) || cents < 0) continue;
+
+    // Use disjoint windows so long explicit ranges keep the recurrence engine's date cap.
+    let windowStart = today;
+    while (windowStart <= cutoff) {
+      const windowEnd = new Date(windowStart);
+      windowEnd.setDate(windowEnd.getDate() + 179);
+      const effectiveEnd = windowEnd < cutoff ? windowEnd : cutoff;
+      for (const date of paymentDates(payment, windowStart, effectiveEnd)) {
+        totalCents += cents;
+        expenses.push({ name: payment.name, date: calendarDateKey(date), amount: cents / 100 });
+      }
+      windowStart = new Date(effectiveEnd);
+      windowStart.setDate(windowStart.getDate() + 1);
+    }
+  }
+
+  const asOfKey = calendarDateKey(today);
+  const salaryDate = salary ? calendarDateKey(salary.date) : null;
+  return {
+    salary: salary && { date: salaryDate, name: salary.name },
+    throughDate: calendarDateKey(cutoff),
+    daysUntilSalary: salaryDate ? (Date.parse(salaryDate) - Date.parse(asOfKey)) / 86_400_000 : null,
+    expenses: expenses.sort((a, b) => a.date.localeCompare(b.date)),
+    totalCents,
+  };
+}
+
 /**
  * Get upcoming payments for a list of recurring payments
  * @param {Array} recurringPayments - Array of recurring payment objects

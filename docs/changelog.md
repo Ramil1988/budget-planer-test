@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **BudgetWise Assistant (2026-11-20)** uses OpenAI Responses in a signed-in chat. It can look up account information and add explicitly requested transactions, accounts, categories, and recurring schedules. Attachments can turn CSV files and screenshots into a transaction import with editable account and category suggestions, duplicate checks, and a confirmation before saving. Spending comparisons and scheduled payments appear as interactive charts. The daily balance forecast shows the first projected shortfall and the amount needed to stay at or above zero through the forecast. Payday questions use the recurring payment calendar to compare scheduled bills with the stated amount. The chat keeps its controls and composer within the phone’s safe areas.
+
 ### Security
+- **Playwright test account removed from the repository (2026-11-20):** `frontend/tests/test-utils.js` reads `BUDGETWISE_TEST_EMAIL` and `BUDGETWISE_TEST_PASSWORD` from the environment and fails with a clear message when they are missing. The matching plaintext copies in `CLAUDE.md` and `frontend/tests/README.md` are gone. The previous password remains in git history and should be rotated
 - **Explicit Data API grants on every table (2026-10-26):**
   - From **30 October 2026** Supabase stops giving `anon`, `authenticated` and `service_role` automatic privileges on new tables in the `public` schema. A table created after that date — including by a rebuilt database, a preview branch or a local `supabase db reset` — is unreachable through supabase-js until it is granted explicitly, failing with `42501 permission denied for table` however correct its RLS policies are
   - `backend/database/migrations/007_dismissed_suggestions.sql` was the clearest exposure: it created the table and three RLS policies but no grants, so on any database built from it after the cutoff `netlify/functions/dismissed-suggestions.js` would have lost all four of its operations. `schema.sql`, `001_recurring_payments.sql` and `003_assets_liabilities.sql` had the same gap
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Measured before/after on the Transactions page: switching tabs away and back fired **4 Supabase requests** (`transactions` ×2, `categories`, `user_settings`) before the fix and **0** after, with the active filter preserved. Genuine sign-in, sign-out, token refresh and profile updates still propagate
 
 ### Changed
+- **Dashboard and navigation (2026-11-20):** The monthly summary brings net balance, income, expenses, and budget progress together. Upcoming Payments appears above Spending Breakdown. Upcoming payments open in the calendar with a list view available. The selected day’s details sit beside the calendar on larger screens and below it on phones. Touch users can select spending categories to highlight their share. Navigation uses a shared responsive menu with active-page indicators and keyboard dismissal on mobile.
 - **Recurring summary shows a real month instead of a smoothed average (2026-08-07):**
   - The three cards summed a **monthly-equivalent** of every recurring (biweekly × 26 ÷ 12, etc.). A $1,918.07 biweekly salary read as **$4,155.82/mo** — an annual average that matches no actual month, since August holds 2 paydays ($3,836.14) and only May and October hold 3 ($5,754.21)
   - They now count **what actually falls in the selected month**, occurrence by occurrence, via the existing `getMonthlyProjection()`. Labels name the month: *Income in August*, *Expenses in August*

@@ -3,11 +3,11 @@
  * Common helper functions and fixtures for Playwright tests
  */
 
-// Test credentials
+// Integration test account
 export const TEST_USER = {
-  email: 'complianceramsharapov@gmail.com',
-  password: '@Ramilka1988',
-  name: 'Ramil Sharapov'
+  email: process.env.BUDGETWISE_TEST_EMAIL,
+  password: process.env.BUDGETWISE_TEST_PASSWORD,
+  name: process.env.BUDGETWISE_TEST_NAME || 'Test User'
 };
 
 // Helper to detect mobile viewport
@@ -29,6 +29,9 @@ export async function openMobileMenuIfNeeded(page) {
 
 // Helper to login a user
 export async function loginUser(page, email = TEST_USER.email, password = TEST_USER.password) {
+  if (!email || !password) {
+    throw new Error('Set BUDGETWISE_TEST_EMAIL and BUDGETWISE_TEST_PASSWORD for authenticated browser tests.');
+  }
   await page.goto('/login');
 
   // Fill in login form

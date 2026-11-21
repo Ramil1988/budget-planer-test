@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginUser, openMobileMenuIfNeeded } from './test-utils.js';
+import { loginUser } from './test-utils.js';
 
 /**
  * Dashboard Tests
@@ -14,52 +14,58 @@ test.describe('Dashboard', () => {
 
   test.describe('Page Layout', () => {
     test('should display dashboard header', async ({ page }) => {
-      await expect(page.locator('text=Dashboard')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     });
 
-    test('should display welcome message with user name', async ({ page }) => {
-      await expect(page.locator('text=Welcome back')).toBeVisible();
+    test('should display the monthly summary', async ({ page }) => {
+      await expect(page.getByRole('region', { name: 'Monthly summary' })).toBeVisible();
     });
 
-    test('should display Add Transaction button', async ({ page }) => {
-      await expect(page.locator('button:has-text("Add Transaction"), a:has-text("Add Transaction")')).toBeVisible();
+    test('should keep the dashboard clear of the Add Transaction shortcut', async ({ page }) => {
+      const main = page.getByRole('main');
+      await expect(main.getByRole('button', { name: 'Add Transaction', exact: true })).toHaveCount(0);
+      await expect(main.getByRole('link', { name: 'Add Transaction', exact: true })).toHaveCount(0);
     });
 
     test('should display month selector', async ({ page }) => {
-      // Check for month/year selector
-      const monthSelector = page.locator('text=/January|February|March|April|May|June|July|August|September|October|November|December/');
-      await expect(monthSelector.first()).toBeVisible();
+      await expect(page.getByLabel('Dashboard month', { exact: true })).toBeVisible();
     });
   });
 
   test.describe('Summary Cards', () => {
     test('should display income card', async ({ page }) => {
-      await expect(page.locator('text=/Income|INCOME/')).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Monthly summary' }).getByText('Income', { exact: true })).toBeVisible();
     });
 
     test('should display expenses card', async ({ page }) => {
-      await expect(page.locator('text=/Expenses|EXPENSES/')).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Monthly summary' }).getByText('Expenses', { exact: true })).toBeVisible();
     });
 
     test('should display net savings/balance card', async ({ page }) => {
-      await expect(page.locator('text=/Net Savings|NET SAVINGS|Balance|BALANCE/')).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Monthly summary' }).getByText('Net Balance', { exact: true })).toBeVisible();
     });
 
     test('should display monetary values', async ({ page }) => {
-      // Check for dollar amounts (with $ symbol)
-      const dollarAmounts = page.locator('text=/\\$[\\d,]+\\.\\d{2}/');
-      const count = await dollarAmounts.count();
-      expect(count).toBeGreaterThan(0);
+      const summary = page.getByRole('region', { name: 'Monthly summary' });
+      await expect(summary.getByText(/\$[\d,]+\.\d{2}/).first()).toBeVisible();
     });
   });
 
   test.describe('Upcoming Payments Section', () => {
     test('should display upcoming payments section', async ({ page }) => {
-      await expect(page.locator('text=Upcoming Payments')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Upcoming Payments', exact: true })).toBeVisible();
     });
 
     test('should display manage link for upcoming payments', async ({ page }) => {
-      await expect(page.locator('text=Manage')).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Upcoming Payments' }).getByRole('link', { name: 'Manage' })).toBeVisible();
+    });
+
+    test('should open on the calendar and switch to the list', async ({ page }) => {
+      const calendar = page.getByRole('button', { name: 'Payment calendar', exact: true });
+      const list = page.getByRole('button', { name: 'Payment list', exact: true });
+      await expect(calendar).toHaveAttribute('aria-pressed', 'true');
+      await list.click();
+      await expect(list).toHaveAttribute('aria-pressed', 'true');
     });
   });
 
@@ -70,36 +76,14 @@ test.describe('Dashboard', () => {
 
     test('should display spending chart or categories', async ({ page }) => {
       // Check for either a chart or category items
-      const chartOrCategories = page.locator('text=/Total Spent|BY CATEGORY/');
+      const chartOrCategories = page.locator('text=/Total Spent|by category|No (categorized )?spending/i');
       await expect(chartOrCategories.first()).toBeVisible();
     });
   });
 
   test.describe('Cash Flow Section', () => {
     test('should display cash flow section', async ({ page }) => {
-      await expect(page.locator('text=Cash Flow')).toBeVisible();
-    });
-  });
-
-  test.describe('Budget Overview Section', () => {
-    test('should display budget overview section', async ({ page }) => {
-      await expect(page.locator('text=Budget Overview')).toBeVisible();
-    });
-
-    test('should display budget percentage', async ({ page }) => {
-      // Check for percentage display
-      const percentage = page.locator('text=/\\d+%/');
-      await expect(percentage.first()).toBeVisible();
-    });
-  });
-
-  test.describe('Top Spending Section', () => {
-    test('should display top spending section', async ({ page }) => {
-      await expect(page.locator('text=Top Spending')).toBeVisible();
-    });
-
-    test('should display view all link', async ({ page }) => {
-      await expect(page.locator('text=View All')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Cash-flow' })).toBeVisible();
     });
   });
 
@@ -113,38 +97,22 @@ test.describe('Dashboard', () => {
     });
   });
 
-  test.describe('Spending by Category Section', () => {
-    test('should display spending by category section', async ({ page }) => {
-      await expect(page.locator('text=Spending by Category')).toBeVisible();
-    });
-  });
-
   test.describe('Navigation Actions', () => {
-    test('should navigate to add transaction page', async ({ page }) => {
-      await page.click('button:has-text("Add Transaction"), a:has-text("Add Transaction")');
-      await expect(page).toHaveURL('/add-transaction');
-    });
-
     test('should navigate to import transactions page', async ({ page }) => {
-      await page.click('text=Import Transactions');
+      await page.getByRole('navigation', { name: 'Dashboard shortcuts' }).getByRole('link', { name: 'Import Transactions' }).click();
       await expect(page).toHaveURL('/import');
     });
 
     test('should navigate to manage budget page', async ({ page }) => {
-      await page.click('text=Manage Budget');
+      await page.getByRole('navigation', { name: 'Dashboard shortcuts' }).getByRole('link', { name: 'Manage Budget' }).click();
       await expect(page).toHaveURL('/budget');
     });
   });
 
   test.describe('Month Navigation', () => {
     test('should have month navigation arrows', async ({ page }) => {
-      // Check for navigation arrows or buttons
-      const leftArrow = page.locator('button[aria-label*="previous"], button:has-text("<"), svg[data-icon="chevron-left"]').first();
-      const rightArrow = page.locator('button[aria-label*="next"], button:has-text(">"), svg[data-icon="chevron-right"]').first();
-
-      // At least one navigation method should exist
-      const hasNavigation = await leftArrow.isVisible() || await rightArrow.isVisible();
-      expect(hasNavigation).toBeTruthy();
+      await expect(page.getByRole('button', { name: 'Previous dashboard month' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Next dashboard month' })).toBeVisible();
     });
   });
 

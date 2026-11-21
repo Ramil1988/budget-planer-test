@@ -20,6 +20,7 @@ BudgetWise is a full-stack budget tracking application built with React (fronten
 
 This project maintains comprehensive documentation in the `docs/` directory. **Always read these documents first** when working on the project:
 
+- **`FOR_RAMIL.md`** (project root) - Plain-language learning document: architecture by analogy, technology reasoning, lessons learned and war stories. Written for reading, not for reference
 - **`docs/architecture.md`** - Complete technical architecture, technology stack, component structure, and design patterns
 - **`docs/changelog.md`** - Version history and detailed change log
 - **`docs/project-status.md`** - Current status, roadmap, tasks, and priorities
@@ -369,6 +370,30 @@ export const handler = async (event, context) => {
 - Interactive: Button, IconButton
 - See `docs/technical-reference.md` for detailed usage patterns
 
+## Budget Assistant
+
+A signed-in chat that answers questions about the user's own data and can add records on request.
+
+**Key Files:**
+- `netlify/functions/budget-assistant.mjs` - the single endpoint (`POST /.netlify/functions/budget-assistant`)
+- `netlify/functions/_lib/assistant-*.mjs` - tools and lookups (`assistant-data`), budget review (`assistant-budget`), CSV/screenshot import (`assistant-import`, `assistant-import-data`), transaction confirmation (`assistant-transaction`), chart payloads (`assistant-visuals`)
+- `frontend/src/components/BudgetAssistant.jsx` (+ `AssistantReplyVisuals`, `AssistantReplyFollowUps`, `AssistantCategoryDetails`) and `frontend/src/styles/budget-assistant.css`
+- Mounted once in `App.jsx` for signed-in users. After the assistant writes data it bumps `dataVersion`, which is the `key` on `<Routes>`, so the open page remounts and refetches
+
+**How it works:**
+- The request carries the user's Supabase JWT. The function builds a supabase-js client from the **anon key + that token**, so RLS applies exactly as in the browser. It refuses to start (`503`) if the configured key is not a public anon/publishable key — never point it at the service-role key
+- `mode` selects the operation. `chat` and `prepare_import` call the OpenAI Responses API (`store: false`, at most 3 tool rounds). The report modes (`suggestions`, `budget_review`, `financial_summary`, `category_comparison`, `category_drilldown`, `upcoming_payments`) are plain database reads and work without an OpenAI key
+- Write tools (`create_transaction`, `create_account`, `create_category`, `create_recurring_payment`) are offered to the model only in the first tool round. Imports and reviewed transactions are two-step: the server returns an HMAC-signed, expiring proposal and saves only when the browser sends it back (`commit_import`, `confirm_transaction`)
+- Netlify rate limit: 20 requests per minute per IP (`config.rateLimit` in the function)
+
+**Environment variables (Netlify Functions):**
+- `OPENAI_API_KEY` - required for chat and imports; server-side only
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY` - the `VITE_` equivalents are accepted as a fallback
+- `OPENAI_ASSISTANT_MODEL` - optional, defaults to `gpt-5-mini`
+- `BUDGET_ASSISTANT_READ_ONLY=true` - optional, disables every write path
+
+**Local testing:** `pnpm run dev` serves only the frontend; the Vite proxy forwards `/.netlify/functions` to port 9999, so the dialog opens but requests fail with a proxy error. Use `netlify dev` (port 8888) to exercise the function.
+
 ## Google Sheets Integration
 
 BudgetWise supports two modes of syncing transactions from Google Sheets:
@@ -414,9 +439,9 @@ BudgetWise has a comprehensive end-to-end test suite built with Playwright. Test
 - Browsers: Chromium, Firefox, WebKit, Mobile Chrome (Pixel 5), Mobile Safari (iPhone 12)
 
 **Test Credentials:**
-- Email: `complianceramsharapov@gmail.com`
-- Password: `@Ramilka1988`
-- Stored in: `frontend/tests/test-utils.js`
+- Read from the environment, never hardcoded: `BUDGETWISE_TEST_EMAIL`, `BUDGETWISE_TEST_PASSWORD` (optional `BUDGETWISE_TEST_NAME`)
+- `loginUser()` in `frontend/tests/test-utils.js` throws if either is missing, so export both before running any authenticated spec
+- **GOTCHA:** every test logs in through the UI. A multi-browser run (~190 logins in a few minutes) trips Supabase Auth's sign-in limit and tests fail on `waitForURL('/dashboard')` with "Request rate limit reached" on the login form. That is the rate limit, not a broken page — run one project at a time (`--project=chromium`) or fewer workers
 
 ### Test Files
 

@@ -1,323 +1,277 @@
+import { useEffect, useRef } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
+import { Box, Button, Flex, Grid, IconButton, Text, useDisclosure } from '@chakra-ui/react'
 import {
-  Box,
-  Flex,
-  HStack,
-  IconButton,
-  useDisclosure,
-  Stack,
-  Text,
-  Button,
-  Heading,
-} from '@chakra-ui/react'
+  LuBookOpen,
+  LuChartColumn,
+  LuLandmark,
+  LuLayoutDashboard,
+  LuList,
+  LuMenu,
+  LuRepeat,
+  LuSettings,
+  LuWallet,
+  LuX,
+} from 'react-icons/lu'
 import { useAuth } from '../contexts/AuthContext'
 import { ColorModeButton, useColorModeValue } from './ui/color-mode'
 
-function Header() {
-  const { open, onToggle } = useDisclosure()
+const navigation = [
+  { to: '/dashboard', label: 'Dashboard', icon: LuLayoutDashboard },
+  { to: '/budget', label: 'Budget', icon: LuWallet },
+  { to: '/recurring', label: 'Recurring', icon: LuRepeat },
+  { to: '/reports', label: 'Reports', icon: LuChartColumn },
+  { to: '/assets-liabilities', label: 'Assets', mobileLabel: 'Assets & Liabilities', icon: LuLandmark },
+  { to: '/transactions', label: 'Transactions', icon: LuList, related: ['/add-transaction'] },
+  { to: '/settings', label: 'Settings', icon: LuSettings, related: ['/import', '/categories'] },
+]
+
+const lightColors = {
+  surface: '#FBFCF8',
+  border: '#DDE7DF',
+  text: '#46574E',
+  brand: '#123F35',
+  mark: '#145446',
+  markText: '#F0F8F1',
+  active: '#124D3F',
+  activeBg: '#E5F2EA',
+  hoverBg: '#EEF4EF',
+  focus: '#19705B',
+}
+
+const darkColors = {
+  surface: '#151E1A',
+  border: '#2B3B34',
+  text: '#B9CAC1',
+  brand: '#EDF7EF',
+  mark: '#BFE7CD',
+  markText: '#123F35',
+  active: '#C6EBD1',
+  activeBg: '#203D31',
+  hoverBg: '#24332C',
+  focus: '#A2D7AF',
+}
+
+export default function Header() {
+  const { open, onToggle, onClose } = useDisclosure()
+  const menuButton = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+  const colors = useColorModeValue(lightColors, darkColors)
 
-  // Dark mode colors
-  const headerBg = useColorModeValue('rgba(255, 255, 255, 0.9)', 'rgba(24, 24, 27, 0.95)')
-  const borderColor = useColorModeValue('#F4F4F5', '#27272A')
-  const logoTextColor = useColorModeValue('#18181B', '#FAFAFA')
-  const navColor = useColorModeValue('#52525B', '#A1A1AA')
-  const navActiveColor = useColorModeValue('#2563EB', '#60A5FA')
-  const navActiveBg = useColorModeValue('#EFF6FF', 'rgba(59, 130, 246, 0.15)')
-  const navHoverBg = useColorModeValue('#EFF6FF', 'rgba(59, 130, 246, 0.1)')
-  const mobileBg = useColorModeValue('white', '#18181B')
-  const signOutBg = useColorModeValue('white', '#27272A')
-  const signOutBorder = useColorModeValue('#E4E4E7', '#3F3F46')
-  const signOutHoverBg = useColorModeValue('#FAFAFA', '#3F3F46')
-  const hamburgerColor = useColorModeValue('#52525B', '#A1A1AA')
+  useEffect(() => {
+    onClose()
+  }, [location.pathname, onClose])
 
-  // Routes grouped under the Settings tab — it stays highlighted on all of them
-  const SETTINGS_PATHS = ['/settings', '/import', '/categories']
+  const focusStyle = {
+    outline: '2px solid',
+    outlineColor: colors.focus,
+    outlineOffset: '2px',
+  }
 
-  const isActive = (path) => {
-    return location.pathname === path
+  const handleKeyDown = (event) => {
+    if (!open || event.key !== 'Escape') return
+    event.preventDefault()
+    onClose()
+    menuButton.current?.focus()
   }
 
   const handleSignOut = async () => {
+    onClose()
     await signOut()
     navigate('/')
-  }
-
-  const NavLink = ({ to, children, onClick, match }) => {
-    const active = match ? match.includes(location.pathname) : isActive(to)
-    return (
-    <Box
-      as={RouterLink}
-      to={to}
-      onClick={onClick}
-      px={3}
-      py={2}
-      borderRadius="8px"
-      fontWeight="500"
-      fontSize="14px"
-      color={active ? navActiveColor : navColor}
-      bg={active ? navActiveBg : 'transparent'}
-      _hover={{
-        color: navActiveColor,
-        bg: navHoverBg,
-      }}
-      transition="all 0.15s"
-    >
-      {children}
-    </Box>
-    )
   }
 
   return (
     <Box
       as="header"
-      bg={headerBg}
-      backdropFilter="blur(12px)"
+      bg={colors.surface}
       borderBottom="1px solid"
-      borderColor={borderColor}
+      borderColor={colors.border}
       position="sticky"
       top="0"
       zIndex="100"
+      pt="env(safe-area-inset-top, 0px)"
+      onKeyDown={handleKeyDown}
     >
-      <Flex
-        w="100%"
+      <Grid
         maxW="1200px"
         mx="auto"
         px={{ base: 4, md: 8 }}
-        py={3}
-        align="center"
-        justify="space-between"
+        templateColumns={{ base: '1fr auto', lg: 'auto minmax(0, 1fr) auto' }}
+        alignItems="center"
+        columnGap={{ base: 2, lg: 4 }}
       >
-        {/* Logo */}
         <Flex
           as={RouterLink}
           to="/"
+          onClick={onClose}
+          gridColumn="1"
+          gridRow="1"
           align="center"
-          gap={2}
-          flexShrink={0}
-          _hover={{ textDecoration: 'none' }}
+          justifySelf="start"
+          gap={2.5}
+          borderRadius="10px"
+          _focusVisible={focusStyle}
         >
           <Flex
-            w="36px"
-            h="36px"
-            borderRadius="10px"
-            bg="linear-gradient(135deg, #18181B 0%, #3B82F6 100%)"
+            aria-hidden="true"
             align="center"
             justify="center"
-            boxShadow="0 2px 8px rgba(37, 99, 235, 0.3)"
+            boxSize="36px"
+            borderRadius="10px"
+            bg={colors.mark}
+            color={colors.markText}
+            fontSize="20px"
           >
-            <Text fontSize="lg">💰</Text>
+            <LuBookOpen />
           </Flex>
-          <Heading
-            size="md"
+          <Text
+            color={colors.brand}
             fontFamily="'Plus Jakarta Sans', sans-serif"
-            fontWeight="700"
-            color={logoTextColor}
-            letterSpacing="-0.02em"
+            fontSize="18px"
+            fontWeight="800"
+            letterSpacing="-0.045em"
           >
             BudgetWise
-          </Heading>
+          </Text>
         </Flex>
 
-        {/* Desktop Navigation */}
-        <HStack as="nav" gap={1} display={{ base: 'none', lg: 'flex' }} flexShrink={1} overflow="hidden">
-          {user && (
-            <>
-              <NavLink to="/dashboard">Dashboard</NavLink>
-              <NavLink to="/budget">Budget</NavLink>
-              <NavLink to="/recurring">Recurring</NavLink>
-              <NavLink to="/reports">Report</NavLink>
-              <NavLink to="/assets-liabilities">Assets</NavLink>
-              <NavLink to="/transactions">Transactions</NavLink>
-              <NavLink to="/settings" match={SETTINGS_PATHS}>Settings</NavLink>
-            </>
-          )}
-        </HStack>
+        <Flex
+          gridColumn={{ base: 2, lg: 3 }}
+          gridRow="1"
+          align="center"
+          gap={1}
+          minH={{ base: '64px', lg: '68px' }}
+        >
+          <ColorModeButton
+            boxSize={{ base: '44px', lg: '36px' }}
+            color={colors.text}
+            borderRadius="10px"
+            _hover={{ bg: colors.hoverBg, color: colors.brand }}
+            _focusVisible={focusStyle}
+          />
+          <IconButton
+            ref={menuButton}
+            display={{ base: 'inline-flex', lg: 'none' }}
+            variant="ghost"
+            boxSize="44px"
+            borderRadius="10px"
+            color={open ? colors.active : colors.text}
+            bg={open ? colors.activeBg : undefined}
+            aria-label="Toggle navigation"
+            aria-expanded={open}
+            aria-controls="main-navigation"
+            onClick={onToggle}
+            _hover={{ bg: colors.hoverBg, color: colors.brand }}
+            _focusVisible={focusStyle}
+          >
+            {open ? <LuX aria-hidden="true" /> : <LuMenu aria-hidden="true" />}
+          </IconButton>
+        </Flex>
 
-        {/* Desktop Auth Button + Dark Mode Toggle */}
-        <HStack gap={3} display={{ base: 'none', lg: 'flex' }}>
-          <ColorModeButton />
-          {!user && (
-            <Button
-              as={RouterLink}
-              to="/login"
-              size="sm"
-              bg="linear-gradient(135deg, #18181B 0%, #2563EB 100%)"
-              color="white"
-              fontWeight="600"
-              borderRadius="8px"
-              px={5}
-              _hover={{
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
-              }}
-              transition="all 0.2s"
-            >
-              Sign In
-            </Button>
-          )}
+        <Flex
+          as="nav"
+          id="main-navigation"
+          aria-label="Main navigation"
+          display={{ base: open ? 'flex' : 'none', lg: 'flex' }}
+          gridColumn={{ base: '1 / -1', lg: 2 }}
+          gridRow={{ base: 2, lg: 1 }}
+          direction={{ base: 'column', lg: 'row' }}
+          align={{ base: 'stretch', lg: 'center' }}
+          justify={{ base: 'flex-start', lg: 'flex-end' }}
+          gap={{ base: 3, lg: 4 }}
+          borderTopWidth={{ base: '1px', lg: 0 }}
+          borderColor={colors.border}
+          pt={{ base: 3, lg: 0 }}
+          pb={{ base: 4, lg: 0 }}
+          maxH={{ base: 'calc(100dvh - 64px - env(safe-area-inset-top, 0px))', lg: 'none' }}
+          overflowY={{ base: 'auto', lg: 'visible' }}
+          overscrollBehaviorY={{ base: 'contain', lg: 'auto' }}
+        >
           {user && (
+            <Flex
+              direction={{ base: 'column', lg: 'row' }}
+              justify={{ lg: 'center' }}
+              flex="1"
+              gap={1}
+              p={{ base: '4px', lg: 0 }}
+              m={{ base: '-4px', lg: 0 }}
+            >
+              {navigation.map(({ to, label, mobileLabel, icon: Icon, related }) => {
+                const matchesPage = location.pathname === to
+                const matchesSection = related?.includes(location.pathname)
+                const active = matchesPage || matchesSection
+                const current = matchesPage ? 'page' : 'location'
+
+                return (
+                  <Flex
+                    key={to}
+                    as={RouterLink}
+                    to={to}
+                    onClick={onClose}
+                    aria-current={active ? current : undefined}
+                    align="center"
+                    gap={3}
+                    minH={{ base: '44px', lg: '36px' }}
+                    px={{ base: 3, lg: 2.5 }}
+                    borderRadius="9px"
+                    color={active ? colors.active : colors.text}
+                    bg={active ? colors.activeBg : undefined}
+                    fontWeight={active ? '700' : '600'}
+                    fontSize="sm"
+                    whiteSpace="nowrap"
+                    _hover={{ bg: active ? colors.activeBg : colors.hoverBg, color: colors.active }}
+                    _focusVisible={focusStyle}
+                  >
+                    <Box as="span" aria-hidden="true" display={{ base: 'inline-flex', lg: 'none' }} fontSize="18px">
+                      <Icon />
+                    </Box>
+                    {mobileLabel ? (
+                      <>
+                        <Box as="span" display={{ base: 'none', lg: 'inline' }}>{label}</Box>
+                        <Box as="span" display={{ base: 'inline', lg: 'none' }}>{mobileLabel}</Box>
+                      </>
+                    ) : label}
+                  </Flex>
+                )
+              })}
+            </Flex>
+          )}
+
+          {user ? (
             <Button
               onClick={handleSignOut}
-              size="sm"
-              bg={signOutBg}
-              color={navColor}
-              fontWeight="500"
-              borderRadius="8px"
-              border="1px solid"
-              borderColor={signOutBorder}
-              _hover={{ bg: signOutHoverBg, borderColor: signOutBorder }}
-              transition="all 0.15s"
+              minH={{ base: '44px', lg: '36px' }}
+              variant="outline"
+              borderColor={colors.border}
+              borderRadius="9px"
+              color={colors.text}
+              fontWeight="600"
+              fontSize="sm"
+              _hover={{ bg: colors.hoverBg, color: colors.brand }}
+              _focusVisible={focusStyle}
             >
               Sign Out
             </Button>
-          )}
-        </HStack>
-
-        {/* Mobile: Dark Mode + Menu Button */}
-        <HStack gap={1} display={{ base: 'flex', lg: 'none' }}>
-          <ColorModeButton />
-          <IconButton
-            onClick={onToggle}
-            variant="ghost"
-            aria-label="Toggle navigation"
-            size="sm"
-            borderRadius="8px"
-            _hover={{ bg: navHoverBg }}
-          >
-            <Box
-              as="span"
-              display="flex"
-              flexDirection="column"
-              gap="4px"
-              w="18px"
+          ) : (
+            <Button
+              asChild
+              minH={{ base: '44px', lg: '36px' }}
+              bg={colors.mark}
+              color={colors.markText}
+              borderRadius="9px"
+              fontWeight="700"
+              fontSize="sm"
+              _hover={{ opacity: 0.9 }}
+              _focusVisible={focusStyle}
             >
-              <Box
-                h="2px"
-                bg={hamburgerColor}
-                borderRadius="full"
-                transform={open ? 'rotate(45deg) translateY(6px)' : 'none'}
-                transition="all 0.2s"
-              />
-              <Box
-                h="2px"
-                bg={hamburgerColor}
-                borderRadius="full"
-                opacity={open ? 0 : 1}
-                transition="all 0.2s"
-              />
-              <Box
-                h="2px"
-                bg={hamburgerColor}
-                borderRadius="full"
-                transform={open ? 'rotate(-45deg) translateY(-6px)' : 'none'}
-                transition="all 0.2s"
-              />
-            </Box>
-          </IconButton>
-        </HStack>
-      </Flex>
-
-      {/* Mobile Navigation */}
-      {open && (
-        <Box
-          display={{ base: 'block', lg: 'none' }}
-          bg={mobileBg}
-          borderTop="1px solid"
-          borderColor={borderColor}
-          shadow="lg"
-        >
-          <Stack maxW="1200px" mx="auto" px={{ base: 4, md: 8 }} py={4} gap={1}>
-            {!user && (
-              <Box>
-                <Button
-                  as={RouterLink}
-                  to="/login"
-                  w="100%"
-                  size="md"
-                  bg="linear-gradient(135deg, #18181B 0%, #2563EB 100%)"
-                  color="white"
-                  fontWeight="600"
-                  borderRadius="10px"
-                  _hover={{ opacity: 0.9 }}
-                  onClick={onToggle}
-                >
-                  Sign In
-                </Button>
-              </Box>
-            )}
-            {user && (
-              <>
-                <MobileNavLink to="/dashboard" active={isActive('/dashboard')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Dashboard
-                </MobileNavLink>
-                <MobileNavLink to="/budget" active={isActive('/budget')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Budget
-                </MobileNavLink>
-                <MobileNavLink to="/recurring" active={isActive('/recurring')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Recurring
-                </MobileNavLink>
-                <MobileNavLink to="/reports" active={isActive('/reports')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Report
-                </MobileNavLink>
-                <MobileNavLink to="/assets-liabilities" active={isActive('/assets-liabilities')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Assets & Liabilities
-                </MobileNavLink>
-                <MobileNavLink to="/transactions" active={isActive('/transactions')} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Transactions
-                </MobileNavLink>
-                <MobileNavLink to="/settings" active={SETTINGS_PATHS.includes(location.pathname)} onClick={onToggle} colors={{ navColor, navActiveColor, navActiveBg, navHoverBg }}>
-                  Settings
-                </MobileNavLink>
-                <Box pt={3} borderTop="1px solid" borderColor={borderColor} mt={2}>
-                  <Button
-                    onClick={() => {
-                      handleSignOut()
-                      onToggle()
-                    }}
-                    w="100%"
-                    size="md"
-                    bg={signOutHoverBg}
-                    color={navColor}
-                    fontWeight="500"
-                    borderRadius="10px"
-                    _hover={{ bg: navHoverBg }}
-                  >
-                    Sign Out
-                  </Button>
-                </Box>
-              </>
-            )}
-          </Stack>
-        </Box>
-      )}
+              <RouterLink to="/login" onClick={onClose}>Sign In</RouterLink>
+            </Button>
+          )}
+        </Flex>
+      </Grid>
     </Box>
   )
 }
-
-const MobileNavLink = ({ to, children, active, onClick, colors }) => (
-  <Box
-    as={RouterLink}
-    to={to}
-    onClick={onClick}
-    display="block"
-    px={4}
-    py={3}
-    borderRadius="10px"
-    fontWeight="500"
-    fontSize="14px"
-    color={active ? colors.navActiveColor : colors.navColor}
-    bg={active ? colors.navActiveBg : 'transparent'}
-    _hover={{
-      bg: colors.navHoverBg,
-      color: colors.navActiveColor,
-    }}
-    transition="all 0.15s"
-  >
-    {children}
-  </Box>
-)
-
-export default Header

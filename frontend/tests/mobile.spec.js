@@ -94,12 +94,27 @@ test.describe('Mobile Responsiveness', () => {
       await page.goto('/dashboard');
 
       // Key elements should be visible
-      await expect(page.locator('text=Dashboard')).toBeVisible();
-      await expect(page.locator('button:has-text("Add Transaction"), a:has-text("Add Transaction")')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Upcoming Payments' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Payment calendar', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByRole('heading', { name: 'Spending Breakdown' })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
       // Summary cards should be visible
-      await expect(page.locator('text=/Income|INCOME/')).toBeVisible();
-      await expect(page.locator('text=/Expenses|EXPENSES/')).toBeVisible();
+      const summary = page.getByRole('region', { name: 'Monthly summary' });
+      await expect(summary.getByText('Income', { exact: true })).toBeVisible();
+      await expect(summary.getByText('Expenses', { exact: true })).toBeVisible();
+    });
+
+    test('should use the budget assistant on a narrow screen', async ({ page }) => {
+      await page.goto('/dashboard');
+      await page.getByRole('button', { name: 'Budget assistant', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Budget assistant' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('textbox')).toBeVisible();
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await dialog.getByRole('button', { name: 'Close budget assistant' }).click();
+      await expect(dialog).toBeHidden();
     });
 
     test('should display transactions page correctly on mobile', async ({ page }) => {
@@ -291,6 +306,6 @@ test.describe('Tablet Responsiveness', () => {
     await loginUser(page);
     await page.goto('/dashboard');
 
-    await expect(page.locator('text=Dashboard')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
   });
 });
