@@ -915,6 +915,53 @@ server, because on the first try the model put all of the HST on one category.
 list every entry point a user has — typing, attaching, clicking a button, retrying — and check each.
 "It works" means it works from where the user is standing.
 
+### 4.14 The receipt that passed every test and failed on the first real one (2026-11-23)
+
+I had tested the receipt feature on a receipt I wrote myself: nineteen tidy lines. The first real one —
+a Costco PDF, 34 lines — failed three different ways.
+
+**It timed out.** Netlify kills a function at 30 seconds, and our own timeout was set to 50, which is
+like setting an alarm for after the meeting. Three model calls, each re-reading the file, took 18–24
+seconds on my fixture and more than 30 on the real thing. The user saw a bare 504.
+
+**It lost lines.** I had asked one model call to copy 34 prices, decide 34 categories and match the
+purchase to the ledger, all at once. The real receipt has a name that wraps onto two rows, quantity
+rows (`2 @ 19.99`) that are not items, and a discount printed as `3.00-`. Lines went missing, the
+parts stopped adding up, the server rejected them — correctly — and there was no time left to retry.
+
+**It was inconsistent.** `CITY/FRIENDS 64.99` is a Lego set. `gpt-5-mini` didn't know that, so it
+guessed: Clothes on one run, Household on the next, Food on the third. Two other chat assistants I
+tried put it in the same place every time. Same receipt, different answer each run is worse than a
+wrong answer — you can't even learn to distrust it in a consistent direction.
+
+One redesign fixed all three:
+
+- **Split the job by what kind of work it is.** *Copying* a receipt needs no thinking, so it runs
+  with reasoning switched off, and the server checks the result against the receipt's own printed
+  subtotal and total. Only then does a second call *categorise* — and it is handed line numbers, not
+  prices, so it has nothing to miscopy. Two small calls beat one big one on speed and on accuracy.
+- **Use the right model for the step that needs knowledge.** Recognising `CITY/FRIENDS` is knowledge,
+  not instruction-following; no prompt fixes a model that doesn't know. My first pick was `gpt-5.1` — simply the first
+  stronger model I tried, and a year old by then. Measured on the real receipt, three runs each,
+  it still moved the Lego set between categories; `gpt-6.2-sol` gave the same split every time,
+  so receipts use it. "A stronger model" is a guess until you measure it. A smaller, cheaper model (`gpt-5-nano`) failed the sum check on every run — and *because*
+  there was a sum check, I knew that in thirty seconds instead of finding out from a wrong ledger.
+- **Let the reply come from the server.** The breakdown you see — every line, each category's share
+  of the tax — is built from the checked receipt, not written by the model. And where the model
+  wasn't sure what a product is, it says so and names its guess, instead of guessing silently.
+
+**The lessons:**
+
+- **Test with a real document before you believe a feature works.** A fixture you wrote encodes your
+  own assumptions; it cannot contain the wrapped name you didn't know receipts have.
+- **A check against an independent figure is worth more than a better prompt.** "The lines must add
+  up to the printed subtotal" caught a bad model, a bad reading and a bad instruction, all without
+  knowing which was at fault.
+- **Know your platform's time limit and set your own just under it.** A timeout above the platform's
+  is not a timeout; it's a crash with extra steps.
+- **When answers vary between runs, the model is guessing.** Don't average the guesses — give it the
+  knowledge, or make it say "not sure."
+
 ---
 
 ## 5. War Stories

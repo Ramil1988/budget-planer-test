@@ -123,6 +123,39 @@ test.describe('Budget assistant', () => {
     expect(requests.at(-1)).toMatchObject({ mode: 'prepare_import', attachmentNote: false });
   });
 
+  test('a correction after a receipt reply needs no second upload and replaces the card', async ({ page }) => {
+    const card = (category) => ({
+      token: `card-${category}`,
+      totals: { before: -557.68, after: -557.68 },
+      items: [{ kind: 'update', type: 'expense', date: '2026-11-21', description: 'COSTCO WHOLESALE', newDescription: null, amount: 307.68, newAmount: 73.44, category: 'Food/Costco', newCategory: category }],
+    });
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode === 'prepare_import') {
+        return { message: 'Receipt read.', choices: [], actions: [], receiptToken: 'signed-receipt', changeReviews: [card('Entertainment')] };
+      }
+      if (body.mode) return null;
+      return body.receiptToken === 'signed-receipt'
+        ? { message: 'Moved.', choices: [], actions: [], receiptToken: 'signed-receipt', changeReviews: [card('Gifts')] }
+        : { message: 'No receipt came with that.', choices: [], actions: [] };
+    });
+
+    await dialog.locator('input[type=file]').setInputFiles({
+      name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await dialog.getByRole('textbox').fill('Split the purchase that is already recorded');
+    await dialog.getByTitle('Analyze attachment').click();
+    const cards = dialog.getByRole('region', { name: /Review changes/ });
+    await expect(cards.getByText('Food/Costco → Entertainment')).toBeVisible();
+
+    await say(dialog, 'Move the Lego to Gifts');
+    await expect(dialog.getByText('Moved.')).toBeVisible();
+    expect(requests.at(-1).receiptToken).toBe('signed-receipt');
+    expect(requests.at(-1).attachment).toBeUndefined();
+    // The corrected proposal takes the place of the first one.
+    await expect(cards).toHaveCount(1);
+    await expect(cards.getByText('Food/Costco → Gifts')).toBeVisible();
+  });
+
   test('a pending import stays with the reply that produced it', async ({ page }) => {
     const { dialog } = await openAssistant(page, (body) => {
       if (body.mode === 'prepare_import') {

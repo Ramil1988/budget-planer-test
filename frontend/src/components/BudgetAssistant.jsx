@@ -974,6 +974,8 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         choices: Array.isArray(payload.choices)
           ? payload.choices.filter((choice) => typeof choice === 'string' && choice.trim()).slice(0, 4)
           : [],
+        // A reply about a receipt carries the receipt back, signed, so the next message can be about it without a new upload.
+        receiptToken: typeof payload.receiptToken === 'string' ? payload.receiptToken : undefined,
         visuals: validAssistantReplyVisuals(payload.visuals),
       };
       if (payload.importDraft) {
@@ -1003,7 +1005,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         ? payload.changeReviews
             .filter((review) => typeof review?.token === 'string' && Array.isArray(review.items) && review.items.length
               && Number.isFinite(review.totals?.before) && Number.isFinite(review.totals?.after))
-            .map((review, index) => ({ ...review, id: `changes:${turn.id}:${index}` }))
+            .map((review, index) => ({ ...review, id: `changes:${turn.id}:${index}`, fromReceipt: typeof payload.receiptToken === 'string' }))
         : [];
       if (turn.reviewId) {
         settledReviews.current.add(turn.reviewId);
@@ -1014,7 +1016,12 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       } else if (reviews.length) {
         setTransactionReviews((previous) => [...previous, ...reviews]);
       }
-      if (changes.length) setChangeReviews((previous) => [...previous, ...changes]);
+      // A corrected proposal for a receipt replaces the earlier receipt card instead of sitting beside it.
+      // Only a follow-up does that: a card for a newly attached receipt, or from anything else, is added.
+      if (changes.length) {
+        const corrected = typeof turn.body.receiptToken === 'string' && changes.some(({ fromReceipt }) => fromReceipt);
+        setChangeReviews((previous) => [...(corrected ? previous.filter(({ fromReceipt }) => !fromReceipt) : previous), ...changes]);
+      }
       setMessages((current) => [...current, message]);
       dataChanged ||= actions.length > 0;
     } catch (error) {
@@ -1127,10 +1134,15 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       : {
         // A file with a request lets the assistant decide what to do with it; a file on its own is an import.
         ...(fileAttachment ? { mode: 'prepare_import', attachmentNote: Boolean(text.trim()) } : { visuals: true }),
+        // The latest reply, even if a failed request left a user message after it.
+        ...(!fileAttachment && messages.findLast(({ role }) => role === 'assistant')?.receiptToken
+          ? { receiptToken: messages.findLast(({ role }) => role === 'assistant').receiptToken }
+          : {}),
         ...(analysisOnly ? { analysisOnly: true } : {}),
         requestId,
         messages: updatedMessages.slice(-MAX_HISTORY).map(({ role, content, requestPrompt: prompt, choices }) => {
-          if (prompt || !choices?.length) return { role, content: prompt ?? content };
+          // The server rejects any message over 6000 characters, and with it the whole request.
+          if (prompt || !choices?.length) return { role, content: (prompt ?? content).slice(0, 6000) };
           // The server rejects a message over 6000 characters, so the options never push one past it.
           const offered = `\n\nOptions offered:\n${choices.map((choice, index) => `${index + 1}) ${choice}`).join('\n')}`;
           return { role, content: `${content.slice(0, 6000 - offered.length)}${offered}` };

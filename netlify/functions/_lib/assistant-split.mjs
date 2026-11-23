@@ -69,3 +69,64 @@ export function spreadExtra(args) {
     }),
   };
 }
+
+// Step two of reading a receipt: the model assigns each numbered receipt line to a category and
+// nothing else. Prices, tax marks and the tax total come from the receipt the server already
+// checked, and every line has to be assigned exactly once, so nothing can be dropped or altered.
+// Returns the arguments in the plain form the change proposal understands, plus a breakdown of
+// what went into each category for the reply.
+export function resolveSplits(args, receipt) {
+  if (!Array.isArray(args?.splits)) return { args, breakdown: null };
+  let groupsOf = null;
+  const splits = args.splits.map((split) => {
+    const groups = Array.isArray(split?.receipt_groups) ? split.receipt_groups : [];
+    const { receipt_groups: _groups, unsure_lines: _unsure, ...rest } = split ?? {};
+    if (!groups.length) return rest;
+    if (!receipt) throw new SplitInputError('No receipt was read in this message. Give the amounts in parts or items instead.');
+    if (groupsOf) throw new SplitInputError('Use receipt_groups in one split only.');
+
+    const seen = new Map();
+    for (const group of groups) {
+      const category = typeof group?.category === 'string' ? group.category.trim() : '';
+      if (!category) throw new SplitInputError('Every group needs a category.');
+      for (const number of Array.isArray(group.lines) ? group.lines : []) {
+        if (!Number.isInteger(number) || number < 1 || number > receipt.lines.length) {
+          throw new SplitInputError(`Line ${number} is not on the receipt, which has lines 1 to ${receipt.lines.length}.`);
+        }
+        if (seen.has(number)) throw new SplitInputError(`Line ${number} is assigned twice. Assign every line to exactly one category.`);
+        seen.set(number, category);
+      }
+    }
+    const missing = receipt.lines.filter(({ line }) => !seen.has(line)).map(({ line }) => line);
+    if (missing.length) {
+      throw new SplitInputError(`Every receipt line must be assigned. Missing lines: ${missing.join(', ')}.`);
+    }
+
+    const unsure = new Set(Array.isArray(split.unsure_lines) ? split.unsure_lines : []);
+    groupsOf = { seen, unsure };
+    return {
+      ...rest,
+      parts: [],
+      extra: receipt.extra || null,
+      // Tax marks decide the shares only for a plain tax line; a tip or a fee is shared by price.
+      items: receipt.lines.map(({ line, amount, taxable }) => ({ amount, category: seen.get(line), taxable: receipt.byTaxMark && taxable })),
+    };
+  });
+
+  const resolved = spreadExtra({ ...args, splits });
+  if (!groupsOf) return { args: resolved, breakdown: null };
+
+  const index = args.splits.findIndex((split) => Array.isArray(split?.receipt_groups) && split.receipt_groups.length);
+  const breakdown = resolved.splits[index].parts.map(({ category, amount }) => {
+    const lines = receipt.lines.filter(({ line }) => groupsOf.seen.get(line).toLowerCase() === category.toLowerCase());
+    const beforeTax = lines.reduce((sum, line) => sum + Math.round(line.amount * 100), 0) / 100;
+    return {
+      category,
+      amount,
+      beforeTax,
+      tax: Math.round((amount - beforeTax) * 100) / 100,
+      lines: lines.map(({ line, name, amount: price }) => ({ line, name, amount: price, unsure: groupsOf.unsure.has(line) })),
+    };
+  });
+  return { args: resolved, breakdown };
+}

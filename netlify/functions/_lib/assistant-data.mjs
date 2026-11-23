@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { BudgetReviewError, categoryBudgetTimeline, getBudgetReview, getCategoryBudgetLimits, monthBounds } from './assistant-budget.mjs';
-import { spreadExtra, SplitInputError } from './assistant-split.mjs';
+import { resolveSplits, SplitInputError } from './assistant-split.mjs';
 import { prepareAssistantTransaction, proposeAssistantChanges, TransactionReviewError } from './assistant-transaction.mjs';
 import { getPaymentDatesInRange, getPaymentsUntilSalary } from '../../../frontend/src/lib/recurringUtils.js';
 import { MATCH_WINDOW_DAYS, matchesRecurringOccurrence } from '../../../frontend/src/lib/recurringAutoAdd.js';
@@ -964,13 +964,15 @@ export async function executeAssistantTool(context) {
     }
     if (isWriteTool(name)) return await runCreateTool(context);
     if (name === CHANGES_TOOL) {
-      return await proposeAssistantChanges({
+      const { args: resolved, breakdown } = resolveSplits(args, context.receipt ?? null);
+      const proposal = await proposeAssistantChanges({
         supabase,
         userId,
         signingKey: context.signingKey,
-        args: spreadExtra(args),
+        args: resolved,
         newId: (index) => requestRecordId(userId, context.requestId, index, `${CHANGES_TOOL}:${context.proposalIndex}`),
       });
+      return { ...proposal, receiptBreakdown: breakdown };
     }
     if (name === 'list_transactions') return { result: await listTransactions(supabase, userId, args) };
     if (name === 'summarize_transactions') return await summarizeTransactions(supabase, userId, args);
