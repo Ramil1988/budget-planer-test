@@ -376,7 +376,7 @@ A signed-in chat that answers questions about the user's own data and can add re
 
 **Key Files:**
 - `netlify/functions/budget-assistant.mjs` - the single endpoint (`POST /.netlify/functions/budget-assistant`)
-- `netlify/functions/_lib/assistant-*.mjs` - tools and lookups (`assistant-data`), budget review (`assistant-budget`), CSV/screenshot import (`assistant-import`, `assistant-import-data`), transaction confirmation (`assistant-transaction`), chart payloads (`assistant-visuals`)
+- `netlify/functions/_lib/assistant-*.mjs` - tools and lookups (`assistant-data`), budget review (`assistant-budget`), CSV/PDF/screenshot import (`assistant-import`, `assistant-import-data`), transaction confirmation (`assistant-transaction`), chart payloads (`assistant-visuals`)
 - `frontend/src/components/BudgetAssistant.jsx` (+ `AssistantReplyVisuals`, `AssistantReplyFollowUps`, `AssistantCategoryDetails`) and `frontend/src/styles/budget-assistant.css`
 - Mounted once in `App.jsx` for signed-in users. After the assistant writes data it bumps `dataVersion`, which is the `key` on `<Routes>`, so the open page remounts and refetches
 
@@ -384,6 +384,7 @@ A signed-in chat that answers questions about the user's own data and can add re
 - The request carries the user's Supabase JWT. The function builds a supabase-js client from the **anon key + that token**, so RLS applies exactly as in the browser. It refuses to start (`503`) if the configured key is not a public anon/publishable key — never point it at the service-role key
 - `mode` selects the operation. `chat` and `prepare_import` call the OpenAI Responses API (`store: false`, at most 3 tool rounds). The report modes (`suggestions`, `budget_review`, `financial_summary`, `category_comparison`, `category_drilldown`, `upcoming_payments`) are plain database reads and work without an OpenAI key
 - Write tools (`create_transaction`, `create_account`, `create_category`, `create_recurring_payment`) are offered to the model only in the first tool round. Imports and reviewed transactions are two-step: the server returns an HMAC-signed, expiring proposal and saves only when the browser sends it back (`commit_import`, `confirm_transaction`)
+- Import attachments: CSV (128 KB, confidential columns stripped before the model sees them), PNG/JPEG/WebP screenshot or PDF (2.5 MB each, verified by file signature). A PDF goes to the Responses API as an `input_file` part with a `data:application/pdf;base64,…` URL; a screenshot as `input_image`. Both reach OpenAI whole. At most 60 transactions per file. To add a type, change `attachmentKind()` / `attachmentLimits` in `BudgetAssistant.jsx` **and** `prepareAssistantImport()` in `assistant-import.mjs` — the browser check alone is not a control
 - Netlify rate limit: 20 requests per minute per IP (`config.rateLimit` in the function)
 
 **Environment variables (Netlify Functions):**

@@ -1184,8 +1184,9 @@ export default function Dashboard() {
                       <MiniCalendar
                         recurringPayments={allRecurringPayments}
                         onDayClick={(date, payments) => {
-                          setSelectedCalendarDate(date);
-                          setSelectedCalendarPayments(payments);
+                          const deselect = selectedCalendarDate?.getTime() === date.getTime();
+                          setSelectedCalendarDate(deselect ? null : date);
+                          setSelectedCalendarPayments(deselect ? [] : payments);
                         }}
                         selectedDate={selectedCalendarDate}
                         viewMonth={calendarViewMonth}

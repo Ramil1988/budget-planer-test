@@ -126,6 +126,8 @@
   - [x] Lookups for transactions, spending, accounts, categories, budgets, recurring schedules, assets and liabilities
   - [x] Adds transactions, accounts, categories and recurring schedules on explicit request
   - [x] CSV and screenshot import with editable suggestions, duplicate check and confirmation before saving
+  - [x] PDF statement import, up to 2.5 MB and 60 transactions per file (2026-11-23)
+  - [x] Upcoming Payments calendar: click the selected day again to deselect it (2026-11-23)
   - [x] Interactive charts for spending comparisons, scheduled payments and the daily balance forecast
   - [x] Chat window stays inside phone safe areas, portrait and landscape
 - [x] Dashboard and navigation refresh (2026-11-20)

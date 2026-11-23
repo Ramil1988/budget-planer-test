@@ -67,6 +67,36 @@ test.describe('Dashboard', () => {
       await list.click();
       await expect(list).toHaveAttribute('aria-pressed', 'true');
     });
+
+    test('should deselect a calendar day when it is clicked again', async ({ page }) => {
+      // Give the calendar one scheduled payment whatever the account holds. Only the
+      // dashboard's own read is replaced; every other recurring_payments request passes through.
+      await page.route('**/rest/v1/recurring_payments*', (route) => {
+        const select = new URL(route.request().url()).searchParams.get('select') || '';
+        if (route.request().method() !== 'GET' || !select.includes('categories(name)')) return route.continue();
+        return route.fulfill({
+          headers: { 'access-control-allow-origin': '*' },
+          json: [{
+            id: 'calendar-test', name: 'Calendar test rent', amount: 100, type: 'expense',
+            frequency: 'monthly', frequency_interval: 1, start_date: '2026-01-15', end_date: null,
+            is_active: true, auto_add: false, business_days_only: false,
+            last_business_day_of_month: false, categories: { name: 'Housing' },
+          }],
+        });
+      });
+      await page.reload();
+
+      const section = page.getByRole('region', { name: 'Upcoming Payments' });
+      const day = section.getByRole('button', { name: / 15, 1 payment$/ });
+      const details = section.getByLabel('Selected day details');
+      await day.click();
+      await expect(day).toHaveAttribute('aria-pressed', 'true');
+      await expect(details.getByText('Total for day')).toBeVisible();
+
+      await day.click();
+      await expect(day).toHaveAttribute('aria-pressed', 'false');
+      await expect(details.getByText('Select a marked day to see its payments')).toBeVisible();
+    });
   });
 
   test.describe('Spending Breakdown', () => {

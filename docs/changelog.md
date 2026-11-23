@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **PDF statements in the assistant import (2026-11-23):** The assistant accepts a PDF attachment (up to 2.5 MB) alongside CSV files and screenshots, and turns it into the same reviewable import. Before, picking a PDF was rejected with "Choose a CSV file or a PNG, JPEG, or WebP screenshot" — the browser, the file picker and the server each allowed only CSV and images. The server checks the PDF signature and passes the file to the OpenAI Responses API as an `input_file`. Limits are unchanged: 60 transactions per file, and a statement with more returns no rows with an explanation. Unlike a CSV, whose confidential columns are stripped first, a PDF reaches OpenAI whole
 - **BudgetWise Assistant (2026-11-20)** uses OpenAI Responses in a signed-in chat. It can look up account information and add explicitly requested transactions, accounts, categories, and recurring schedules. Attachments can turn CSV files and screenshots into a transaction import with editable account and category suggestions, duplicate checks, and a confirmation before saving. Spending comparisons and scheduled payments appear as interactive charts. The daily balance forecast shows the first projected shortfall and the amount needed to stay at or above zero through the forecast. Payday questions use the recurring payment calendar to compare scheduled bills with the stated amount. The chat keeps its controls and composer within the phone’s safe areas.
 
 ### Security
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Measured before/after on the Transactions page: switching tabs away and back fired **4 Supabase requests** (`transactions` ×2, `categories`, `user_settings`) before the fix and **0** after, with the active filter preserved. Genuine sign-in, sign-out, token refresh and profile updates still propagate
 
 ### Changed
+- **Upcoming Payments calendar (2026-11-23):** Clicking the selected day a second time clears the selection — the highlight goes away and the day details return to the "Select a marked day" hint. Before, a day stayed selected until another day or month was chosen.
 - **Dashboard and navigation (2026-11-20):** The monthly summary brings net balance, income, expenses, and budget progress together. Upcoming Payments appears above Spending Breakdown. Upcoming payments open in the calendar with a list view available. The selected day’s details sit beside the calendar on larger screens and below it on phones. Touch users can select spending categories to highlight their share. Navigation uses a shared responsive menu with active-page indicators and keyboard dismissal on mobile.
 - **Recurring summary shows a real month instead of a smoothed average (2026-08-07):**
   - The three cards summed a **monthly-equivalent** of every recurring (biweekly × 26 ÷ 12, etc.). A $1,918.07 biweekly salary read as **$4,155.82/mo** — an annual average that matches no actual month, since August holds 2 paydays ($3,836.14) and only May and October hold 3 ($5,754.21)

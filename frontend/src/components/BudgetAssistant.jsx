@@ -33,14 +33,20 @@ const MAX_HISTORY = 16;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_CSV_BYTES = 128_000;
 const MAX_IMAGE_BYTES = 2_500_000;
+const MAX_PDF_BYTES = 2_500_000;
 const INPUT_MIN_HEIGHT = 48;
 const INPUT_RESIZE_STEP = 32;
 const WINDOW_RESIZE_STEP = 48;
 const windowHeightOverride = '--assistant-custom-window-height';
 const maximumWindowHeight = 'var(--assistant-max-height)';
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-const imageTypesByExtension = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
-const attachmentTypes = '.csv,.png,.jpg,.jpeg,.webp,text/csv,image/png,image/jpeg,image/webp';
+const typesByExtension = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pdf: 'application/pdf' };
+const attachmentTypes = '.csv,.pdf,.png,.jpg,.jpeg,.webp,text/csv,application/pdf,image/png,image/jpeg,image/webp';
+const attachmentLimits = {
+  csv: { bytes: MAX_CSV_BYTES, error: 'CSV files can be up to 128 KB.' },
+  image: { bytes: MAX_IMAGE_BYTES, error: 'Screenshots can be up to 2.5 MB.' },
+  pdf: { bytes: MAX_PDF_BYTES, error: 'PDF files can be up to 2.5 MB.' },
+};
 const formatAmount = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const assistantShortcuts = [
@@ -275,14 +281,15 @@ const actionRoutes = new Map([
 
 function attachmentKind(file) {
   if (IMAGE_TYPES.has(file.type)) return 'image';
+  if (file.type === 'application/pdf') return 'pdf';
   if (/\.csv$/i.test(file.name) || file.type === 'text/csv') return 'csv';
   return null;
 }
 
 function normalizeAttachmentType(file) {
   if (file.type && file.type !== 'application/octet-stream') return file;
-  const extension = file.name.match(/\.(png|jpe?g|webp)$/i)?.[1].toLowerCase();
-  const type = extension && imageTypesByExtension[extension];
+  const extension = file.name.match(/\.(png|jpe?g|webp|pdf)$/i)?.[1].toLowerCase();
+  const type = extension && typesByExtension[extension];
   return type ? new File([file], file.name, { type, lastModified: file.lastModified }) : file;
 }
 
@@ -314,7 +321,7 @@ async function encodeAttachment({ file, kind }) {
     : await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('The screenshot could not be read.'));
+        reader.onerror = () => reject(new Error('The file could not be read.'));
         reader.readAsDataURL(file);
       });
   return { kind, name: file.name || 'Screenshot', content };
@@ -956,15 +963,15 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     const file = normalizeAttachmentType(pickedFile);
     const kind = attachmentKind(file);
     if (!kind) {
-      setAttachmentError('Choose a CSV file or a PNG, JPEG, or WebP screenshot.');
+      setAttachmentError('Choose a CSV file, a PDF, or a PNG, JPEG, or WebP screenshot.');
       return;
     }
     if (!file.size) {
       setAttachmentError('This file is empty.');
       return;
     }
-    if (file.size > (kind === 'csv' ? MAX_CSV_BYTES : MAX_IMAGE_BYTES)) {
-      setAttachmentError(kind === 'csv' ? 'CSV files can be up to 128 KB.' : 'Screenshots can be up to 2.5 MB.');
+    if (file.size > attachmentLimits[kind].bytes) {
+      setAttachmentError(attachmentLimits[kind].error);
       return;
     }
     setAttachment({ file, kind });
@@ -975,7 +982,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
   const attachTransferredFiles = (files) => {
     if (requestRef.current || !session?.access_token) return;
     if (files.length > 1) {
-      setAttachmentError('Attach one screenshot or CSV per message.');
+      setAttachmentError('Attach one screenshot, PDF or CSV per message.');
       return;
     }
     if (setFile(files[0])) composerRef.current?.focus({ preventScroll: true });
@@ -1216,7 +1223,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         <div className="budget-assistant__drop-overlay" aria-hidden="true">
           <div>
             <LuPaperclip />
-            <span>Drop a screenshot or CSV</span>
+            <span>Drop a screenshot, PDF or CSV</span>
           </div>
         </div>
         <header className="budget-assistant__header">
@@ -1440,7 +1447,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
           />
           {attachment && (
             <div className="budget-assistant__attachment">
-              {attachment.kind === 'csv' ? <LuFileText aria-hidden="true" /> : <LuImage aria-hidden="true" />}
+              {attachment.kind === 'image' ? <LuImage aria-hidden="true" /> : <LuFileText aria-hidden="true" />}
               <span title={attachment.file.name}>{attachment.file.name || 'Screenshot'}</span>
               <button
                 type="button"
@@ -1489,8 +1496,8 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
           <button
             className="budget-assistant__attach"
             type="button"
-            aria-label="Attach CSV or screenshot"
-            title="Attach CSV or screenshot. You can also drop a file here or paste a screenshot."
+            aria-label="Attach CSV, PDF or screenshot"
+            title="Attach CSV, PDF or screenshot. You can also drop a file here or paste a screenshot."
             disabled={Boolean(pending) || !session?.access_token}
             onClick={() => uploadRef.current?.click()}
           >
