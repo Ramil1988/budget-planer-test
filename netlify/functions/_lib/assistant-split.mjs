@@ -7,6 +7,31 @@ function cents(value, label) {
   return Math.round(value * 100);
 }
 
+// The lines of a receipt, added up per category. The model only says which category each line
+// belongs to and what it costs as printed; a discount line is a negative price. Adding up is
+// arithmetic, and a model that adds thirty prices in its head gets some of them wrong.
+function partsFromItems(items) {
+  const totals = new Map();
+  for (const item of items) {
+    const category = typeof item?.category === 'string' ? item.category.trim() : '';
+    if (!category) throw new SplitInputError('Every item needs a category.');
+    const { amount } = item;
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || Number(amount.toFixed(2)) !== amount) {
+      throw new SplitInputError('An item price must have at most two decimal places.');
+    }
+    const price = Math.round(amount * 100);
+    const key = category.toLowerCase();
+    const total = totals.get(key) ?? { category, amount: 0, taxed: 0 };
+    total.amount += price;
+    if (item.taxable === true) total.taxed += price;
+    totals.set(key, total);
+  }
+  return [...totals.values()].map(({ category, amount, taxed }) => {
+    if (amount <= 0) throw new SplitInputError(`The items in "${category}" do not add up to a positive amount. Check their prices.`);
+    return { amount: amount / 100, category, description: null, taxable_amount: Math.min(Math.max(taxed, 0), amount) / 100 };
+  });
+}
+
 // A receipt lists tax and fees once for the whole purchase. The model reports the pre-tax
 // amount of each part and that one figure; sharing it out is arithmetic, so it happens here.
 // Each part gets a share in proportion to its taxed amount, to the cent, and the shares
@@ -16,7 +41,8 @@ export function spreadExtra(args) {
   return {
     ...args,
     splits: args.splits.map((split) => {
-      const parts = Array.isArray(split?.parts) ? split.parts : [];
+      const items = Array.isArray(split?.items) ? split.items : [];
+      const parts = items.length ? partsFromItems(items) : Array.isArray(split?.parts) ? split.parts : [];
       const plain = parts.map(({ taxable_amount: _taxable, ...part }) => part);
       const extra = split?.extra == null ? 0 : cents(split.extra, 'The extra charge');
       if (!extra || !parts.length) return { ids: split?.ids, parts: plain };
