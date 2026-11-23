@@ -184,6 +184,7 @@ export const checkBudgetAndNotify = async (supabase, userId, categoryId, newTran
       .eq('user_id', userId)
       .eq('category_id', categoryId)
       .eq('type', 'expense')
+      .is('deleted_at', null)
       .gte('date', startDate)
       .lte('date', endDate);
 

@@ -799,9 +799,14 @@ worst they can do is what you could do yourself.
 
 Three more guard rails, each cheap:
 
-- **Writes only on the first move.** The four `create_*` tools are offered to the model only in the
-  first tool round. After it has read data — which may contain text from a bank statement, i.e. text
-  somebody else wrote — it can no longer write. Data it read can't talk it into acting.
+- **Writes only until the first read.** The four `create_*` tools are offered to the model until it
+  looks anything up. After it has read data — which may contain text from a bank statement, i.e. text
+  somebody else wrote — it can no longer write in that turn. Data it read can't talk it into acting.
+  (The first version was stricter: writes in the *first step only*. See §4.12 for how that backfired.)
+- **Edits and deletes are never the model's to make.** To change existing transactions it can only
+  *propose*: the server checks the proposal against your rows, signs it, and the window shows a
+  "Review changes" card. You press Apply. The model reads your ledger to build the proposal, and that
+  is exactly why it isn't allowed to execute it.
 - **Imports are propose-then-confirm.** A CSV or screenshot becomes a *proposal* the server signs
   (HMAC) with an expiry. Nothing is saved until the browser sends that exact proposal back. The
   model can suggest rows; it can't smuggle in different ones between your review and the save.
@@ -812,6 +817,83 @@ And one honest shortcut: half the "assistant" isn't AI at all. Budget review, ca
 upcoming payments — those are plain SQL reads that return charts and work with no OpenAI key. **Use
 the model for language, use the database for arithmetic.** A model that adds up your spending will
 eventually be confidently wrong; a `SUM()` won't.
+
+### 4.12 The assistant that typed its own tool results (2026-11-23)
+
+I asked the assistant to split a $557.68 Costco purchase across three categories. It offered four
+numbered options, I answered "1", and the reply was this, verbatim, in the chat bubble:
+
+```
+{"type":"expense","amount":187.68,"date":"2026-11-21","category":null,...}
+{"ok":true,"already_created":false,"record":{...}}
+```
+
+Only one of the three records existed. The second line — a tool *result* reporting success — was
+written by the model. Nothing had been saved. It was acting out the conversation it wished it was
+having.
+
+Why? The safety rule said "write tools in the first step only." The model created the first record,
+got the result, and reached for the tool again — and the tool was gone. A model with a job to finish
+and no tool to finish it with doesn't stop. It **improvises the missing tool in prose**, complete
+with a plausible success message, because that is what the next token looks like.
+
+And there was a second, quieter failure: I'd asked it to *split existing* transactions and it had
+no way to edit or delete anything — it could only add. So it "split" by adding a new row beside the
+originals, turning $557.68 of spending into $877.68.
+
+Three fixes, each aimed at a different layer:
+
+1. **Give it the tool it actually needs.** `propose_transaction_changes` — it describes the edit, the
+   server validates and signs it, you approve it in a card. Capability and safety in the same move.
+2. **Loosen the rule to what it was protecting.** The danger was never "a second write"; it was "a
+   write *after reading untrusted data*." So: writes until the first read. Three creates in a row are
+   fine.
+3. **Stop trusting the reply to be prose.** Replies are now structured JSON (`message`, `choices`),
+   and any line that is bare JSON is stripped server-side before you see it.
+
+Then the fix itself failed a test. With the new tool, one run in four proposed Household **$237.68**
+instead of $187.68 — while the model's own message said, correctly, $187.68. It had to turn "three
+parts" into "edit row one, edit row two, add a third," and somewhere in that bookkeeping it lost $50.
+The card showed the wrong figure and a total of $607.68, so you *could* have caught it. "Could have"
+is not a control.
+
+So a split is now something the model only *describes*: these transactions, these parts. The server
+maps parts onto rows and **refuses any split whose parts don't add up to what they replace.** Three
+runs in a row, same answer, $557.68 — and a set of parts that's off by a cent never reaches a card.
+
+Before committing I had independent reviewers attack the change — three hunting for defects, a
+fourth trying to *refute* them so only real findings survived. Then I had a second team attack my
+fixes. Both rounds earned their keep:
+
+- **Editing a row in place broke something three files away.** Google Sheets sync decides "already
+  imported" by `date|description|amount`. Change a $307.68 row to $187.68 and the next sync no longer
+  finds $307.68 — so it imports it again, and the split you just made is doubled.
+- **My fix for that was wrong in four ways.** "Never edit: trash the original, insert a corrected
+  copy." The second team took it apart: the copy made the liability trigger deduct a mortgage payment
+  twice; it dropped the link to the recurring payment that generated the row; it left a trap in the
+  trash (Restore all doubles it); and — the one nobody expected — **the Dashboard and Reports had
+  never filtered out trashed rows at all.** Every transaction you ever deleted was still in those
+  totals. That bug predates the assistant; the assistant just made it impossible to miss.
+- **"Idempotent" was true for one card and false for two.** Re-applying the same card was safe. But
+  ask for the same split twice and you get two cards with different ids for the new rows; the second
+  saw the edited rows, took them for its own half-finished retry, and added its parts again. The check
+  now asks the right question — not "do the rows look done?" but "do *my* rows exist?"
+
+Where it landed: edit in place by default; replace only a **bank-imported** row whose amount or
+description changes, because only those rows have an import signature worth preserving. It is a
+compromise, and `CLAUDE.md` lists what it still gets wrong. The real fix is to stop deriving a row's
+identity from fields a user can edit — store the import signature once, at import.
+
+**The lessons from the review itself:**
+
+- **A fix is a change, and a change needs the same scrutiny as the thing it fixes.** The first review
+  found two real bugs. My repair of one of them introduced four. Reviewing only the original would
+  have shipped all four with a clear conscience.
+- **Soft delete is a promise every query has to keep.** One `deleted_at` column, and from then on
+  *every* read of that table is either correct or silently wrong. Budget filtered; Dashboard didn't.
+  Nothing failed, nothing warned. If a table has a "deleted" flag, grep for every read of it.
+- **An identity built from a row's contents turns every edit into a hazard.** Find out what else keys
+  off the fields before you update them.
 
 ---
 

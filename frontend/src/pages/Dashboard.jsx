@@ -788,6 +788,7 @@ export default function Dashboard() {
           .from('transactions')
           .select('id, description, date, amount, type, category_id, categories(name)')
           .eq('user_id', user.id)
+          .is('deleted_at', null)
           .gte('date', startDate)
           .lte('date', endDate)
           .order('date', { ascending: false })

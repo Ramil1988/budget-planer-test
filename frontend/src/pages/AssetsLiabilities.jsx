@@ -2005,6 +2005,7 @@ export default function AssetsLiabilities() {
         .select('amount, type, date')
         .eq('user_id', user.id)
         .eq('type', 'expense')
+        .is('deleted_at', null)
         .gte('date', twelveMonthsAgo.toISOString().split('T')[0]);
 
       if (error) throw error;

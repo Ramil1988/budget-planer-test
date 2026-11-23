@@ -67,9 +67,11 @@
 
 .budget-assistant__dialog {
   --assistant-top-gap: max(8px, env(safe-area-inset-top, 0px));
-  --assistant-max-height: calc(100dvh - var(--assistant-top-gap) - env(safe-area-inset-bottom, 0px));
+  --assistant-bottom-gap: max(8px, env(safe-area-inset-bottom, 0px));
+  --assistant-max-height: calc(100dvh - var(--assistant-top-gap) - var(--assistant-bottom-gap));
   --assistant-min-window-height: min(280px, var(--assistant-max-height));
-  --assistant-window-height: clamp(var(--assistant-min-window-height), var(--assistant-custom-window-height, min(640px, 78dvh)), var(--assistant-max-height));
+  /* Full height unless the user has dragged or toggled the window to a shorter one. */
+  --assistant-window-height: clamp(var(--assistant-min-window-height), var(--assistant-custom-window-height, var(--assistant-max-height)), var(--assistant-max-height));
   --assistant-window-grip-room: 10px;
   position: fixed;
   inset: var(--assistant-top-gap) max(18px, env(safe-area-inset-right, 0px)) auto auto;
@@ -1009,6 +1011,46 @@
 
 .budget-assistant__transaction-duplicates li span {
   display: block;
+}
+
+.budget-assistant__changes {
+  background: var(--assistant-tint);
+}
+
+.budget-assistant__changes ul {
+  gap: 8px;
+  max-height: min(340px, 46dvh);
+  margin-top: 0;
+}
+
+.budget-assistant__changes .budget-assistant__transaction-amount {
+  white-space: nowrap;
+}
+
+.budget-assistant__changes li[data-kind="remove"] > div strong {
+  text-decoration: line-through;
+}
+
+.budget-assistant__changes-total {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--assistant-border);
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+}
+
+.budget-assistant__choices button {
+  justify-content: flex-start;
+  height: auto;
+  padding: 7px 10px;
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+}
+
+/* The import card sits inside the conversation, where the grid gap already spaces it. */
+.budget-assistant__messages > .budget-assistant__import {
+  margin-top: 0;
 }
 
 .budget-assistant__import-duplicates,

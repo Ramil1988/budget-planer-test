@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { BudgetReviewError, categoryBudgetTimeline, getBudgetReview, getCategoryBudgetLimits, monthBounds } from './assistant-budget.mjs';
-import { prepareAssistantTransaction, TransactionReviewError } from './assistant-transaction.mjs';
+import { prepareAssistantTransaction, proposeAssistantChanges, TransactionReviewError } from './assistant-transaction.mjs';
 import { getPaymentDatesInRange, getPaymentsUntilSalary } from '../../../frontend/src/lib/recurringUtils.js';
 import { MATCH_WINDOW_DAYS, matchesRecurringOccurrence } from '../../../frontend/src/lib/recurringAutoAdd.js';
 
@@ -36,6 +36,7 @@ const RECORDS = {
   },
 };
 
+export const CHANGES_TOOL = 'propose_transaction_changes';
 const field = (type, description) => ({ type, description });
 const optionalText = (description) => field(['string', 'null'], description);
 const typeField = { type: 'string', enum: MONEY_TYPES };
@@ -124,6 +125,73 @@ export const assistantTools = [
     category: optionalText('Exact existing category name matching the transaction type, or null to choose during review.'),
     account: optionalText('Exact existing account name, or null to choose during review.'),
     description: optionalText('Brief user-provided description, or null for the standard label.'),
+  }),
+  tool(CHANGES_TOOL, 'Prepare changes to transactions that already exist: move one to another category, correct an amount or description, split a purchase across categories (use splits), or remove an entry. This does not change anything. The app shows the changes in a card and applies them only when the user approves. Look the transactions up with list_transactions first and use their ids. Put every change for the request in one call.', {
+    updates: {
+      type: 'array',
+      description: 'Existing transactions to edit. Empty if none.',
+      items: {
+        type: 'object',
+        properties: {
+          id: field('string', 'Transaction id from list_transactions.'),
+          amount: field(['number', 'null'], 'New positive amount with at most two decimal places, or null to keep the amount.'),
+          category: optionalText('Exact existing category name matching the transaction type, or null to keep the category.'),
+          description: optionalText('New description, or null to keep the description.'),
+        },
+        required: ['id', 'amount', 'category', 'description'],
+        additionalProperties: false,
+      },
+    },
+    additions: {
+      type: 'array',
+      description: 'New transactions that take their type, date and account from an existing one. Use for the extra parts of a split. Empty if none.',
+      items: {
+        type: 'object',
+        properties: {
+          copy_from: field('string', 'Id of the existing transaction whose type, date and account the new one copies.'),
+          amount: field('number', 'Positive amount with at most two decimal places.'),
+          category: field('string', 'Exact existing category name matching the transaction type.'),
+          description: optionalText('Description, or null to reuse the description of the copied transaction.'),
+        },
+        required: ['copy_from', 'amount', 'category', 'description'],
+        additionalProperties: false,
+      },
+    },
+    removals: {
+      type: 'array',
+      description: 'Ids of existing transactions to move to the trash. Empty if none.',
+      items: { type: 'string' },
+    },
+    splits: {
+      type: 'array',
+      description: 'Purchases to divide across categories without changing their total. The app turns the parts into edits of the selected transactions and rejects parts that do not add up. Empty if none.',
+      items: {
+        type: 'object',
+        properties: {
+          ids: {
+            type: 'array',
+            description: 'Ids of the existing transactions that together make up the purchase.',
+            items: { type: 'string' },
+          },
+          parts: {
+            type: 'array',
+            description: 'The parts that replace those transactions. Their amounts must add up to the total of the selected transactions.',
+            items: {
+              type: 'object',
+              properties: {
+                amount: field('number', 'Positive amount with at most two decimal places.'),
+                category: field('string', 'Exact existing category name matching the transaction type.'),
+                description: optionalText('Description, or null to keep the description of the original transaction.'),
+              },
+              required: ['amount', 'category', 'description'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['ids', 'parts'],
+        additionalProperties: false,
+      },
+    },
   }),
   tool('create_account', 'Create an explicitly requested account in the budget ledger.', {
     name: field('string', 'User-provided account name.'),
@@ -293,7 +361,7 @@ async function listTransactions(supabase, userId, args) {
   const page = paginate(args);
   const filters = await getTransactionFilters(supabase, userId, args);
   const rows = await fetchData(transactions(supabase, userId, filters,
-    'date,type,amount,description,provider,account:accounts(name),category:categories(name)')
+    'id,date,type,amount,description,provider,account:accounts(name),category:categories(name)')
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
     .order('id')
@@ -878,6 +946,15 @@ export async function executeAssistantTool(context) {
       throw new ToolInputError('The supplied arguments are invalid.');
     }
     if (isWriteTool(name)) return await runCreateTool(context);
+    if (name === CHANGES_TOOL) {
+      return await proposeAssistantChanges({
+        supabase,
+        userId,
+        signingKey: context.signingKey,
+        args,
+        newId: (index) => requestRecordId(userId, context.requestId, index, `${CHANGES_TOOL}:${context.proposalIndex}`),
+      });
+    }
     if (name === 'list_transactions') return { result: await listTransactions(supabase, userId, args) };
     if (name === 'summarize_transactions') return await summarizeTransactions(supabase, userId, args);
     if (name === 'compare_spending_categories') {

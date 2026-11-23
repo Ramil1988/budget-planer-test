@@ -723,6 +723,7 @@ export default function Reports() {
         .from('transactions')
         .select('date, amount, type, category_id, categories(name)')
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .gte('date', startDate)
         .lte('date', endDate);
 

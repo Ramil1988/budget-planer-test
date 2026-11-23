@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import {
@@ -38,7 +38,7 @@ const INPUT_MIN_HEIGHT = 48;
 const INPUT_RESIZE_STEP = 32;
 const WINDOW_RESIZE_STEP = 48;
 const windowHeightOverride = '--assistant-custom-window-height';
-const maximumWindowHeight = 'var(--assistant-max-height)';
+const compactWindowHeight = 'min(640px, 78dvh)';
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const typesByExtension = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pdf: 'application/pdf' };
 const attachmentTypes = '.csv,.pdf,.png,.jpg,.jpeg,.webp,text/csv,application/pdf,image/png,image/jpeg,image/webp';
@@ -621,6 +621,63 @@ function TransactionReview({ review, busy, onConfirm, onSkip, onEdit }) {
   );
 }
 
+function ChangeReview({ review, busy, onApply, onSkip }) {
+  const headingId = useId();
+  const noteId = useId();
+  const { items, totals } = review;
+  const money = (type, amount) => `${type === 'income' ? '+' : '−'}$${formatAmount.format(amount)}`;
+  const net = (value) => `${value < 0 ? '−' : ''}$${formatAmount.format(Math.abs(value))}`;
+  const labels = { update: 'Change', add: 'Add', remove: 'Remove' };
+
+  return (
+    <section className="budget-assistant__transaction" aria-labelledby={`${headingId} ${noteId}`}>
+      <div className="budget-assistant__transaction-heading">
+        <div>
+          <h3 id={headingId}>Review changes</h3>
+          <p id={noteId}>Nothing changes until you apply.</p>
+        </div>
+      </div>
+
+      <div className="budget-assistant__transaction-duplicates budget-assistant__changes">
+        <ul aria-label="Proposed changes">
+          {items.map((item, index) => {
+            const category = item.kind === 'update' && item.newCategory !== item.category
+              ? `${item.category ?? 'No category'} → ${item.newCategory ?? 'No category'}`
+              : item.newCategory ?? item.category;
+
+            return (
+              <li key={index} data-kind={item.kind}>
+                <div>
+                  <strong>{labels[item.kind]}: {item.newDescription ?? item.description}</strong>
+                  <span>{[formatReviewDate(item.date), category, item.account].filter(Boolean).join(' · ')}</span>
+                </div>
+                <strong className="budget-assistant__transaction-amount" data-type={item.type}>
+                  {item.kind === 'update' && item.newAmount !== item.amount
+                    ? `${money(item.type, item.amount)} → ${money(item.type, item.newAmount)}`
+                    : money(item.type, item.amount)}
+                </strong>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="budget-assistant__changes-total">
+          Total of these transactions: {net(totals.before)} → {net(totals.after)}
+          {totals.before === totals.after ? ' (unchanged)' : ''}
+        </p>
+      </div>
+
+      <div className="budget-assistant__transaction-controls">
+        <button type="button" className="budget-assistant__transaction-skip" disabled={busy} onClick={onSkip}>
+          Skip
+        </button>
+        <button type="button" className="budget-assistant__transaction-save" disabled={busy} onClick={onApply}>
+          Apply changes
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function fitComposer(composer) {
   if (!composer?.offsetWidth) return;
   // Measure the text independently of the user's chosen minimum height.
@@ -633,7 +690,7 @@ function fitComposer(composer) {
 
 function AssistantWindowResize({ dialogRef, dialogId }) {
   const drag = useRef(null);
-  const heightBeforeFill = useRef('');
+  const shorterHeight = useRef('');
 
   const getBounds = () => {
     const dialog = dialogRef.current;
@@ -677,13 +734,14 @@ function AssistantWindowResize({ dialogRef, dialogId }) {
   const toggleWindowHeight = (event) => {
     if (event.detail > 0 && drag.current?.moved) return;
     const style = dialogRef.current.style;
-    const currentHeight = style.getPropertyValue(windowHeightOverride);
-    if (currentHeight === maximumWindowHeight) {
-      if (heightBeforeFill.current) style.setProperty(windowHeightOverride, heightBeforeFill.current);
-      else style.removeProperty(windowHeightOverride);
+    const { height, maximum } = getBounds();
+    if (height >= maximum - 1) {
+      // The window opens at full height, so the toggle goes to the last shorter size, or a compact one.
+      const previous = parseFloat(shorterHeight.current);
+      style.setProperty(windowHeightOverride, previous < maximum - 1 ? shorterHeight.current : compactWindowHeight);
     } else {
-      heightBeforeFill.current = currentHeight;
-      style.setProperty(windowHeightOverride, maximumWindowHeight);
+      shorterHeight.current = style.getPropertyValue(windowHeightOverride);
+      style.removeProperty(windowHeightOverride);
     }
   };
 
@@ -693,8 +751,8 @@ function AssistantWindowResize({ dialogRef, dialogId }) {
       type="button"
       aria-label="Resize chat window height"
       aria-controls={dialogId}
-      aria-description="Drag or use the arrow keys to resize. Click or press Enter to switch between maximum height and the previous size."
-      title="Drag down for a taller chat window or up for a shorter one. Click to fill or restore height."
+      aria-description="Drag or use the arrow keys to resize. Click or press Enter to switch between full height and a shorter window."
+      title="Drag up for a shorter chat window or down for a taller one. Click to switch between full height and a shorter window."
       onPointerDown={start}
       onPointerMove={move}
       onLostPointerCapture={stop}
@@ -722,6 +780,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
   const [importPreview, setImportPreview] = useState(null);
   const [importResults, setImportResults] = useState({});
   const [transactionReviews, setTransactionReviews] = useState([]);
+  const [changeReviews, setChangeReviews] = useState([]);
   const dialogId = useId();
   const titleId = useId();
   const launcherRef = useRef(null);
@@ -751,6 +810,16 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     const panel = scrollRef.current;
     if (!open || !panel) return;
 
+    // An import card sits with the reply that produced it, which may be far above the newest
+    // message. While it is being committed, keep it in view instead of jumping to the bottom.
+    const committing = pending === 'commit_import' || failure?.turn.body.mode === 'commit_import'
+      || latestMessage?.replyMode === 'commit_import';
+    const importCard = committing && panel.querySelector('.budget-assistant__messages .budget-assistant__import');
+    if (importCard) {
+      importCard.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
     const latestReview = !pending && !failure && showLatestFromStart
       ? panel.querySelector('.budget-assistant__messages')?.lastElementChild
       : null;
@@ -759,7 +828,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     } else {
       panel.scrollTop = panel.scrollHeight;
     }
-  }, [open, latestMessageId, showLatestFromStart, pending, failure, importPreview, transactionReviews]);
+  }, [open, latestMessageId, showLatestFromStart, pending, failure, importPreview, transactionReviews, changeReviews]);
 
   useLayoutEffect(() => {
     if (open) fitComposer(composerRef.current);
@@ -902,6 +971,9 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         replyMode: turn.body.mode,
         timeZone: turn.body.timeZone,
         actions,
+        choices: Array.isArray(payload.choices)
+          ? payload.choices.filter((choice) => typeof choice === 'string' && choice.trim()).slice(0, 4)
+          : [],
         visuals: validAssistantReplyVisuals(payload.visuals),
       };
       if (payload.importDraft) {
@@ -927,14 +999,22 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
             )
             .map((review, index) => ({ ...review, id: `review:${turn.id}:${index}` }))
         : [];
+      const changes = Array.isArray(payload.changeReviews)
+        ? payload.changeReviews
+            .filter((review) => typeof review?.token === 'string' && Array.isArray(review.items) && review.items.length
+              && Number.isFinite(review.totals?.before) && Number.isFinite(review.totals?.after))
+            .map((review, index) => ({ ...review, id: `changes:${turn.id}:${index}` }))
+        : [];
       if (turn.reviewId) {
         settledReviews.current.add(turn.reviewId);
         setTransactionReviews((previous) => previous.flatMap((review) =>
           review.id === turn.reviewId ? reviews : [review],
         ));
+        setChangeReviews((previous) => previous.filter(({ id }) => id !== turn.reviewId));
       } else if (reviews.length) {
         setTransactionReviews((previous) => [...previous, ...reviews]);
       }
+      if (changes.length) setChangeReviews((previous) => [...previous, ...changes]);
       setMessages((current) => [...current, message]);
       dataChanged ||= actions.length > 0;
     } catch (error) {
@@ -1048,10 +1128,12 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         ...(fileAttachment ? { mode: 'prepare_import' } : { visuals: true }),
         ...(analysisOnly ? { analysisOnly: true } : {}),
         requestId,
-        messages: updatedMessages.slice(-MAX_HISTORY).map(({ role, content, requestPrompt: prompt }) => ({
-          role,
-          content: prompt ?? content,
-        })),
+        messages: updatedMessages.slice(-MAX_HISTORY).map(({ role, content, requestPrompt: prompt, choices }) => {
+          if (prompt || !choices?.length) return { role, content: prompt ?? content };
+          // The server rejects a message over 6000 characters, so the options never push one past it.
+          const offered = `\n\nOptions offered:\n${choices.map((choice, index) => `${index + 1}) ${choice}`).join('\n')}`;
+          return { role, content: `${content.slice(0, 6000 - offered.length)}${offered}` };
+        }),
         timeZone,
       };
     requestReply({ id: requestId, attachment: fileAttachment, body });
@@ -1176,6 +1258,24 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     composerRef.current?.focus();
   };
 
+  const applyChanges = (review) => {
+    const russian = /^ru\b/i.test(navigator.language)
+      || messages.some(({ role, content }) => role === 'user' && /[А-Яа-яЁё]/.test(content));
+    requestReply({
+      id: crypto.randomUUID(),
+      reviewId: review.id,
+      body: { mode: 'confirm_changes', changesToken: review.token, language: russian ? 'ru' : 'en' },
+    });
+  };
+
+  const skipChanges = (reviewId) => {
+    if (requestRef.current) return;
+    settledReviews.current.add(reviewId);
+    setChangeReviews((previous) => previous.filter(({ id }) => id !== reviewId));
+    clearReviewFailure(reviewId);
+    composerRef.current?.focus();
+  };
+
   const reset = () => {
     if (requestRef.current) return;
     setMessages([]);
@@ -1187,9 +1287,26 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     setImportPreview(null);
     setImportResults({});
     setTransactionReviews([]);
+    setChangeReviews([]);
     settledReviews.current.clear();
     closeRef.current?.focus();
   };
+
+  // The import card belongs to the reply that produced it. Pinned under the newest
+  // message, it looked as if every later reply proposed the same import again.
+  const importReview = importPreview && (importPreview.rows.length > 0 || importPreview.warnings?.length > 0) && (
+    <ImportReview
+      key={importPreview.sourceId ?? importPreview.id}
+      preview={importPreview}
+      results={importResults}
+      pending={pending}
+      onImport={commitImport}
+      onModify={clearImportFailure}
+    />
+  );
+  // sourceId stays the same when an import refreshes its draft, so the card keeps its place and its selection.
+  const importAnchor = importReview
+    && messages.find(({ id }) => id === `reply:${importPreview.sourceId ?? importPreview.id}`)?.id;
 
   return createPortal(
     <div className="budget-assistant">
@@ -1278,7 +1395,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
             </div>
           ) : (
             <div className="budget-assistant__messages" role="log" aria-label="Conversation">
-              {messages.map(({ id, role, content, originalContent, actions, attachmentName, visuals, timeZone }, index) => {
+              {messages.map(({ id, role, content, originalContent, actions, choices, attachmentName, visuals, timeZone }, index) => {
                 const previous = messages[index - 1];
                 const request = previous?.role === 'user' ? previous.requestPrompt ?? previous.content : '';
                 const plainComparison = role === 'assistant' && !visuals?.length && isPlainCategoryComparison(content, request);
@@ -1287,10 +1404,10 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                   && visuals?.some(({ kind, payments }) => kind === 'upcoming-payments' && payments.length === 0);
                 const language = /\p{Script=Cyrillic}/u.test(content) ? 'ru' : 'en';
                 return (
+                  <Fragment key={id}>
                   <div
                     className={`budget-assistant__message budget-assistant__message--${role}`}
                     data-has-visuals={visuals?.length ? true : undefined}
-                    key={id}
                   >
                     <span className="budget-assistant__message-author">
                       {role === 'user' ? 'You' : 'Budget assistant'}
@@ -1338,6 +1455,20 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                         <p>{originalContent ?? content}</p>
                       </details>
                     )}
+                    {choices?.length > 0 && (
+                      <div className="assistant-follow-ups budget-assistant__choices" role="group" aria-label="Choose a reply">
+                        {choices.map((choice) => (
+                          <button
+                            key={choice}
+                            type="button"
+                            disabled={index !== messages.length - 1 || Boolean(pending) || !session?.access_token}
+                            onClick={() => send(choice, null, { requestPrompt: choice })}
+                          >
+                            {choice}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {attachmentName && (
                       <span className="budget-assistant__message-attachment">
                         <LuPaperclip aria-hidden="true" /> {attachmentName}
@@ -1362,20 +1493,22 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                       </ul>
                     )}
                   </div>
+                  {id === importAnchor && importReview}
+                  </Fragment>
                 );
               })}
             </div>
           )}
-          {importPreview && (importPreview.rows.length > 0 || importPreview.warnings?.length > 0) && (
-            <ImportReview
-              key={importPreview.sourceId ?? importPreview.id}
-              preview={importPreview}
-              results={importResults}
-              pending={pending}
-              onImport={commitImport}
-              onModify={clearImportFailure}
+          {!importAnchor && importReview}
+          {changeReviews.map((review) => (
+            <ChangeReview
+              key={review.id}
+              review={review}
+              busy={Boolean(pending) || !session?.access_token}
+              onApply={() => applyChanges(review)}
+              onSkip={() => skipChanges(review.id)}
             />
-          )}
+          ))}
           {transactionReviews.map((review) => (
             <TransactionReview
               key={review.id}
@@ -1402,6 +1535,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                 prepare_import: 'Reading your attachment…',
                 commit_import: 'Importing transactions…',
                 confirm_transaction: 'Saving transaction…',
+                confirm_changes: 'Applying changes…',
                 budget_review: 'Checking this category’s transactions…',
                 financial_summary: 'Reviewing recorded income and expenses…',
                 category_comparison: 'Comparing recorded spending…',
