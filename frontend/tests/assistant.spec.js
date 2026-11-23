@@ -87,6 +87,42 @@ test.describe('Budget assistant', () => {
     expect(requests.at(-1)).toMatchObject({ mode: 'confirm_changes', changesToken: 'signed-token' });
   });
 
+  test('a file sent with a request can come back as a change card', async ({ page }) => {
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode !== 'prepare_import') return null;
+      // With a request the server may answer like a chat turn; a file on its own is an import.
+      return body.attachmentNote
+        ? {
+          message: 'The split is waiting in the card.',
+          choices: [],
+          actions: [],
+          changeReviews: [{
+            token: 'signed-token',
+            totals: { before: -557.68, after: -557.68 },
+            items: [{ kind: 'update', type: 'expense', date: '2026-11-21', description: 'COSTCO WHOLESALE', newDescription: null, amount: 307.68, newAmount: 187.68, category: 'Food/Costco', newCategory: 'Household' }],
+          }],
+        }
+        : {
+          message: 'Review the transactions found in your file.',
+          actions: [],
+          importDraft: { token: 'draft', rows: [], warnings: ['Used the receipt total.'], accounts: [], categories: [] },
+        };
+    });
+    const receipt = { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) };
+
+    await dialog.locator('input[type=file]').setInputFiles(receipt);
+    await dialog.getByRole('textbox').fill('Split the purchase that is already recorded');
+    await dialog.getByTitle('Analyze attachment').click();
+    await expect(dialog.getByRole('region', { name: /Review changes/ })).toBeVisible();
+    await expect(dialog.getByRole('region', { name: 'Review transactions' })).toHaveCount(0);
+    expect(requests.at(-1)).toMatchObject({ mode: 'prepare_import', attachmentNote: true, attachment: { kind: 'image' } });
+
+    await dialog.locator('input[type=file]').setInputFiles(receipt);
+    await dialog.getByTitle('Analyze attachment').click();
+    await expect(dialog.getByRole('region', { name: 'Review transactions' })).toBeVisible();
+    expect(requests.at(-1)).toMatchObject({ mode: 'prepare_import', attachmentNote: false });
+  });
+
   test('a pending import stays with the reply that produced it', async ({ page }) => {
     const { dialog } = await openAssistant(page, (body) => {
       if (body.mode === 'prepare_import') {

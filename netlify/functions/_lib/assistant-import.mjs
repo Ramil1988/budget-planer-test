@@ -123,6 +123,14 @@ function pdfContent(value) {
   return value;
 }
 
+// The validated attachment as a model input part, for a turn where the chat model reads
+// the file itself. CSV files are not offered this way: they are always an import.
+export function attachmentInput(attachment) {
+  if (attachment?.kind === 'image') return { type: 'input_image', image_url: imageContent(attachment.content), detail: 'high' };
+  if (attachment?.kind === 'pdf') return { type: 'input_file', filename: 'statement.pdf', file_data: pdfContent(attachment.content) };
+  return null;
+}
+
 const nullableText = { type: ['string', 'null'] };
 const transactionType = { type: ['string', 'null'], enum: ['expense', 'income', null] };
 const extractionSchema = {

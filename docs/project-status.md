@@ -130,6 +130,7 @@
   - [x] Upcoming Payments calendar: click the selected day again to deselect it (2026-11-23)
   - [x] Assistant can change existing transactions — recategorize, correct, split, remove — through a "Review changes" card the user applies (2026-11-23)
   - [x] Assistant offers decisions as clickable buttons; replies no longer leak tool JSON (2026-11-23)
+  - [x] A receipt sent with a request can split or recategorize a purchase that is already recorded; receipt tax is shared between the parts on the server (2026-11-23)
   - [x] Interactive charts for spending comparisons, scheduled payments and the daily balance forecast
   - [x] Chat window stays inside phone safe areas, portrait and landscape
 - [x] Dashboard and navigation refresh (2026-11-20)

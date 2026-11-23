@@ -1125,7 +1125,8 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     const body = review
       ? { ...review, timeZone, language: usesRussian ? 'ru' : 'en', visuals: true }
       : {
-        ...(fileAttachment ? { mode: 'prepare_import' } : { visuals: true }),
+        // A file with a request lets the assistant decide what to do with it; a file on its own is an import.
+        ...(fileAttachment ? { mode: 'prepare_import', attachmentNote: Boolean(text.trim()) } : { visuals: true }),
         ...(analysisOnly ? { analysisOnly: true } : {}),
         requestId,
         messages: updatedMessages.slice(-MAX_HISTORY).map(({ role, content, requestPrompt: prompt, choices }) => {

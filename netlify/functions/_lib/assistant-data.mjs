@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { BudgetReviewError, categoryBudgetTimeline, getBudgetReview, getCategoryBudgetLimits, monthBounds } from './assistant-budget.mjs';
+import { spreadExtra, SplitInputError } from './assistant-split.mjs';
 import { prepareAssistantTransaction, proposeAssistantChanges, TransactionReviewError } from './assistant-transaction.mjs';
 import { getPaymentDatesInRange, getPaymentsUntilSalary } from '../../../frontend/src/lib/recurringUtils.js';
 import { MATCH_WINDOW_DAYS, matchesRecurringOccurrence } from '../../../frontend/src/lib/recurringAutoAdd.js';
@@ -175,20 +176,22 @@ export const assistantTools = [
           },
           parts: {
             type: 'array',
-            description: 'The parts that replace those transactions. Their amounts must add up to the total of the selected transactions.',
+            description: 'The parts that replace those transactions. Their amounts plus extra must add up to the total of the selected transactions.',
             items: {
               type: 'object',
               properties: {
-                amount: field('number', 'Positive amount with at most two decimal places.'),
+                amount: field('number', 'Positive amount with at most two decimal places. When extra is used, the amount before that extra charge.'),
                 category: field('string', 'Exact existing category name matching the transaction type.'),
                 description: optionalText('Description, or null to keep the description of the original transaction.'),
+                taxable_amount: field(['number', 'null'], 'How much of this amount the extra charge applies to, for example the taxed items of the part. 0 if none of it is taxed, null if unknown or if extra is not used.'),
               },
-              required: ['amount', 'category', 'description'],
+              required: ['amount', 'category', 'description', 'taxable_amount'],
               additionalProperties: false,
             },
           },
+          extra: field(['number', 'null'], 'A charge listed once for the whole purchase and not included in any part amount, such as the tax line of a receipt. The app shares it between the parts in proportion to their taxable_amount. Null when the part amounts already add up to the total.'),
         },
-        required: ['ids', 'parts'],
+        required: ['ids', 'parts', 'extra'],
         additionalProperties: false,
       },
     },
@@ -951,7 +954,7 @@ export async function executeAssistantTool(context) {
         supabase,
         userId,
         signingKey: context.signingKey,
-        args,
+        args: spreadExtra(args),
         newId: (index) => requestRecordId(userId, context.requestId, index, `${CHANGES_TOOL}:${context.proposalIndex}`),
       });
     }
@@ -976,6 +979,6 @@ export async function executeAssistantTool(context) {
     }
     return { result: await listFinanceRecords(supabase, userId, args) };
   } catch (error) {
-    return { result: { ok: false, error: (error instanceof ToolInputError || error instanceof TransactionReviewError || error instanceof BudgetReviewError) ? error.message : 'BudgetWise could not complete this operation.' } };
+    return { result: { ok: false, error: (error instanceof ToolInputError || error instanceof TransactionReviewError || error instanceof BudgetReviewError || error instanceof SplitInputError) ? error.message : 'BudgetWise could not complete this operation.' } };
   }
 }

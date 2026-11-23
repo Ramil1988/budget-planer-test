@@ -895,6 +895,26 @@ identity from fields a user can edit — store the import signature once, at imp
 - **An identity built from a row's contents turns every edit into a hazard.** Find out what else keys
   off the fields before you update them.
 
+### 4.13 "Why did nothing change?" (2026-11-23)
+
+The day the assistant learned to split a recorded purchase, I attached the Costco receipt, wrote
+"split it by category" — and got the same import card as before. Deployed, tested, and for the one
+thing I actually wanted to do, nothing had changed.
+
+The new ability lived in the chat path. A message with a file took a *different* path, decided by one
+line in the browser: file attached → `mode: 'prepare_import'`. That path had never heard of editing
+anything. I had tested the feature the way I built it (typing), not the way it would be used (handing
+over a receipt).
+
+The fix was to stop deciding in the browser. A file that comes with a request goes to the model
+together with the tools, and *the model* chooses: import it, or use it to change what's recorded. And
+the tax line — one number for the whole receipt — is shared out between the taxed items by the
+server, because on the first try the model put all of the HST on one category.
+
+**The lesson:** a capability is only as available as the paths that lead to it. When you add one,
+list every entry point a user has — typing, attaching, clicking a button, retrying — and check each.
+"It works" means it works from where the user is standing.
+
 ---
 
 ## 5. War Stories
