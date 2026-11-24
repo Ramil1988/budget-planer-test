@@ -978,13 +978,17 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         receiptToken: typeof payload.receiptToken === 'string' ? payload.receiptToken : undefined,
         visuals: validAssistantReplyVisuals(payload.visuals),
       };
+      // A follow-up about a receipt replaces what the receipt proposed before, whichever kind of card that was.
+      const receiptFollowUp = typeof turn.body.receiptToken === 'string' && typeof payload.receiptToken === 'string';
       if (payload.importDraft) {
         setImportPreview((previous) => ({
           ...payload.importDraft,
           id: turn.id,
           sourceId: turn.body.mode === 'commit_import' ? previous?.sourceId ?? previous?.id ?? turn.id : turn.id,
+          fromReceipt: turn.body.mode === 'commit_import' ? Boolean(previous?.fromReceipt) : typeof payload.receiptToken === 'string',
         }));
         setImportResults({});
+        if (receiptFollowUp) setChangeReviews((previous) => previous.filter(({ fromReceipt }) => !fromReceipt));
       }
       if (Array.isArray(payload.importResult?.rows)) {
         if (!payload.importDraft) {
@@ -1021,6 +1025,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       if (changes.length) {
         const corrected = typeof turn.body.receiptToken === 'string' && changes.some(({ fromReceipt }) => fromReceipt);
         setChangeReviews((previous) => [...(corrected ? previous.filter(({ fromReceipt }) => !fromReceipt) : previous), ...changes]);
+        if (corrected) setImportPreview((previous) => (previous?.fromReceipt ? null : previous));
       }
       setMessages((current) => [...current, message]);
       dataChanged ||= actions.length > 0;

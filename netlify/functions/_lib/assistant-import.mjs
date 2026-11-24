@@ -330,6 +330,18 @@ export async function prepareAssistantImport({
   };
 }
 
+// A draft from rows the server worked out itself, such as a checked receipt split by category.
+// It goes through the same preview and the same signed, two-step confirmation as a file import.
+export async function draftAssistantImport({ rows, warnings, userId, supabase, signingKey, readOnly, options }) {
+  const preview = await previewAssistantImport({ supabase, userId, rows: rows.map(normalizeExtractedRow), options });
+  return importDraft(preview, {
+    userId,
+    proposalId: randomUUID(),
+    expires: Date.now() + importLifetime,
+    warnings: warnings.map((warning) => trim(warning, 900)).filter(Boolean),
+  }, signingKey, readOnly);
+}
+
 export async function confirmAssistantImport({ token, selection, userId, supabase, signingKey }) {
   if (!Array.isArray(selection) || selection.length === 0 || selection.length > maxRows) {
     throw new ImportRequestError('Select the transactions you want to import.');

@@ -156,6 +156,70 @@ test.describe('Budget assistant', () => {
     await expect(cards.getByText('Food/Costco → Gifts')).toBeVisible();
   });
 
+  test('a purchase missing from the records can be added as new transactions with one click', async ({ page }) => {
+    const offer = 'Add the purchase as new transactions split by category';
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode === 'prepare_import') {
+        return { message: 'No recorded transactions add up to this receipt.', choices: [offer], actions: [], receiptToken: 'signed-receipt' };
+      }
+      if (body.mode) return null;
+      return {
+        message: 'One new transaction per category.',
+        choices: [],
+        actions: [],
+        receiptToken: 'signed-receipt',
+        importDraft: { token: 'draft', rows: [], warnings: ['If the payment arrives from the bank later, it is recorded separately.'], accounts: [], categories: [] },
+      };
+    });
+
+    await dialog.locator('input[type=file]').setInputFiles({
+      name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await dialog.getByRole('textbox').fill('Split the purchase that is already recorded');
+    await dialog.getByTitle('Analyze attachment').click();
+    await dialog.getByRole('button', { name: offer }).click();
+
+    // The offer is answered from the receipt that was already read: no second upload.
+    await expect(dialog.getByRole('region', { name: 'Review transactions' })).toBeVisible();
+    await expect(dialog.getByText('If the payment arrives from the bank later')).toBeVisible();
+    expect(requests.at(-1).receiptToken).toBe('signed-receipt');
+    expect(requests.at(-1).attachment).toBeUndefined();
+    expect(requests.at(-1).messages.at(-1)).toEqual({ role: 'user', content: offer });
+  });
+
+  test('switching a receipt from a split to new transactions leaves one card', async ({ page }) => {
+    const { dialog } = await openAssistant(page, (body) => {
+      const split = {
+        token: 'signed-token',
+        totals: { before: -557.68, after: -557.68 },
+        items: [{ kind: 'update', type: 'expense', date: '2026-11-21', description: 'COSTCO WHOLESALE', newDescription: null, amount: 307.68, newAmount: 73.44, category: 'Food/Costco', newCategory: 'Gifts' }],
+      };
+      if (body.mode === 'prepare_import') return { message: 'Receipt read.', choices: [], actions: [], receiptToken: 'signed-receipt', changeReviews: [split] };
+      if (body.mode) return null;
+      return body.messages.at(-1).content.startsWith('Add')
+        ? { message: 'One new transaction per category.', choices: [], actions: [], receiptToken: 'signed-receipt', importDraft: { token: 'draft', rows: [], warnings: ['Check for a double entry.'], accounts: [], categories: [] } }
+        : { message: 'Split again.', choices: [], actions: [], receiptToken: 'signed-receipt', changeReviews: [split] };
+    });
+    const changeCard = dialog.getByRole('region', { name: /Review changes/ });
+    const importCard = dialog.getByRole('region', { name: 'Review transactions' });
+
+    await dialog.locator('input[type=file]').setInputFiles({
+      name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await dialog.getByRole('textbox').fill('Split the purchase that is already recorded');
+    await dialog.getByTitle('Analyze attachment').click();
+    await expect(changeCard).toBeVisible();
+
+    // Both cards are about the same purchase: applying both would count it twice.
+    await say(dialog, 'Add it as new transactions instead');
+    await expect(importCard).toBeVisible();
+    await expect(changeCard).toHaveCount(0);
+
+    await say(dialog, 'No, split the recorded one after all');
+    await expect(changeCard).toBeVisible();
+    await expect(importCard).toHaveCount(0);
+  });
+
   test('a pending import stays with the reply that produced it', async ({ page }) => {
     const { dialog } = await openAssistant(page, (body) => {
       if (body.mode === 'prepare_import') {

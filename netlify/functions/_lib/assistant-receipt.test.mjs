@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkReceipt, linesTotal, readReceipt, receiptMessage, signReceipt, verifyReceipt } from './assistant-receipt.mjs';
+import { addChoice, addWarnings, checkReceipt, linesTotal, notFoundMessage, planFormat, planInstructions, readReceipt, receiptMessage, signReceipt, verifyReceipt } from './assistant-receipt.mjs';
 import { resolveSplits, SplitInputError } from './assistant-split.mjs';
 
 // The shape the model returns: short keys, a discount as a negative line.
@@ -107,10 +107,10 @@ test('a wrong first reading is retried once with the reason', async () => {
   assert.equal(failed.receipt, null);
   assert.match(failed.problem, /figures do not agree/);
 
-  // A purchase to be added as new is imported whole, so a failed check is not worth a second read.
+  // A purchase to be added as new is split by category from its lines, so it gets the second read too.
   let reads = 0;
-  const toImport = await readReceipt(async () => { reads += 1; return raw({ wants: 'add_as_new', lines: raw().lines.slice(1) }); });
-  assert.deepEqual([reads, toImport.wants, toImport.receipt], [1, 'add_as_new', null]);
+  const toAdd = await readReceipt(async () => { reads += 1; return raw({ wants: 'add_as_new', lines: reads === 1 ? raw().lines.slice(1) : raw().lines }); });
+  assert.deepEqual([reads, toAdd.wants, toAdd.receipt.lines.length], [2, 'add_as_new', 6]);
 });
 
 test('lines grouped by category become exact parts, with the tax shared between taxed lines', () => {
@@ -121,7 +121,7 @@ test('lines grouped by category become exact parts, with the tax shared between 
   assert.deepEqual(args.splits, [{ ids: ['a'], parts: [
     { amount: 49.98, category: 'Food', description: null },
     { amount: 35.01, category: 'Household', description: null },
-  ] }]);
+  ], receipt_total: true }]);
   assert.deepEqual(breakdown.map(({ category, amount, beforeTax, tax }) => [category, amount, beforeTax, tax]), [
     ['Food', 49.98, 49.98, 0], ['Household', 35.01, 30.98, 4.03],
   ]);
@@ -170,4 +170,45 @@ test('a receipt token is accepted only unchanged, unexpired and for the same use
   assert.equal(verifyReceipt(`${forged}.${hash}`, 'user-1', 'secret'), null);
   assert.equal(verifyReceipt(`${payload}.${hash}.x`, 'user-1', 'secret'), null);
   assert.equal(verifyReceipt(undefined, 'user-1', 'secret'), null);
+});
+
+const recorded = (amount, description = 'COSTCO WHOLESALE W1362') => ({ id: `t-${amount}`, date: '2026-11-21', type: 'expense', amount, description, category: 'Food/Costco' });
+const period = { from: '2026-11-18', to: '2026-12-01' };
+
+test('a purchase that is not in the records is answered with what the records do hold', () => {
+  const text = notFoundMessage('ru', receipt(), [recorded(50), recorded(20.5, 'COSTCO GAS')], period, 'CAD');
+  assert.match(text, /^В записях нет операций, которые вместе дают сумму этого чека \(84\.99 CAD\)/);
+  assert.match(text, /Похожее в записях за 18\.11\.2026 – 01\.12\.2026:\n• 21\.11\.2026 · COSTCO WHOLESALE W1362 · 50\.00 · Food\/Costco\n• 21\.11\.2026 · COSTCO GAS · 20\.50 · Food\/Costco\nВместе: 70\.50 CAD\./);
+  assert.match(text, /добавлю покупку сейчас новыми транзакциями/);
+  assert.match(notFoundMessage('ru', receipt(), [], period, 'CAD'), /Похожих на эту покупку операций за 18\.11\.2026 – 01\.12\.2026 в записях не нашлось\./);
+  assert.match(notFoundMessage('en', receipt(), [recorded(50)], period, 'CAD'), /Similar entries recorded between 2026-11-18 – 2026-12-01:\n• 2026-11-21 · COSTCO WHOLESALE W1362 · 50\.00 · Food\/Costco\nTogether: 50\.00 CAD\./);
+  // Without the right to save, the reply does not offer to add anything.
+  assert.doesNotMatch(notFoundMessage('ru', receipt(), [], period, 'CAD', false), /добавлю/);
+  assert.equal(typeof addChoice('ru'), 'string');
+  assert.notEqual(addChoice('ru'), addChoice('en'));
+});
+
+test('adding a receipt as new warns about entries that may already be this purchase', () => {
+  // Nothing from this merchant in the records: only the note about a bank feed.
+  assert.equal(addWarnings('ru', receipt(), [], 'CAD', '2026-11-23').length, 1);
+  const some = addWarnings('ru', receipt(), [recorded(50)], 'CAD', '2026-11-23');
+  assert.equal(some.length, 2);
+  assert.match(some[0], /^В записях уже есть похожие операции\. Если среди них оплата этой покупки, новые транзакции её задвоят\. 21\.11\.2026 COSTCO WHOLESALE W1362 50\.00 CAD\.$/);
+  // Entries that add up to the receipt total are the purchase itself, and that is said first.
+  const whole = addWarnings('en', receipt(), [recorded(50), recorded(34.99)], 'CAD', '2026-11-23');
+  assert.match(whole[0], /^The purchase looks recorded already/);
+  // Amounts rounded by hand are the purchase too: 85.00 recorded for a receipt of 84.99.
+  assert.match(addWarnings('en', receipt(), [recorded(85)], 'CAD', '2026-11-23')[0], /^The purchase looks recorded already/);
+  assert.match(addWarnings('en', receipt(), [recorded(88)], 'CAD', '2026-11-23')[0], /^Similar entries are already recorded/);
+  // A receipt without a date is dated today, and the card says so.
+  assert.match(addWarnings('ru', { ...receipt(), date: null }, [], 'CAD', '2026-11-23')[0], /датированы сегодняшним днём \(23\.11\.2026\)/);
+});
+
+test('the plan can add a purchase as new or report it missing, on a follow-up too', () => {
+  assert.deepEqual(planFormat.schema.properties.action.enum, ['propose', 'add', 'not_found', 'answer', 'not_about_receipt']);
+  const first = planInstructions({ today: '2026-11-23', currency: 'CAD', followUp: false });
+  assert.match(first, /action "add"/);
+  assert.match(first, /action "not_found"/);
+  assert.doesNotMatch(first, /not_about_receipt/);
+  assert.match(planInstructions({ today: '2026-11-23', currency: 'CAD', followUp: true, hasProposal: true }), /Keep its action/);
 });

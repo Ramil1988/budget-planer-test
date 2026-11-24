@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spreadExtra, SplitInputError } from './assistant-split.mjs';
+import { closeToReceipt, resolveSplits, spreadExtra, SplitInputError } from './assistant-split.mjs';
 
 const part = (amount, category, taxable_amount = null) => ({ amount, category, description: null, taxable_amount });
 const amounts = (args) => spreadExtra(args).splits[0].parts.map(({ amount }) => amount);
@@ -92,4 +92,21 @@ test('items win over parts, and items that cancel out are rejected', () => {
   assert.throws(() => spreadExtra({ splits: [{ ids: ['a'], parts: [], extra: null, items: [item(3, 'Food'), item(-3, 'Food')] }] }), SplitInputError);
   assert.throws(() => spreadExtra({ splits: [{ ids: ['a'], parts: [], extra: null, items: [item(3.005, 'Food')] }] }), SplitInputError);
   assert.throws(() => spreadExtra({ splits: [{ ids: ['a'], parts: [], extra: null, items: [item(3, ' ')] }] }), SplitInputError);
+});
+
+test('recorded amounts count as the receipt within one percent, and at least 1.00', () => {
+  assert.equal(closeToReceipt(55800, 55768), true);
+  assert.equal(closeToReceipt(56400, 55768), false);
+  // A small receipt still allows a rounded dollar.
+  assert.equal(closeToReceipt(1300, 1220), true);
+  assert.equal(closeToReceipt(1400, 1220), false);
+});
+
+test('only a split taken from a checked receipt may change the recorded total', () => {
+  const receipt = { extra: 0, byTaxMark: false, lines: [{ line: 1, name: 'BREAD', amount: 5, taxable: false }] };
+  const fromReceipt = resolveSplits({ splits: [{ ids: ['a'], receipt_groups: [{ category: 'Food', lines: [1] }] }] }, receipt);
+  assert.equal(fromReceipt.args.splits[0].receipt_total, true);
+  // The mark cannot be supplied from outside: a split given as parts never carries it.
+  const claimed = resolveSplits({ splits: [{ ids: ['a'], receipt_total: true, extra: null, parts: [{ amount: 5, category: 'Food', description: null, taxable_amount: null }] }] }, receipt);
+  assert.equal(claimed.args.splits[0].receipt_total, undefined);
 });

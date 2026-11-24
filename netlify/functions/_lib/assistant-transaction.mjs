@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { loadAssistantImportOptions } from './assistant-import-data.mjs';
+import { closeToReceipt } from './assistant-split.mjs';
 
 const reviewPurpose = 'budgetwise-assistant-transaction-v1:';
 const changesPurpose = 'budgetwise-assistant-changes-v1:';
@@ -389,15 +390,31 @@ export async function proposeAssistantChanges({ supabase, userId, signingKey, ar
     }
     const sourceTotal = sources.reduce((sum, row) => sum + cents(row.amount), 0);
     const partTotal = parts.reduce((sum, part) => sum + cents(changeAmount(part.amount)), 0);
-    if (sourceTotal !== partTotal) {
+    // Parts worked out from a checked receipt may differ a little from what was recorded, because
+    // amounts typed in by hand are often rounded. The card shows the old total and the new one.
+    const fromReceipt = split.receipt_total === true && closeToReceipt(sourceTotal, partTotal);
+    if (sourceTotal !== partTotal && !fromReceipt) {
       throw new TransactionReviewError(`The parts add up to ${(partTotal / 100).toFixed(2)} but the selected transactions total ${(sourceTotal / 100).toFixed(2)}. Adjust the parts so the total stays the same, or ask the user.`);
     }
-    parts.forEach(({ amount, category, description }, index) => {
-      const source = sources[index];
-      if (source) updates.push({ id: source.id, amount, category, description, fromSplit: true });
-      else additions.push({ copy_from: sources.at(-1).id, amount, category, description });
+    // A part goes to the transaction that already has its category, where there is one, so that
+    // a row keeps its meaning. The rest are paired in order, and what is left over is added or removed.
+    const left = [...parts];
+    const sameCategory = sources.map((source) => {
+      const name = (categoryNames.get(source.category_id) ?? '').toLowerCase();
+      const index = left.findIndex(({ category }) => typeof category === 'string' && category.trim().toLowerCase() === name);
+      return index === -1 ? null : left.splice(index, 1)[0];
     });
-    removals.push(...sources.slice(parts.length).map(({ id }) => id));
+    sources.forEach((source, index) => {
+      const part = sameCategory[index] ?? left.shift();
+      if (part) updates.push({ id: source.id, amount: part.amount, category: part.category, description: part.description, fromSplit: true });
+      else removals.push(source.id);
+    });
+    // A new row is a copy of the source with the shortest description: of "Costco" and
+    // "Costco Household" the first is the merchant, the second already says what its row holds.
+    const template = sources.reduce((plain, source) => ((source.description ?? '').length < (plain.description ?? '').length ? source : plain));
+    for (const { amount, category, description } of left) {
+      additions.push({ copy_from: template.id, amount, category, description });
+    }
   }
   const count = updates.length + additions.length + removals.length;
   if (count > maxChanges) throw new TransactionReviewError(`Propose at most ${maxChanges} changes at a time.`);

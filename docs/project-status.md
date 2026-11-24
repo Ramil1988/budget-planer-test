@@ -132,6 +132,7 @@
   - [x] Assistant offers decisions as clickable buttons; replies no longer leak tool JSON (2026-11-23)
   - [x] A receipt sent with a request can split or recategorize a purchase that is already recorded; receipt tax is shared between the parts on the server (2026-11-23)
   - [x] Receipts are copied and checked against their printed totals before any amount is used; the reply lists every line per category; corrections work without a second upload (2026-11-23)
+  - [x] A receipt for a purchase that is not recorded yet can be added as new transactions, one per category (2026-11-23)
   - [x] Interactive charts for spending comparisons, scheduled payments and the daily balance forecast
   - [x] Chat window stays inside phone safe areas, portrait and landscape
 - [x] Dashboard and navigation refresh (2026-11-20)

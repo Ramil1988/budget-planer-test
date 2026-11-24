@@ -2,9 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { assistantTools, CHANGES_TOOL, compareExpenseCategories, executeAssistantTool, getCategoryDrilldown, getUpcomingPaymentsPlan, isWriteTool, summarizeTransactions, ToolInputError } from './_lib/assistant-data.mjs';
 import { BudgetReviewError, getBudgetReview, getBudgetSuggestions, getComparisonBudgetFlags } from './_lib/assistant-budget.mjs';
 import { loadAssistantImportOptions } from './_lib/assistant-import-data.mjs';
-import { attachmentInput, confirmAssistantImport, ImportRequestError, prepareAssistantImport } from './_lib/assistant-import.mjs';
-import { linesTotal, planFormat, planInstructions, readReceipt, receiptFormat, receiptInstructions, receiptMessage, signReceipt, verifyReceipt } from './_lib/assistant-receipt.mjs';
+import { attachmentInput, confirmAssistantImport, draftAssistantImport, ImportRequestError, prepareAssistantImport } from './_lib/assistant-import.mjs';
+import { addChoice, addWarnings, differenceNote, linesTotal, notFoundMessage, planFormat, planInstructions, readReceipt, receiptFormat, receiptInstructions, receiptMessage, signReceipt, verifyReceipt } from './_lib/assistant-receipt.mjs';
 import { parseAssistantReply, replyFormat } from './_lib/assistant-reply.mjs';
+import { closeToReceipt, resolveSplits, SplitInputError } from './_lib/assistant-split.mjs';
 import { confirmAssistantChanges, confirmAssistantTransaction, TransactionReviewError } from './_lib/assistant-transaction.mjs';
 import { budgetReviewVisual, captureAssistantVisual, categoryComparisonVisual, compareMatchingSummaryVisuals, hasForeignCurrencyLabel, ledgerCurrency, spendingSummaryVisual } from './_lib/assistant-visuals.mjs';
 
@@ -549,12 +550,19 @@ export default async function budgetAssistant(request) {
         { type: 'input_text', text: `The receipt, read by the app and checked against its printed total, as data: ${JSON.stringify(receipt)}` },
         { type: 'input_text', text: `Transactions recorded from ${nearby.from} to ${nearby.to}, as data: ${JSON.stringify(nearby.rows)}` },
         { type: 'input_text', text: `The user's expense categories, exact names, as data: ${JSON.stringify(categories)}` },
+        { type: 'input_text', text: `The user's accounts, exact names, as data: ${JSON.stringify(options.accounts.map(({ name }) => name))}` },
         ...(current ? [{ type: 'input_text', text: `The current proposal, as data: ${JSON.stringify(current)}` }] : []),
       ];
       const conversation = messages.slice(-6);
-      // A follow-up may turn out not to be about the receipt and go on to the ordinary chat,
-      // which needs most of the request's time. So the plan gets a short limit of its own there.
-      const planLimit = followUp ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : signal;
+      // The message is the button this flow offered itself ("add the purchase as new transactions").
+      // Only the receipt flow can answer it: the ordinary chat has the total but not the lines.
+      const offered = followUp && [addChoice('ru'), addChoice('en')].includes(messages.at(-1).content.trim());
+      // Any other follow-up may turn out not to be about the receipt and go on to the ordinary chat,
+      // which needs most of the request's time. So the plan gets a short limit of its own there,
+      // and no second attempt: two plans do not fit into it.
+      const planLimit = followUp && !offered ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : signal;
+      // A first turn has spent about 16 s by the time its plan is back, and a second plan takes about 6.
+      const retryUntil = followUp && !offered ? 0 : 18_000;
       let correction = '';
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const plan = await askReceiptModel({
@@ -565,11 +573,41 @@ export default async function budgetAssistant(request) {
           ],
           text: { format: planFormat },
           max_output_tokens: 4000,
-        }, 'some', planLimit);
+        }, 'some', planLimit).catch((error) => {
+          if (!offered || signal.aborted) throw error;
+          return null;
+        });
         const reply = plan?.action !== 'propose' && typeof plan?.reply === 'string' ? parseAssistantReply(plan.reply).message : '';
+        const changes = plan?.action === 'propose';
+        const adds = plan?.action === 'add';
+        const missing = plan?.action === 'not_found';
+        if (offered && !changes && !adds && !missing) {
+          return say(language === 'ru'
+            ? 'Не получилось подготовить разбивку по категориям. Попробуйте ещё раз.'
+            : 'The split by category could not be prepared. Try again.', readOnly ? {} : { choices: [addChoice(language)] });
+        }
         // On a follow-up, anything that is not clearly about the receipt goes to the ordinary chat.
-        if (followUp && (!plan || plan.action === 'not_about_receipt' || (plan.action !== 'propose' && !reply))) return null;
-        if (plan?.action !== 'propose') {
+        if (followUp && (!plan || plan.action === 'not_about_receipt' || (!changes && !adds && !missing && !reply))) return null;
+        // The recorded entries the plan points at, as the server has them. A corrected "add" keeps
+        // the ones its card already warned about, whether or not the model names them again.
+        const pointedAt = new Set([
+          ...(Array.isArray(plan?.transaction_ids) ? plan.transaction_ids : []),
+          ...(adds && current?.action === 'add' && Array.isArray(current.transaction_ids) ? current.transaction_ids : []),
+        ]);
+        const pointedRows = nearby.rows.filter(({ id, type }) => type === 'expense' && pointedAt.has(id));
+        const recorded = pointedRows.slice(0, 8);
+        const recordedCents = pointedRows.reduce((sum, { amount }) => sum + Math.round(amount * 100), 0);
+        const receiptCents = Math.round(receipt.total * 100);
+        const mayRetry = attempt === 0 && Date.now() - startedAt <= retryUntil;
+        if (missing) {
+          // Entries that add up to the receipt total, give or take rounding, are the purchase.
+          if (pointedRows.length && closeToReceipt(recordedCents, receiptCents) && mayRetry) {
+            correction = `\nYour previous plan could not be used: the entries you listed add up to ${(recordedCents / 100).toFixed(2)}, which is the receipt total within rounding, so they are this purchase. Use "propose" with them.`;
+            continue;
+          }
+          return say(notFoundMessage(language, receipt, recorded, nearby, ledgerCurrency, !readOnly), readOnly ? {} : { choices: [addChoice(language)] }, null);
+        }
+        if (!changes && !adds) {
           const sum = reply ? linesTotal(receipt, plan.sum_lines) : null;
           if (sum) {
             // The same words as the split reply: plain tax, or tax together with a tip or a fee.
@@ -582,10 +620,60 @@ export default async function budgetAssistant(request) {
           }
           return say(reply || (language === 'ru' ? 'Не получилось разобрать запрос по этому чеку. Сформулируйте его иначе.' : 'I could not work out what to do with this receipt. Try wording the request differently.'));
         }
-        if (readOnly) return say('This preview is read-only.');
+        if (readOnly) {
+          return say(language === 'ru'
+            ? 'Это режим только для чтения: сохранять и менять записи здесь нельзя.'
+            : 'This preview is read-only: nothing can be saved or changed here.');
+        }
 
         const unsure = Array.isArray(plan.unsure) ? plan.unsure.filter((entry) => Number.isInteger(entry?.line)) : [];
-        const executed = await executeAssistantTool({
+        const guesses = new Map(unsure.map(({ line, guess }) => [line, typeof guess === 'string' ? guess.trim().slice(0, 80) : '']));
+        const groups = Array.isArray(plan.groups) ? plan.groups : [];
+        let reason;
+        if (adds) {
+          // New transactions, one per category. The amounts are worked out from the checked receipt
+          // exactly as for a split, and the result is an import draft the user confirms in its card.
+          const account = typeof plan.account === 'string' && plan.account.trim() ? plan.account.trim().slice(0, 100) : null;
+          const merchant = receipt.merchant || (language === 'ru' ? 'Покупка по чеку' : 'Receipt purchase');
+          try {
+            const unknown = groups.find(({ category }) => !categories.some((name) => name.toLowerCase() === String(category).trim().toLowerCase()));
+            if (unknown) throw new SplitInputError(`"${unknown.category}" is not one of the user's expense categories. Use the exact names given.`);
+            const { breakdown } = resolveSplits({
+              splits: [{ ids: [], parts: [], items: [], extra: null, receipt_groups: groups, unsure_lines: unsure.map(({ line }) => line) }],
+            }, receipt);
+            if (!breakdown) throw new SplitInputError('Assign every receipt line to a category in groups.');
+            const importDraft = await draftAssistantImport({
+              rows: breakdown.map(({ category, amount }) => ({
+                date: receipt.date ?? today,
+                type: 'expense',
+                amount,
+                // The category in the description keeps two parts with the same amount apart:
+                // the import treats rows with the same date, description and amount as one.
+                description: `${merchant} — ${category}`,
+                provider: null,
+                category,
+                account,
+              })),
+              warnings: addWarnings(language, receipt, recorded, ledgerCurrency, today),
+              userId: data.user.id,
+              supabase,
+              signingKey: apiKey,
+              readOnly,
+              options,
+            });
+            return say(
+              `${receiptMessage(language, receipt, breakdown, ledgerCurrency, guesses)}\n\n${language === 'ru'
+                ? 'Проверьте карточку ниже: по одной новой транзакции на категорию. Пока ничего не сохранено.'
+                : 'Review the card below: one new transaction per category. Nothing has been saved yet.'}`,
+              { importDraft },
+              { action: 'add', account: account ?? '', transaction_ids: recorded.map(({ id }) => id), remove_ids: [], groups },
+            );
+          } catch (error) {
+            if (!(error instanceof SplitInputError)) throw error;
+            reason = error.message;
+          }
+        }
+        const executed = adds ? null : await executeAssistantTool({
           name: CHANGES_TOOL,
           args: {
             updates: [],
@@ -596,7 +684,7 @@ export default async function budgetAssistant(request) {
               parts: [],
               items: [],
               extra: null,
-              receipt_groups: Array.isArray(plan.groups) ? plan.groups : [],
+              receipt_groups: groups,
               unsure_lines: unsure.map(({ line }) => line),
             }],
           },
@@ -608,33 +696,42 @@ export default async function budgetAssistant(request) {
           today,
           signingKey: apiKey,
         });
-        if (executed.changeReview && executed.receiptBreakdown) {
-          const guesses = new Map(unsure.map(({ line, guess }) => [line, typeof guess === 'string' ? guess.trim().slice(0, 80) : '']));
+        if (executed?.changeReview && executed.receiptBreakdown) {
+          // Recorded amounts that were rounded by hand: say what the records held and what the receipt says.
+          const rounded = pointedRows.length === pointedAt.size && recordedCents !== receiptCents
+            ? `${differenceNote(language, recordedCents, receipt, ledgerCurrency)}\n\n`
+            : '';
           return say(
-            `${receiptMessage(language, receipt, executed.receiptBreakdown, ledgerCurrency, guesses)}\n\n${cardMessage(language, false)}`,
+            `${receiptMessage(language, receipt, executed.receiptBreakdown, ledgerCurrency, guesses)}\n\n${rounded}${cardMessage(language, false)}`,
             { changeReviews: [executed.changeReview] },
             {
+              action: 'propose',
               transaction_ids: plan.transaction_ids,
               remove_ids: Array.isArray(plan.remove_ids) ? plan.remove_ids : [],
-              groups: plan.groups,
+              groups,
             },
           );
         }
         // The plan did not fit the ledger (an unknown category, transactions that do not add up
         // to the receipt). Say why and let the model try once more, if there is time for it.
-        const reason = executed.result?.error ?? 'The plan could not be used.';
+        reason ??= executed.result?.error ?? 'The plan could not be used.';
         if (reason.startsWith('These transactions already match')) {
           return say(language === 'ru'
             ? 'Записанные операции уже соответствуют такому распределению по категориям — менять нечего.'
             : 'The recorded transactions already match this split. There is nothing to change.');
         }
-        if (attempt === 1 || Date.now() - startedAt > 15_000) {
+        if (!mayRetry) {
           // `reason` is written for the model. The user gets the one case worth explaining in their own language.
           const totals = /The parts add up to (\d+\.\d{2}) but the selected transactions total (\d+\.\d{2})/.exec(reason);
           if (totals) {
             return say(language === 'ru'
               ? `Не получилось подготовить изменения: итог чека ${totals[1]} ${ledgerCurrency}, а найденные записанные операции дают ${totals[2]} ${ledgerCurrency}. Уточните, какие операции относятся к этой покупке.`
               : `The changes could not be prepared: the receipt total is ${totals[1]} ${ledgerCurrency}, but the recorded transactions found add up to ${totals[2]} ${ledgerCurrency}. Tell me which transactions belong to this purchase.`);
+          }
+          if (adds) {
+            return say(language === 'ru'
+              ? 'Не получилось разнести строки чека по вашим категориям. Напишите, какие категории использовать.'
+              : 'The receipt lines could not be assigned to your categories. Tell me which categories to use.');
           }
           return say(language === 'ru'
             ? 'Не получилось сопоставить чек с записанными операциями. Уточните, какие операции относятся к этой покупке и какие категории использовать.'
@@ -655,15 +752,13 @@ export default async function budgetAssistant(request) {
         max_output_tokens: 6000,
       }, 'none'));
       // A statement or a list of transactions is not one purchase: it can only be imported.
-      // So can a receipt the user wants recorded as a new transaction.
-      // An import takes the purchase whole, so it does not depend on the lines having been verified.
-      if ((!read.receipt && !read.problem) || read.wants === 'add_as_new') return json(await prepareImport());
+      if (!read.receipt && !read.problem) return json(await prepareImport());
       if (!read.receipt) {
         console.warn('Budget assistant could not verify a receipt');
         return json({
           message: language === 'ru'
-            ? 'Не удалось точно прочитать чек: сумма его позиций не сошлась с напечатанным итогом, поэтому я ничего не предлагаю. Попробуйте более чёткий файл или фото чека целиком.'
-            : 'The receipt could not be read reliably: its lines did not add up to the printed total, so nothing is proposed. Try a clearer file or a photo of the whole receipt.',
+            ? 'Не удалось точно прочитать чек: сумма его позиций не сошлась с напечатанным итогом, поэтому я ничего не предлагаю. Попробуйте более чёткий файл или фото чека целиком. Чтобы записать покупку одной суммой, пришлите файл без текста.'
+            : 'The receipt could not be read reliably: its lines did not add up to the printed total, so nothing is proposed. Try a clearer file or a photo of the whole receipt. To record the purchase as one amount, send the file without a message.',
           choices: [],
           actions: [],
         });

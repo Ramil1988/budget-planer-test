@@ -961,6 +961,22 @@ One redesign fixed all three:
   is not a timeout; it's a crash with extra steps.
 - **When answers vary between runs, the model is guessing.** Don't average the guesses — give it the
   knowledge, or make it say "not sure."
+- **Never let the assistant promise what the code can't do.** The first production test after all
+  of this ended with the assistant saying "send the file again and ask to add it with a split" — a
+  sentence the model made up. The add path recorded one transaction for the whole receipt, so the
+  advice led straight into a dead end, and from the outside it looked like nothing had been fixed.
+  Free text from a model is a promise made on your behalf. Where the next step matters, the server
+  now writes the sentence and the button, and the button leads to something that exists: the same
+  checked receipt, turned into one new transaction per category.
+- **Test on the real ledger, not on the ledger you imagined.** Three pushes in a row passed every
+  test I had and broke on Ramil's first real message. All my test ledgers held two bank payments,
+  250.00 and 307.68, adding up to the receipt to the cent — because that is what the receipt said was
+  paid. The real ledger held `Costco 360.00` and `Costco Household 198.00`: the purchase had been
+  entered by hand, already roughly split, and rounded. 558.00 is not 557.68, so the assistant said
+  "not found" and offered to add the purchase again. No amount of scripted cases would have found
+  that, because I wrote the scripts from the same wrong picture. What found it in one minute was
+  running the function locally against the real account, with the real PDF and the exact words from
+  the screenshot — read-only, pressing nothing. That run is now a step before every push of this flow.
 
 ---
 

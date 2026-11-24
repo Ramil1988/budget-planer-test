@@ -70,6 +70,13 @@ export function spreadExtra(args) {
   };
 }
 
+// Amounts typed in by hand are often rounded, so the transactions recorded for a purchase may
+// differ a little from its receipt. Within one percent of the receipt, and at least 1.00, they
+// still count as that purchase. Both arguments are in cents.
+export function closeToReceipt(recordedCents, receiptCents) {
+  return Math.abs(recordedCents - receiptCents) <= Math.max(100, Math.round(receiptCents * 0.01));
+}
+
 // Step two of reading a receipt: the model assigns each numbered receipt line to a category and
 // nothing else. Prices, tax marks and the tax total come from the receipt the server already
 // checked, and every line has to be assigned exactly once, so nothing can be dropped or altered.
@@ -117,6 +124,9 @@ export function resolveSplits(args, receipt) {
   if (!groupsOf) return { args: resolved, breakdown: null };
 
   const index = args.splits.findIndex((split) => Array.isArray(split?.receipt_groups) && split.receipt_groups.length);
+  // Only parts taken from the checked receipt may change the total of what was recorded.
+  // spreadExtra rebuilds every split, so this mark cannot arrive from the model.
+  resolved.splits[index].receipt_total = true;
   const breakdown = resolved.splits[index].parts.map(({ category, amount }) => {
     const lines = receipt.lines.filter(({ line }) => groupsOf.seen.get(line).toLowerCase() === category.toLowerCase());
     const beforeTax = lines.reduce((sum, line) => sum + Math.round(line.amount * 100), 0) / 100;
