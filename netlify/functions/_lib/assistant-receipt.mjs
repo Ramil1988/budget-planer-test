@@ -176,7 +176,7 @@ export const planFormat = {
       remove_ids: { type: 'array', items: { type: 'string' }, description: 'Ids of other recorded entries the user asked to remove.' },
       groups: {
         type: 'array',
-        description: 'For propose and add: every receipt line number, each in exactly one category. Empty otherwise.',
+        description: 'For propose, add and not_found: every receipt line number, each in exactly one category. Empty otherwise.',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -189,14 +189,14 @@ export const planFormat = {
       },
       unsure: {
         type: 'array',
-        description: 'Lines whose product you could not identify with confidence.',
+        description: 'Only the lines whose category may be wrong. Usually none or very few.',
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['line', 'guess'],
           properties: {
             line: { type: 'integer' },
-            guess: { type: 'string', description: 'What the product most likely is, in a few words, in the user\'s language.' },
+            guess: { type: 'string', description: 'What the product is, in a few words, in the user\'s language.' },
           },
         },
       },
@@ -221,17 +221,18 @@ action "propose": the user wants the purchase, which is already recorded, moved 
 - transaction_ids: the recorded transactions that are this purchase: the same merchant, on or shortly after the purchase date, with amounts that together equal the receipt total or differ from it only by rounding. One purchase paid with two cards is two transactions, and both belong here. Leave out any entry the user calls redundant or wants removed, and any entry whose amount is not part of that total.
 - remove_ids: recorded entries the user explicitly asked to remove, such as a leftover from an earlier attempt. Never anything else.
 - groups: assign every receipt line number to exactly one category, using the exact category names given.
-- unsure: the lines whose product you could not identify with confidence.
+- unsure: only the lines whose category may be wrong, because the product could as well belong to another of the user's categories or none of them fits it. A line is not unsure when its category is plain, even if the abbreviated name leaves the exact product open: an untaxed line of a grocery receipt is food whatever it is, and a taxed kitchen or cleaning item is household. Most receipts have no such lines or very few.
 - reply: empty.
 
-action "not_found": the user wants a recorded purchase changed, but no recorded transactions come that close to the receipt total. Do not propose and do not write a reply: the app tells the user what is in the records and offers to add the purchase as new.
-- transaction_ids: the recorded entries from the same merchant within a few days of the purchase date, if there are any, except entries the user told you to leave alone.
-- Everything else empty.
+action "not_found": the user wants a recorded purchase changed, but no recorded transactions come that close to the receipt total. The app still shows the user the receipt by category and offers to add the purchase as new transactions.
+- groups and unsure: as for "propose".
+- transaction_ids: the recorded entries from the same merchant within a few days of the purchase date that could be a payment for this purchase, if there are any. Not a fuel fill-up or another plainly different purchase, and not entries the user told you to leave alone.
+- remove_ids and reply: empty.
 
-action "add": the user asks to record this purchase as new transactions, in this message or by accepting that offer. The app creates one new transaction per category.
+action "add": the user asks to record this purchase as new transactions. The app creates one new transaction per category.
 - groups and unsure: as for "propose". If they ask for a single transaction, put every line in one category.
 - account: the exact name of the user's account they named for the purchase, if they named one. Otherwise empty.
-- transaction_ids: the recorded entries from the same merchant within a few days of the purchase date, if there are any. The app warns the user that the purchase may already be recorded.
+- transaction_ids: the recorded entries from the same merchant within a few days of the purchase date that could be a payment for this purchase, if there are any. Not a fuel fill-up or another plainly different purchase. The app warns the user that the purchase may already be recorded.
 - remove_ids and reply: empty.
 
 How to choose categories. Receipt names are abbreviated, so first work out what each product is from its name, price and tax mark. "KS" is Kirkland Signature. A grocery or warehouse store also sells household supplies, clothing, toys, books, electronics and seasonal goods. When some lines of such a receipt are taxed and others are not, the untaxed lines are food and the taxed lines are not basic groceries. When no line or every line is marked as taxed, the mark says nothing: go by the product. A Discount line goes with the line just above it. What the user said about categories comes first. When they name the categories to use, use only those: a product that fits none of them goes to the closest one, such as the household one for a toy bought at a warehouse store, and into unsure so that the user sees it. When they name none, choose the existing category that fits what the product is, for example a children's or gifts category for a toy. Do not put a product in a category only because it is the largest one.
@@ -305,8 +306,8 @@ export function receiptMessage(language, receipt, breakdown, currency, guesses =
   const notes = [];
   if (unsure.length) {
     notes.push(russian
-      ? `Не уверен, что это за товар: ${unsure.join('; ')}. Если категория не та, напишите, куда перенести.`
-      : `Not sure what these are: ${unsure.join('; ')}. If a category is wrong, tell me where to move it.`);
+      ? `Проверьте категорию: ${unsure.join('; ')}. Если она не та, напишите, куда перенести.`
+      : `Worth checking the category: ${unsure.join('; ')}. If it is wrong, tell me where to move it.`);
   }
   if (receipt.extra) {
     if (receipt.byTaxMark) {
@@ -324,32 +325,15 @@ export function receiptMessage(language, receipt, breakdown, currency, guesses =
 
 const shortDate = (date, russian) => (russian ? date.split('-').reverse().join('.') : date);
 
-// Recorded entries the plan pointed at, as the server has them: one per line, then their sum.
-function recordedList(rows, currency, russian) {
-  const total = rows.reduce((sum, { amount }) => sum + Math.round(amount * 100), 0) / 100;
-  const lines = rows.map(({ date, description, amount, category }) =>
-    `• ${[shortDate(date, russian), description, amount.toFixed(2), category].filter(Boolean).join(' · ')}`);
-  return { total, text: `${lines.join('\n')}\n${russian ? 'Вместе' : 'Together'}: ${total.toFixed(2)} ${currency}.` };
-}
-
-// The reply when the purchase is not in the records as amounts that add up to the receipt.
-// Written here so that it shows what the server actually has, not what the model recalls.
-export function notFoundMessage(language, receipt, rows, period, currency, offer = true) {
+// Said under the receipt by category when nothing recorded comes close to it: there is nothing
+// to split, so the card adds the purchase instead. Entries in the trash that look like it are
+// named, because a purchase the user remembers recording is often there.
+export function missingNote(language, trashed) {
   const russian = language === 'ru';
-  const total = `${receipt.total.toFixed(2)} ${currency}`;
-  const recorded = rows.length ? recordedList(rows, currency, russian) : null;
-  const span = `${shortDate(period.from, russian)} – ${shortDate(period.to, russian)}`;
-  return (russian
-    ? [
-      `В записях нет операций, которые вместе дают сумму этого чека (${total}), поэтому делить пока нечего.`,
-      recorded ? `Похожее в записях за ${span}:\n${recorded.text}` : `Похожих на эту покупку операций за ${span} в записях не нашлось.`,
-      `Если оплата ещё не пришла из банка, пришлите запрос снова, когда она появится.${offer ? ' Или добавлю покупку сейчас новыми транзакциями, по одной на категорию.' : ''}`,
-    ]
-    : [
-      `No recorded transactions add up to this receipt's total (${total}), so there is nothing to split yet.`,
-      recorded ? `Similar entries recorded between ${span}:\n${recorded.text}` : `No entries that look like this purchase were found between ${span}.`,
-      `If the payment has not arrived from the bank yet, ask again once it is there.${offer ? ' Or I can add the purchase now as new transactions, one per category.' : ''}`,
-    ]).join('\n\n');
+  const list = trashed.map(({ date, description, amount }) => `${shortDate(date, russian)} ${description} ${amount.toFixed(2)}`).join('; ');
+  return russian
+    ? `Записей, которые вместе дают сумму этого чека, нет, поэтому делить нечего.${list ? ` Похожие записи есть в корзине: ${list}. Если разделить нужно их, восстановите их и повторите запрос.` : ''} Ниже карточка, чтобы добавить покупку новыми транзакциями, по одной на категорию. Пока ничего не сохранено.`
+    : `No recorded transactions add up to this receipt, so there is nothing to split.${list ? ` Similar entries are in the trash: ${list}. If those are the ones to split, restore them and ask again.` : ''} The card below adds the purchase as new transactions, one per category. Nothing has been saved yet.`;
 }
 
 // Said with a split whose recorded transactions do not add up to the receipt to the cent.
@@ -359,12 +343,6 @@ export function differenceNote(language, recordedCents, receipt, currency) {
   return language === 'ru'
     ? `В записях эта покупка занесена на ${recorded} ${currency}, по чеку — ${printed} ${currency}. После применения сумма записей станет равна чеку.`
     : `The records hold this purchase as ${recorded} ${currency}; the receipt says ${printed} ${currency}. Applying the card makes the recorded total equal to the receipt.`;
-}
-
-export function addChoice(language) {
-  return language === 'ru'
-    ? 'Добавь покупку новыми транзакциями с разбивкой по категориям'
-    : 'Add the purchase as new transactions split by category';
 }
 
 // Notes for the card that adds a receipt as new transactions. Adding is right only when the

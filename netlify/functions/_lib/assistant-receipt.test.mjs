@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addChoice, addWarnings, checkReceipt, linesTotal, notFoundMessage, planFormat, planInstructions, readReceipt, receiptMessage, signReceipt, verifyReceipt } from './assistant-receipt.mjs';
+import { addWarnings, checkReceipt, linesTotal, missingNote, planFormat, planInstructions, readReceipt, receiptMessage, signReceipt, verifyReceipt } from './assistant-receipt.mjs';
 import { resolveSplits, SplitInputError } from './assistant-split.mjs';
 
 // The shape the model returns: short keys, a discount as a negative line.
@@ -173,19 +173,12 @@ test('a receipt token is accepted only unchanged, unexpired and for the same use
 });
 
 const recorded = (amount, description = 'COSTCO WHOLESALE W1362') => ({ id: `t-${amount}`, date: '2026-11-21', type: 'expense', amount, description, category: 'Food/Costco' });
-const period = { from: '2026-11-18', to: '2026-12-01' };
 
-test('a purchase that is not in the records is answered with what the records do hold', () => {
-  const text = notFoundMessage('ru', receipt(), [recorded(50), recorded(20.5, 'COSTCO GAS')], period, 'CAD');
-  assert.match(text, /^В записях нет операций, которые вместе дают сумму этого чека \(84\.99 CAD\)/);
-  assert.match(text, /Похожее в записях за 18\.11\.2026 – 01\.12\.2026:\n• 21\.11\.2026 · COSTCO WHOLESALE W1362 · 50\.00 · Food\/Costco\n• 21\.11\.2026 · COSTCO GAS · 20\.50 · Food\/Costco\nВместе: 70\.50 CAD\./);
-  assert.match(text, /добавлю покупку сейчас новыми транзакциями/);
-  assert.match(notFoundMessage('ru', receipt(), [], period, 'CAD'), /Похожих на эту покупку операций за 18\.11\.2026 – 01\.12\.2026 в записях не нашлось\./);
-  assert.match(notFoundMessage('en', receipt(), [recorded(50)], period, 'CAD'), /Similar entries recorded between 2026-11-18 – 2026-12-01:\n• 2026-11-21 · COSTCO WHOLESALE W1362 · 50\.00 · Food\/Costco\nTogether: 50\.00 CAD\./);
-  // Without the right to save, the reply does not offer to add anything.
-  assert.doesNotMatch(notFoundMessage('ru', receipt(), [], period, 'CAD', false), /добавлю/);
-  assert.equal(typeof addChoice('ru'), 'string');
-  assert.notEqual(addChoice('ru'), addChoice('en'));
+test('a purchase that is not recorded gets a short note under the receipt, naming what is in the trash', () => {
+  assert.equal(missingNote('ru', []), 'Записей, которые вместе дают сумму этого чека, нет, поэтому делить нечего. Ниже карточка, чтобы добавить покупку новыми транзакциями, по одной на категорию. Пока ничего не сохранено.');
+  const trashed = [{ date: '2026-11-21', description: 'Costco', amount: 360 }, { date: '2026-11-21', description: 'Costco Household', amount: 198 }];
+  assert.match(missingNote('ru', trashed), /Похожие записи есть в корзине: 21\.11\.2026 Costco 360\.00; 21\.11\.2026 Costco Household 198\.00\. Если разделить нужно их, восстановите их и повторите запрос\./);
+  assert.match(missingNote('en', trashed), /Similar entries are in the trash: 2026-11-21 Costco 360\.00; 2026-11-21 Costco Household 198\.00\./);
 });
 
 test('adding a receipt as new warns about entries that may already be this purchase', () => {

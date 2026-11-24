@@ -156,20 +156,14 @@ test.describe('Budget assistant', () => {
     await expect(cards.getByText('Food/Costco → Gifts')).toBeVisible();
   });
 
-  test('a purchase missing from the records can be added as new transactions with one click', async ({ page }) => {
-    const offer = 'Add the purchase as new transactions split by category';
+  test('a receipt for a purchase that is not recorded comes back with the card to add it, and a correction replaces that card', async ({ page }) => {
+    const draft = (warning) => ({ token: `draft-${warning}`, rows: [], warnings: [warning], accounts: [], categories: [] });
     const { dialog, requests } = await openAssistant(page, (body) => {
       if (body.mode === 'prepare_import') {
-        return { message: 'No recorded transactions add up to this receipt.', choices: [offer], actions: [], receiptToken: 'signed-receipt' };
+        return { message: 'Receipt by category. Nothing recorded adds up to it.', choices: [], actions: [], receiptToken: 'signed-receipt', importDraft: draft('First split.') };
       }
       if (body.mode) return null;
-      return {
-        message: 'One new transaction per category.',
-        choices: [],
-        actions: [],
-        receiptToken: 'signed-receipt',
-        importDraft: { token: 'draft', rows: [], warnings: ['If the payment arrives from the bank later, it is recorded separately.'], accounts: [], categories: [] },
-      };
+      return { message: 'Moved.', choices: [], actions: [], receiptToken: 'signed-receipt', importDraft: draft('Corrected split.') };
     });
 
     await dialog.locator('input[type=file]').setInputFiles({
@@ -177,14 +171,15 @@ test.describe('Budget assistant', () => {
     });
     await dialog.getByRole('textbox').fill('Split the purchase that is already recorded');
     await dialog.getByTitle('Analyze attachment').click();
-    await dialog.getByRole('button', { name: offer }).click();
+    const card = dialog.getByRole('region', { name: 'Review transactions' });
+    await expect(card.getByText('First split.')).toBeVisible();
 
-    // The offer is answered from the receipt that was already read: no second upload.
-    await expect(dialog.getByRole('region', { name: 'Review transactions' })).toBeVisible();
-    await expect(dialog.getByText('If the payment arrives from the bank later')).toBeVisible();
+    // The correction is answered from the receipt that was already read: no second upload.
+    await say(dialog, 'Move the Lego to Gifts');
+    await expect(card).toHaveCount(1);
+    await expect(card.getByText('Corrected split.')).toBeVisible();
     expect(requests.at(-1).receiptToken).toBe('signed-receipt');
     expect(requests.at(-1).attachment).toBeUndefined();
-    expect(requests.at(-1).messages.at(-1)).toEqual({ role: 'user', content: offer });
   });
 
   test('switching a receipt from a split to new transactions leaves one card', async ({ page }) => {

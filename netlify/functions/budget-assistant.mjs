@@ -3,7 +3,7 @@ import { assistantTools, CHANGES_TOOL, compareExpenseCategories, executeAssistan
 import { BudgetReviewError, getBudgetReview, getBudgetSuggestions, getComparisonBudgetFlags } from './_lib/assistant-budget.mjs';
 import { loadAssistantImportOptions } from './_lib/assistant-import-data.mjs';
 import { attachmentInput, confirmAssistantImport, draftAssistantImport, ImportRequestError, prepareAssistantImport } from './_lib/assistant-import.mjs';
-import { addChoice, addWarnings, differenceNote, linesTotal, notFoundMessage, planFormat, planInstructions, readReceipt, receiptFormat, receiptInstructions, receiptMessage, signReceipt, verifyReceipt } from './_lib/assistant-receipt.mjs';
+import { addWarnings, differenceNote, linesTotal, missingNote, planFormat, planInstructions, readReceipt, receiptFormat, receiptInstructions, receiptMessage, signReceipt, verifyReceipt } from './_lib/assistant-receipt.mjs';
 import { parseAssistantReply, replyFormat } from './_lib/assistant-reply.mjs';
 import { closeToReceipt, resolveSplits, SplitInputError } from './_lib/assistant-split.mjs';
 import { confirmAssistantChanges, confirmAssistantTransaction, TransactionReviewError } from './_lib/assistant-transaction.mjs';
@@ -39,6 +39,27 @@ async function nearbyTransactions(supabase, userId, today, purchaseDate) {
       id, date, type, amount: Math.abs(Number(amount)), description: (description ?? '').slice(0, 80), category: category?.name ?? null,
     })),
   };
+}
+
+// When a purchase is not in the records, the entries that look like it may be in the trash.
+// A hint for the reply only: matched by a word of the merchant's name, and never changed.
+async function trashedLookalikes(supabase, userId, { from, to }, merchant) {
+  const words = (merchant ?? '').toLowerCase().match(/\p{L}{4,}/gu) ?? [];
+  if (!words.length) return [];
+  const { data, error } = await supabase.from('transactions')
+    .select('date,amount,description,deleted_at')
+    .eq('user_id', userId)
+    .eq('type', 'expense')
+    .not('deleted_at', 'is', null)
+    .gte('date', from)
+    .lte('date', to)
+    .order('date', { ascending: false })
+    .limit(60);
+  if (error || !Array.isArray(data)) return [];
+  return data
+    .filter(({ deleted_at: trashed, description }) => trashed && words.some((word) => (description ?? '').toLowerCase().includes(word)))
+    .slice(0, 4)
+    .map(({ date, amount, description }) => ({ date, amount: Math.abs(Number(amount)), description: (description ?? '').slice(0, 40) }));
 }
 
 export const config = {
@@ -554,15 +575,10 @@ export default async function budgetAssistant(request) {
         ...(current ? [{ type: 'input_text', text: `The current proposal, as data: ${JSON.stringify(current)}` }] : []),
       ];
       const conversation = messages.slice(-6);
-      // The message is the button this flow offered itself ("add the purchase as new transactions").
-      // Only the receipt flow can answer it: the ordinary chat has the total but not the lines.
-      const offered = followUp && [addChoice('ru'), addChoice('en')].includes(messages.at(-1).content.trim());
-      // Any other follow-up may turn out not to be about the receipt and go on to the ordinary chat,
+      // A follow-up may turn out not to be about the receipt and go on to the ordinary chat,
       // which needs most of the request's time. So the plan gets a short limit of its own there,
       // and no second attempt: two plans do not fit into it.
-      const planLimit = followUp && !offered ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : signal;
-      // A first turn has spent about 16 s by the time its plan is back, and a second plan takes about 6.
-      const retryUntil = followUp && !offered ? 0 : 18_000;
+      const planLimit = followUp ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : signal;
       let correction = '';
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const plan = await askReceiptModel({
@@ -573,21 +589,16 @@ export default async function budgetAssistant(request) {
           ],
           text: { format: planFormat },
           max_output_tokens: 4000,
-        }, 'some', planLimit).catch((error) => {
-          if (!offered || signal.aborted) throw error;
-          return null;
-        });
+        }, 'some', planLimit);
         const reply = plan?.action !== 'propose' && typeof plan?.reply === 'string' ? parseAssistantReply(plan.reply).message : '';
         const changes = plan?.action === 'propose';
-        const adds = plan?.action === 'add';
+        // Nothing recorded comes close to the receipt, so there is nothing to change. The user asked
+        // for the receipt by category and still gets it, with the one thing left to offer: the
+        // purchase as new transactions. From here on that is the same as "add".
         const missing = plan?.action === 'not_found';
-        if (offered && !changes && !adds && !missing) {
-          return say(language === 'ru'
-            ? 'Не получилось подготовить разбивку по категориям. Попробуйте ещё раз.'
-            : 'The split by category could not be prepared. Try again.', readOnly ? {} : { choices: [addChoice(language)] });
-        }
+        const adds = plan?.action === 'add' || missing;
         // On a follow-up, anything that is not clearly about the receipt goes to the ordinary chat.
-        if (followUp && (!plan || plan.action === 'not_about_receipt' || (!changes && !adds && !missing && !reply))) return null;
+        if (followUp && (!plan || plan.action === 'not_about_receipt' || (!changes && !adds && !reply))) return null;
         // The recorded entries the plan points at, as the server has them. A corrected "add" keeps
         // the ones its card already warned about, whether or not the model names them again.
         const pointedAt = new Set([
@@ -598,14 +609,12 @@ export default async function budgetAssistant(request) {
         const recorded = pointedRows.slice(0, 8);
         const recordedCents = pointedRows.reduce((sum, { amount }) => sum + Math.round(amount * 100), 0);
         const receiptCents = Math.round(receipt.total * 100);
-        const mayRetry = attempt === 0 && Date.now() - startedAt <= retryUntil;
-        if (missing) {
-          // Entries that add up to the receipt total, give or take rounding, are the purchase.
-          if (pointedRows.length && closeToReceipt(recordedCents, receiptCents) && mayRetry) {
-            correction = `\nYour previous plan could not be used: the entries you listed add up to ${(recordedCents / 100).toFixed(2)}, which is the receipt total within rounding, so they are this purchase. Use "propose" with them.`;
-            continue;
-          }
-          return say(notFoundMessage(language, receipt, recorded, nearby, ledgerCurrency, !readOnly), readOnly ? {} : { choices: [addChoice(language)] }, null);
+        // A first turn has spent about 16 s by the time its plan is back, and a second plan takes about 6.
+        const mayRetry = !followUp && attempt === 0 && Date.now() - startedAt <= 18_000;
+        // Entries that add up to the receipt total, give or take rounding, are the purchase.
+        if (missing && pointedRows.length && closeToReceipt(recordedCents, receiptCents) && mayRetry) {
+          correction = `\nYour previous plan could not be used: the entries you listed add up to ${(recordedCents / 100).toFixed(2)}, which is the receipt total within rounding, so they are this purchase. Use "propose" with them.`;
+          continue;
         }
         if (!changes && !adds) {
           const sum = reply ? linesTotal(receipt, plan.sum_lines) : null;
@@ -661,10 +670,13 @@ export default async function budgetAssistant(request) {
               readOnly,
               options,
             });
-            return say(
-              `${receiptMessage(language, receipt, breakdown, ledgerCurrency, guesses)}\n\n${language === 'ru'
+            const closing = missing
+              ? missingNote(language, await trashedLookalikes(supabase, data.user.id, nearby, receipt.merchant))
+              : language === 'ru'
                 ? 'Проверьте карточку ниже: по одной новой транзакции на категорию. Пока ничего не сохранено.'
-                : 'Review the card below: one new transaction per category. Nothing has been saved yet.'}`,
+                : 'Review the card below: one new transaction per category. Nothing has been saved yet.';
+            return say(
+              `${receiptMessage(language, receipt, breakdown, ledgerCurrency, guesses)}\n\n${closing}`,
               { importDraft },
               { action: 'add', account: account ?? '', transaction_ids: recorded.map(({ id }) => id), remove_ids: [], groups },
             );
