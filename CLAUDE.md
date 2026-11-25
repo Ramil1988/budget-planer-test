@@ -153,6 +153,7 @@ The application uses React's built-in state management:
 - A page's root is `<Box className="bw-surface bw-page">`. The tokens live on `.bw-surface` (and `.dark .bw-surface`), so **anything rendered in a portal needs `bw-surface` too**. Use `components/DialogFrame.jsx` for dialogs
 - Structure: `pages/<Page>.jsx` keeps loading and saving; `components/<page>/` holds the page's charts, lists and forms; `lib/<page>View.js` (`budgetMath.js` for Budget) holds pure functions with `node --test` tests, all listed in `test:unit`
 - Charts are hand-written HTML and SVG. A line is an SVG stretched to its plot (`preserveAspectRatio="none"`, `vector-effect: non-scaling-stroke`); points and figures are HTML laid over it. Proportions are exact: a part too small to label is named in text, never drawn larger
+- **GOTCHA:** never give a flex item both `aspect-ratio` and a `min-height`. Safari derives the width from the height and the element runs out of its panel; Chrome keeps the width. The Reports treemap did this. Size from the container and measure the box instead (`ExpenseTreemap.jsx`). Check layout in WebKit, not only Chromium: `reports.spec.js` asserts that every tile is inside its panel
 - Dropdowns are native `<select>`; dates are local (`today()` in `lib/transactionView.js`), never `toISOString()`
 - **GOTCHA:** on Transactions the trash button writes at once. The Playwright tests for these pages only read: they never press it, cancel every dialog, and the Transactions and Add transaction tests fail if the page sends anything but a read to `/rest/v1/`
 

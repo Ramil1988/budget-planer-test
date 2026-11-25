@@ -206,6 +206,28 @@ test.describe('Reports', () => {
       }));
       expect(problems).toEqual([]);
     });
+
+    // Safari once drew the map wider than its panel, with the tiles on the right cut off.
+    for (const [name, width] of [['a wide screen', 1440], ['a phone', 390]]) {
+      test(`keeps every tile of the map inside its panel on ${name}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        const map = page.getByRole('region', { name: 'The shape of the spending' });
+        const tiles = map.locator('.reports-map__tile');
+        test.skip(await tiles.count() === 0, 'No expenses recorded this year.');
+        // The map settles after it has measured itself and fitted its text.
+        await page.waitForTimeout(500);
+        const outside = await map.evaluate((panel) => {
+          const box = panel.getBoundingClientRect();
+          return [...panel.querySelectorAll('.reports-map__tile')].filter((tile) => {
+            const rect = tile.getBoundingClientRect();
+            return rect.left < box.left - 0.5 || rect.right > box.right + 0.5 || rect.top < box.top - 0.5 || rect.bottom > box.bottom + 0.5;
+          }).map((tile) => tile.title);
+        });
+        expect(outside).toEqual([]);
+        // On a phone the map takes fewer tiles, so that each has room for its text.
+        if (width < 480) expect(await tiles.count()).toBeLessThanOrEqual(8);
+      });
+    }
   });
 
   test.describe('Categories', () => {

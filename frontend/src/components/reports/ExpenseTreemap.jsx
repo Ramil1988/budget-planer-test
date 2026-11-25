@@ -2,9 +2,11 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { FiChevronRight } from 'react-icons/fi';
 import { treemap } from '../../lib/reportView';
 
-// The frame the tiles are laid out in. Its proportions decide the shape of the tiles;
-// the positions are then written as percentages, so the map follows its container.
-const FRAME = { width: 100, height: 62 };
+// The tiles are laid out in a frame 100 wide and as tall as the map really is, so they are
+// shaped for the box they are drawn in; positions are written as percentages of it. Until
+// the map has been measured it is taken to be this tall.
+const FRAME_WIDTH = 100;
+const FRAME_HEIGHT = 62;
 // At most this many categories get a tile of their own; the rest share one that opens.
 // A phone-wide map takes fewer, so that each tile is wide enough for a whole name.
 const SHOWN = 11;
@@ -28,7 +30,10 @@ const breakable = (name) => name.split('/').flatMap((part, index) => (index ? ['
 // under the map instead.
 export default function ExpenseTreemap({ categories, formatCurrency }) {
   const [opened, setOpened] = useState(false);
-  const [width, setWidth] = useState(0);
+  // The size of the map on screen. Its width decides how many tiles there is room for.
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { width } = size;
+  const frame = { width: FRAME_WIDTH, height: width ? (size.height / width) * FRAME_WIDTH : FRAME_HEIGHT };
   // How tightly each tile has had to set its text, and which categories could not fit even so.
   // Both belong to one view at one width, and start over when either changes.
   const [fitting, setFitting] = useState({ key: '', levels: {}, dropped: [] });
@@ -42,6 +47,8 @@ export default function ExpenseTreemap({ categories, formatCurrency }) {
   const lumped = rest.length > 0 && restShare >= SMALLEST;
   const inside = opened && lumped;
 
+  // The height is left out: the line under the map that names what was dropped changes it,
+  // and starting over on that would drop and restore the same tiles for ever.
   const key = `${inside}:${width}:${categories.length}:${Math.round(restAmount)}`;
   const { levels, dropped } = fitting.key === key ? fitting : { levels: {}, dropped: [] };
 
@@ -55,14 +62,18 @@ export default function ExpenseTreemap({ categories, formatCurrency }) {
   ].sort((a, b) => b.amount - a.amount);
   // The lumped remainder may outweigh the smallest tiles; the layout wants largest first.
   const ordered = [...drawn].sort((a, b) => b.amount - a.amount);
-  const rects = treemap(ordered.map(({ amount }) => amount), FRAME.width, FRAME.height);
+  const rects = treemap(ordered.map(({ amount }) => amount), frame.width, frame.height);
   const percent = (share) => (share < 0.01 ? '<1' : Math.round(share * 100));
 
-  // The map's width decides how much room the tiles have, so the fitting restarts when it changes.
+  // The map's size decides how much room the tiles have, so the fitting restarts when it changes.
   useLayoutEffect(() => {
     const element = tilesRef.current;
     if (!element) return undefined;
-    const measure = () => setWidth(Math.round(element.getBoundingClientRect().width));
+    const measure = () => {
+      const box = element.getBoundingClientRect();
+      const next = { width: Math.round(box.width), height: Math.round(box.height) };
+      setSize((current) => (current.width === next.width && current.height === next.height ? current : next));
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
@@ -117,7 +128,7 @@ export default function ExpenseTreemap({ categories, formatCurrency }) {
       {ordered.length === 0 ? (
         <p className="bw-nothing">Nothing recorded.</p>
       ) : (
-        <ul className="reports-map__tiles" style={{ aspectRatio: `${FRAME.width} / ${FRAME.height}` }} ref={tilesRef}>
+        <ul className="reports-map__tiles" ref={tilesRef}>
           {ordered.map((tile, index) => {
             const rect = rects[index];
             // Darkest for the largest tile, fading with rank.
@@ -132,10 +143,10 @@ export default function ExpenseTreemap({ categories, formatCurrency }) {
                 data-fit={levels[tile.name] ?? 0}
                 title={`${tile.name}: ${formatCurrency(tile.amount)}, ${percent(tile.share)}%`}
                 style={{
-                  left: `${(rect.x / FRAME.width) * 100}%`,
-                  top: `${(rect.y / FRAME.height) * 100}%`,
-                  width: `${(rect.width / FRAME.width) * 100}%`,
-                  height: `${(rect.height / FRAME.height) * 100}%`,
+                  left: `${(rect.x / frame.width) * 100}%`,
+                  top: `${(rect.y / frame.height) * 100}%`,
+                  width: `${(rect.width / frame.width) * 100}%`,
+                  height: `${(rect.height / frame.height) * 100}%`,
                   '--strength': `${strength}%`,
                 }}
                 key={tile.name}

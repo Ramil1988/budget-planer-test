@@ -438,9 +438,14 @@
   flex-direction: column;
 }
 
+/* The map is as wide as its panel and at least this tall; in a row with a taller neighbour
+   it grows to the panel's height. It has no aspect ratio of its own: together with a
+   minimum height Safari turns one into a width, and the map then runs out of the panel. */
 .reports-map__tiles {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
   min-height: 260px;
   margin: 0 clamp(14px, 2vw, 22px) clamp(14px, 2vw, 22px);
   padding: 0;
