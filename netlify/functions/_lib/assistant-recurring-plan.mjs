@@ -4,7 +4,7 @@ import { auditWords } from './assistant-recurring-audit.mjs';
 const createVerb = /(?:\b(?:create|add|set up)\b|созда(?:й|ть|вай|вать|дим)|завед(?:и|ём|ем)|завести|добав(?:ь|ить|им)|внеси)/iu;
 const editVerb = /(?:\b(?:update|edit|fix|correct|adjust|reschedule|align)\b|исправ(?:ь|ить|им)|измен(?:и|ить)|поправ(?:ь|ить)|обнов(?:и|ить)|перенес(?:и|ти)|скорректир(?:уй|овать))/iu;
 const scheduleWord = /\brecurr?ings?\b|расписан|регулярн\p{L}* платеж|подписк|\bschedules?\b/iu;
-const auditReference = /\b(?:these|missing|unmatched|mismatches|discrepanc\w*|audit|matched)\b|без пары|непарн|несопоставлен|отсутств|там[, ]+где|недоста|несоответств|расхожд|из (этой )?сверки|существующ|имеющ|остальн/iu;
+const auditReference = /\b(?:these|missing|unmatched|mismatches|discrepanc\w*|audit|matched)\b|\bwithout (?:a )?(?:recurring )?(?:schedule|record)\b|без пары|непарн|несопоставлен|отсутств|там[, ]+где|где (?:нет запис\p{L}*|запис\p{L}* нет)|недоста|несоответств|расхожд|из (этой )?сверки|существующ|имеющ|остальн/iu;
 const cancel = /\b(?:cancel|never ?mind|stop|no changes)\b|отмен[аи]|передумал/iu;
 const readOnly = /\bread[ -]only\b|\bjust (?:check|review|audit)\b|\bno (?:writes|edits|changes)\b|только (?:сверк|провер|покаж|найти)|без (?:изменени|записи)|ничего не (?:записы|сохраня|меня)/iu;
 const negatedWrite = /\b(?:do not|don't|don’t|never) (?:add|update|fix|create|edit|change)|(?:не |нельзя |без )(?:создава|созда[йть]|добавля|добав[ьит]|исправля|исправ[ьи]|обновля|обнови|меня[йть])/iu;
@@ -12,6 +12,12 @@ const targetedDate = /(?:исправ|измени|поправ|обнови|п�
 const standaloneTerms = /(?:[$€£]|\b(?:cad|usd)\b|\d[.,]\d{2}|\bstarting\b|\bstarts? on\b|начиная с|сумм\p{L}*\s+\d)/iu;
 const refersToLast = /(?:по (?:этой |последней )?сверке|из (?:этой |последней )?сверки|(?:тогда|эти|упомянут|их|те же|указанн)|\b(?:these|those|them|the audit|this audit|from the audit)\b)/iu;
 const exception = /(?:кроме|исключая|исключи(?:ть)?|за исключением|пропусти(?:ть)?|\b(?:except(?: for)?|excluding|exclude|skip)\b)\s+/iu;
+// Only a new imperative can end an exception. Decimal separators, merchant
+// lists, and qualifiers such as “and only if …” stay with their filter.
+const commandObject = /(?:(?:the|all|any|missing|existing|monthly|billing|posted|new|все|отсутствующ\p{L}*|недостающ\p{L}*|существующ\p{L}*|ежемесячн\p{L}*)\s+)*(?:дат\p{L}*|расписан\p{L}*|подписк\p{L}*|recurr?ings?|dates?|schedules?)(?!\p{L})/iu;
+const nextCommand = new RegExp(
+  String.raw`(?:[.!?;,]\s*|\s+(?=(?:и|а|также|затем|and|also|then)\s))(?:(?:и|а|также|затем|and|also|then)\s+)*(?=(?:${createVerb.source}|${editVerb.source})\s+${commandObject.source})`, 'iu',
+);
 const referenceException = /^(?:(?:the |those |these |previously |specified |mentioned |above|listed|same)\b|(?:ранее |раньше |указанн|упомянут|перечисленн|названн|тех же|этих))/iu;
 const yes = /^(?:да|ага|верно|подтверждаю|yes|yeah|correct|confirm(?:ed)?|ok(?:ay)?|ок(?:ей)?)[.!\s]*$/iu;
 const copy = (ru, en) => ({ ru, en });
@@ -72,7 +78,14 @@ function explicitScope(text, today) {
 function requestParts(text) {
   const match = exception.exec(text);
   if (!match) return { instruction: text, excluded: null };
-  return { instruction: text.slice(0, match.index), excluded: text.slice(match.index + match[0].length).trim().replace(/[).!?\s]+$/u, '') };
+  const prefix = text.slice(0, match.index);
+  const tail = text.slice(match.index + match[0].length);
+  const boundary = nextCommand.exec(tail);
+  const next = boundary && tail.slice(0, boundary.index).trim() ? boundary : null;
+  return {
+    instruction: next ? prefix + ' ' + tail.slice(next.index + next[0].length) : prefix,
+    excluded: (next ? tail.slice(0, next.index) : tail).trim().replace(/[).!?\s]+$/u, ''),
+  };
 }
 
 function refinement(text) {
@@ -205,7 +218,9 @@ export function buildRecurringPlan(audit, intent) {
   if (audit.omittedRows > 0) return { ...empty, clarify: copy(
     'В сверке больше строк, чем помещается в карточку. Сузь период, чтобы проверить полный список перед изменением расписаний.',
     'The audit is larger than a review card. Narrow the period so every candidate can be reviewed.') };
-  const filterWords = (intent.instruction ?? '').toLowerCase().match(/[\p{L}\p{N}]+/gu)?.filter(word =>
+  const instruction = (intent.instruction ?? '').toLowerCase()
+    .replace(/по (?:банковской )?выписке|\b(?:from|according to|based on) (?:the )?(?:bank )?statement\b|\bwithout (?:a )?(?:recurring )?(?:schedule|record)\b/gu, ' ');
+  const filterWords = instruction.match(/[\p{L}\p{N}]+/gu)?.filter(word =>
     !reviewWords.has(word) && !reviewStems.test(word) && !monthWord.test(word) && !auditWords(audit.category).includes(auditWords(word)[0])) ?? [];
   // References like “fix the date for ChatGPT Plus” narrow the row set. An
   // unknown or more complex condition must never turn into a bulk operation.

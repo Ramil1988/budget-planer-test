@@ -60,6 +60,33 @@ test('creates and date corrections are separately scoped, and uncertain pairs ne
   assert.equal(planFor([user('Create monthly Recurring schedules for the unmatched charges in this audit')]).update,false);
 });
 
+test('a date correction after the exception list keeps both actions and the exact merchant amounts', () => {
+  const create = 'Создай ежемесячные Recurring для тех списаний, где записей нет, кроме Market 6.25 CAD, 14.80 CAD и 22.90 CAD';
+  const expectedCreates = ['t0', 't1', 't5'];
+  const expectedExclusions = ['t2', 't3', 't4'];
+  const requests = [
+    create + '. И исправь даты существующих расписаний по выписке.',
+    create.replace('где записей нет', 'где нет записей') + ' и исправь даты по банковской выписке.',
+    'Create monthly Recurring for charges without a schedule, except Market 6.25 CAD, 14.80 CAD and 22.90 CAD; then fix the dates of existing schedules from the bank statement.',
+  ];
+  for (const text of requests) {
+    const request = user(text);
+    for (const turns of [[request], [request, assistant('Проверь выбранные изменения в Recurring.'), user('да')]]) {
+      const intent = planFor(turns);
+      assert.ok(intent?.create && intent?.update, text);
+      const plan = buildRecurringPlan(audit, intent);
+      assert.deepEqual(plan.candidates.filter(row => row.kind === 'create').map(row => row.transactionId), expectedCreates, text);
+      assert.deepEqual(plan.candidates.filter(row => row.kind === 'update').map(row => row.scheduleId), ['late'], text);
+      assert.deepEqual(plan.excluded.map(row => row.transactionId), expectedExclusions, text);
+    }
+  }
+  const onlyCreate = planFor([user(create)]);
+  assert.equal(onlyCreate.update, false);
+  assert.deepEqual(buildRecurringPlan(audit, onlyCreate).excluded.map(row => row.transactionId), expectedExclusions);
+  const restricted = planFor([user(create + ' и только если сумма меньше 20 CAD. И исправь даты по выписке.')]);
+  assert.ok(buildRecurringPlan(audit, restricted).manualSelection);
+});
+
 test('read-only questions, cancellation, and a bare yes do not start changes', () => {
   for (const text of ['Только проверь связи с Recurring без изменений.', 'добавь транзакцию Subscriptions', 'Which subscription is late?', 'Да']) {
     assert.equal(planFor([user(text)]),null);
