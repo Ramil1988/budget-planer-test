@@ -69,6 +69,34 @@ test('a follow-up to a legacy audit re-reads the category and prepares only the 
   }
 });
 
+test('answering only the missing category or month resumes the original proposal and its exclusions', async (t) => {
+  setup(t, () => assert.fail('A clarification for an audit proposal should not call the model'), {
+    categories: [{ id: category, name: 'Subscriptions', type: 'expense' }],
+    transactions: ['Studio', 'Market'].map((description, index) => ({
+      id: `12345678-1234-4123-8123-00000000000${index}`, description, type: 'expense',
+      category_id: category, amount: 10 + index, date: '2024-11-07', assistant_change_version: 1,
+    })),
+  });
+  for (const [scope, answer] of [['за ноябрь 2024', 'Subscriptions'], ['в категории Subscriptions', 'ноябрь 2024']]) {
+    const initial = userMessage(`Создай недостающие ежемесячные расписания ${scope}, кроме Market 11 CAD`);
+    const first = await chat([initial]);
+    assert.equal(first.status, 200);
+    const question = await first.json();
+    assert.deepEqual(question.actions, []);
+    assert.equal(question.recurringReview, undefined);
+    const reply = { role: 'assistant', content: question.message + (question.choices.length ? '\n\nOptions offered:\n1) Subscriptions' : '') };
+    const second = await chat([initial, reply, userMessage(answer)]);
+    const review = await second.json();
+    assert.equal(second.status, 200, JSON.stringify(review));
+    assert.equal(review.recurringReview?.month, '2024-11', review.message);
+    assert.match(review.message, /Проверь предложенные изменения/);
+    assert.equal(review.recurringReview.category, 'Subscriptions');
+    assert.deepEqual(review.recurringReview.items.map(item => item.name), ['Studio']);
+    assert.match(review.recurringReview.notes.join(' '), /Market.*11\.00/);
+    assert.deepEqual(review.actions, []);
+  }
+});
+
 test('recurring confirmation applies the selected signed rows and binds retries to that selection and actor', async (t) => {
   const calls = [];
   setup(t, () => assert.fail('Approval should not call the model'), {}, (args) => {
@@ -129,6 +157,55 @@ test('a month selection finishes the category audit without OpenAI, keeping the 
   assert.equal(answer.visuals[0].month, '2024-11');
   assert.equal(calls, 0);
   assert.equal((await (await chat([...history, userMessage('Как создать новый счёт в ноябре?')])).json()).message, 'New topic.');
+  assert.equal(calls, 1);
+});
+
+test('the shorthand expense audit and a follow-up month read the same category without asking for its transactions', async (t) => {
+  let calls = 0;
+  setup(t, () => { calls++; return textReply('Other topic'); }, {
+    categories: [{ id: category, name: 'Subscriptions' }],
+    transactions: [{ id: 'nov', description: 'Music', date: '2024-11-15', amount: 10 },
+      { id: 'oct', description: 'Music', date: '2024-10-15', amount: 9 }],
+  });
+  const question = userMessage('Сверь мои расходы Subscriptions за ноябрь 2024 с Recurring');
+  const nov = (await (await chat([question])).json()).visuals[0];
+  assert.equal(nov.transactionTotal, 10);
+  const note = 'Recurring audit filter: ' + JSON.stringify({
+    category: nov.category, type: 'expense', start_date: nov.startDate, end_date: nov.endDate,
+  });
+  const history = [question, { role: 'assistant', content: 'Сверка\n' + note }];
+  const followUp = userMessage('А за октябрь?');
+  const result = await (await chat([...history, followUp])).json();
+  assert.deepEqual([result.visuals[0].month, result.visuals[0].category, result.visuals[0].transactionTotal], ['2024-10', 'Subscriptions', 9]);
+  assert.deepEqual(result.actions, []);
+  assert.equal(calls, 0);
+  const other = [userMessage('Какую валюту использует приложение?'), { role: 'assistant', content: 'CAD.' }];
+  assert.equal((await (await chat([...history, ...other, followUp])).json()).message, 'Other topic');
+  assert.equal(calls, 1);
+});
+
+test('a missing audit category asks for the category once, accepts a choice, and preserves the selected month and reply language', async (t) => {
+  let calls = 0;
+  setup(t, () => { calls++; return textReply('New topic'); }, {
+    categories: [{ id: category, name: 'Subscriptions' }, { id: 'travel', name: 'Travel' }],
+    transactions: [{ id: 'bank', date: '2024-10-12', amount: 12, description: 'Example Music' }],
+  });
+  const question = userMessage('Сверь даты моих транзакций в Recurring за октябрь и ноябрь 2024');
+  const period = await (await chat([question])).json();
+  const chosen = [question, { role: 'assistant', content: period.message }, userMessage('Только октябрь')];
+  const questionResponse = await chat(chosen);
+  assert.equal(questionResponse.status, 200);
+  const pending = await questionResponse.json();
+  assert.match(pending.message, /категорию.*10\.2024/);
+  assert.deepEqual(pending.choices, ['Subscriptions', 'Travel']);
+  const history = [...chosen, { role: 'assistant', content: pending.message + '\n\nOptions offered:\n1) Subscriptions\n2) Travel' }];
+  const answer = await (await chat([...history, userMessage('Subscriptions')])).json();
+  assert.deepEqual([answer.visuals[0].category, answer.visuals[0].month, answer.visuals[0].language, answer.visuals[0].transactionCount],
+    ['Subscriptions', '2024-10', 'ru', 1]);
+  assert.deepEqual(answer.actions, []);
+  assert.match((await (await chat([...history, userMessage('Отмена')])).json()).message, /отменена/);
+  assert.equal(calls, 0);
+  assert.equal((await (await chat([...history, userMessage('Что такое ипотека?')])).json()).message, 'New topic');
   assert.equal(calls, 1);
 });
 
@@ -205,7 +282,7 @@ for (const [name, mock, status, code, retryable] of [
   });
 }
 
-test('month clarification keeps dates spanning years and asks for a year for repeated month names', () => {
+test('month clarification keeps dates spanning years and asks for a year for repeated month names', async (t) => {
   const prompt = { role: 'assistant', content: auditMonthPrompt.ru };
   const question = userMessage('Сверь даты транзакций Subscriptions с Recurring за декабрь 2024 и январь 2025');
   assert.equal(recurringAuditTurn([question, prompt, userMessage('декабрь')], '2026-11-25').month, '2024-12');
@@ -214,6 +291,15 @@ test('month clarification keeps dates spanning years and asks for a year for rep
   const history = [ambiguous, prompt, userMessage('ноябрь')];
   assert.equal(recurringAuditTurn(history, '2026-11-25').month, null);
   assert.equal(recurringAuditTurn([...history, prompt, userMessage('ноябрь 2024')], '2026-11-25').month, '2024-11');
+  setup(t, () => assert.fail('Choosing only the year should finish the report directly'), {
+    categories: [{ id: category, name: 'Subscriptions' }],
+  });
+  const years = await (await chat(history)).json();
+  assert.match(years.message, /какой год/i);
+  assert.deepEqual(years.choices, ['2024', '2025']);
+  const completed = await (await chat([...history, { role: 'assistant', content: years.message }, userMessage('2024')])).json();
+  assert.deepEqual([completed.visuals[0].month, completed.visuals[0].category, completed.visuals[0].language],
+    ['2024-11', 'Subscriptions', 'ru']);
 });
 
 test('income coverage includes an earlier cash shortfall when the user asks about going negative', async (t) => {

@@ -531,7 +531,8 @@ test.describe('Budget assistant', () => {
     await expect(dialog.getByText('Selected schedule saved.')).toBeVisible();
     expect(requests.at(-1).selectedIndices).toEqual([1]);
     await say(dialog, 'Review the schedules again');
-    const next = dialog.getByRole('region', { name: 'Review recurring schedules' }).last();
+    await expect(review).toHaveCount(2);
+    const next = review.last();
     await next.getByRole('checkbox').nth(0).check();
     await next.getByRole('checkbox').nth(1).check();
     await next.getByRole('button', { name: 'Apply schedule changes' }).click();

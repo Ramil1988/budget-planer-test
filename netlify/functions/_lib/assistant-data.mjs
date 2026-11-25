@@ -252,6 +252,13 @@ export const isWriteTool = (name) => Object.hasOwn(WRITE_TYPES, name);
 
 export class ToolInputError extends Error {}
 
+export class AuditCategoryChoice extends ToolInputError {
+  constructor(categories) {
+    super('Which single expense category should I compare with its recurring schedule?');
+    this.choices = [...new Set(categories.map(record => record.name))].sort().slice(0, 4);
+  }
+}
+
 function asText(value, label, maxLength = 100) {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text || text.length > maxLength || /[\p{Cc}]/u.test(text)) {
@@ -748,7 +755,7 @@ async function findAuditCategory(supabase, userId, category, question) {
     spanStart = hit.start;
     spanEnd = hit.end;
   }
-  if (unique.size !== 1) throw new ToolInputError('Which single expense category should I compare with its recurring schedule?');
+  if (unique.size !== 1) throw new AuditCategoryChoice(unique.size ? [...unique.values()] : categories);
   return unique.values().next().value;
 }
 

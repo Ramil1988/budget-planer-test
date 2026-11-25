@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildRecurringPlan, recurringPlanIntent } from './assistant-recurring-plan.mjs';
+import { buildRecurringPlan, recurringPlanCategoryPrompt, recurringPlanIntent } from './assistant-recurring-plan.mjs';
 
 const today = '2026-11-25';
 const scope = { category: 'Subscriptions', month: '2026-11', fromIndex: 2 };
@@ -30,6 +30,27 @@ test('a category and month reply resumes the pending creation request with its e
   assert.deepEqual(answered.scope, { month: '2026-11', question: 'Subscriptions за ноябрь 2026' });
   assert.equal(answered.create, true);
   assert.deepEqual(answered.exceptionTexts, ['Market 6.25 CAD']);
+});
+
+test('month-only and category-only answers keep the other field and the original exclusions', () => {
+  const named = user('Создай недостающие расписания в категории Subscriptions кроме Market 6.25 CAD');
+  const first = recurringPlanIntent([named], null, today);
+  assert.match(first.clarify.ru, /За какой месяц/);
+  const next = recurringPlanIntent([named, assistant(first.clarify.ru), user('за октябрь 2026 года')], null, today);
+  assert.equal(next.scope.month, '2026-10');
+  assert.match(next.scope.question, /Subscriptions/);
+  assert.deepEqual(next.exceptionTexts, ['Market 6.25 CAD']);
+  const unnamed = user('Создай недостающие расписания кроме Market 6.25 CAD');
+  const askScope = recurringPlanIntent([unnamed], null, today);
+  const steps = [unnamed, assistant(askScope.clarify.ru), user('октябрь 2026'),
+    assistant(recurringPlanCategoryPrompt('2026-10', 'ru') + '\n\nOptions offered:\n1) Utilities'), user('Utilities')];
+  const chosen = recurringPlanIntent(steps, null, today);
+  assert.deepEqual(chosen.scope, { month: '2026-10', question: 'Utilities' });
+  assert.deepEqual(chosen.exceptionTexts, ['Market 6.25 CAD']);
+  const switched = [user('Создай недостающие Recurring в категории Utilities за октябрь 2026'), assistant('По этой сверке нет подходящих изменений в Recurring.'), user('да')];
+  const noRows = planFor(switched);
+  assert.equal(noRows.scope.month, '2026-10');
+  assert.match(noRows.scope.question, /Utilities/);
 });
 
 test('the follow-up request and old suggested reply read the same audit and keep just the three Market exceptions', () => {
@@ -160,8 +181,46 @@ test('refine a proposed selection without losing the original exclusions, or req
   assert.ok(buildRecurringPlan(audit,planFor(first.concat(user('оставь только Spotify')))).manualSelection);
   assert.ok(planFor([user(confirmation)],{...scope,historyTruncated:true}).manualSelection);
   const different = planFor([user('Создай отсутствующие подписки в категории Groceries')]);
-  assert.ok(different.clarify && !different.manualSelection);
+  assert.deepEqual(different.scope, { month: scope.month, question: 'Создай отсутствующие подписки в категории Groceries' });
   assert.equal(planFor(first.concat(user('What is a mortgage?'),assistant('A loan...'),user('yes'))),null);
+});
+
+test('a legacy confirmation followed by more refinements and a bare yes preserves every charge exclusion', () => {
+  const reply = assistant('Проверь предложенные изменения в Recurring.');
+  const turns = [user(initial), assistant('Подтверди выбор Recurring.'), user(confirmation), reply];
+  for (const followup of ['Да', 'без OTHER', 'оставь только Cloudlab', 'Да']) {
+    turns.push(user(followup));
+    const intent = planFor(turns);
+    assert.ok(intent?.create && !intent.clarify, followup);
+    const plan = buildRecurringPlan(audit, intent);
+    assert.ok(!plan.manualSelection);
+    assert.ok(plan.candidates.every(row => !['t2', 't3', 't4'].includes(row.transactionId)));
+    if (followup === 'без OTHER') assert.deepEqual(plan.candidates.map(r => r.transactionId), ['t0', 't1']);
+    turns.push(reply);
+  }
+  const final = buildRecurringPlan(audit, planFor(turns.slice(0, -1)));
+  assert.deepEqual(final.candidates.map(r => r.transactionId), ['t0']);
+  for (const answer of ['Да', 'Нет', 'Отмена']) {
+    assert.equal(planFor([...turns, user('Что такое ипотека?'), assistant('Нужен пример?'), user(answer)]), null);
+  }
+  const replace = planFor([...turns.slice(0, 6), user('Теперь исключи только OTHER')]);
+  assert.deepEqual(replace.exceptionTexts, ['OTHER']);
+});
+
+test('an interval clarification keeps the original audit selection; a bare yes leaves the interval unresolved', () => {
+  const source = user('Создай недостающие Recurring каждые 2 месяца кроме Market 6.25 CAD');
+  const unresolved = planFor([source]);
+  const next = planFor([source, assistant(unresolved.clarify.en), user('yes')]);
+  assert.ok(next.clarify);
+  const turns = [source, assistant(unresolved.clarify.ru), user('Ежемесячно.')];
+  const resumed = planFor(turns);
+  assert.ok(!resumed.clarify);
+  const plan = buildRecurringPlan(audit, resumed);
+  assert.deepEqual(plan.candidates.map(r => r.transactionId), ['t0', 't1', 't3', 't4', 't5']);
+  assert.ok(plan.candidates.every(r => r.frequency === 'monthly'));
+  assert.deepEqual(planFor([...turns, assistant('Проверь изменения в Recurring.'), user('да')]), resumed);
+  const english = user('Create missing Recurring schedules every 2 months except Market 6.25 CAD');
+  assert.deepEqual(planFor([english, assistant(planFor([english]).clarify.en), user('monthly')]).exceptionTexts, resumed.exceptionTexts);
 });
 
 test('an audit supplies its schedule fingerprint to every write candidate without sending it to the browser', async () => {

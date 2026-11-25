@@ -30,13 +30,33 @@ const scopePrompt = copy('Укажи месяц и категорию расхо
 const refreshPrompt = copy('Укажи категорию и месяц для новой сверки. Предыдущая карточка относится к другому периоду или категории.',
   'Which category and month should I check for the new audit? The previous card covers a different scope.');
 
+const cadencePrompt = copy('Для новых расписаний доступны интервалы день, неделя, две недели, месяц, квартал и год. Какой выбрать?',
+  'New schedules currently support daily, weekly, biweekly, monthly, quarterly, and yearly. Which one should I use?');
+
+const planMonthPrompt = copy('За какой месяц подготовить изменения в Recurring?', 'Which month should I prepare Recurring changes for?');
+
+export function recurringPlanCategoryPrompt(month, language) {
+  const period = month.slice(5) + '.' + month.slice(0, 4);
+  return language === 'ru' ? `Для какой категории подготовить изменения в Recurring за ${period}?`
+    : `Which expense category should I prepare Recurring changes for in ${period}?`;
+}
+
+const namesCategory = /категори\p{L}*\s+[«"“]?[\p{L}\d]|\bcategory\s+[“"]?[\p{L}\d]|\bin (?:the )?[\p{L}\d& /-]+ category\b/iu;
+
+function clarificationMonth(prompt) {
+  const period = /(0[1-9]|1[0-2])\.(20\d{2})\?$/.exec(prompt);
+  if (!period) return null;
+  const month = `${period[2]}-${period[1]}`;
+  return ['ru', 'en'].some(lang => recurringPlanCategoryPrompt(month, lang) === prompt) ? month : null;
+}
+
 const cadences = [
-  ['monthly', /ежемесячн|раз в месяц|\bmonthly\b|every month/iu],
-  ['weekly', /еженедельн|раз в неделю|\bweekly\b|every week/iu],
+  ['monthly', /ежемесячн\p{L}*|раз в месяц|\bmonthly\b|every month/iu],
+  ['weekly', /еженедельн\p{L}*|раз в неделю|\bweekly\b|every week/iu],
   ['biweekly', /раз в две недели|каждые две недели|\bbiweekly\b|every two weeks/iu],
-  ['quarterly', /ежеквартальн|раз в квартал|\bquarterly\b|every quarter/iu],
-  ['yearly', /ежегодн|раз в год|\byearly\b|\bannually\b|every year/iu],
-  ['daily', /ежедневн|раз в день|\bdaily\b|every day/iu],
+  ['quarterly', /ежеквартальн\p{L}*|раз в квартал|\bquarterly\b|every quarter/iu],
+  ['yearly', /ежегодн\p{L}*|раз в год|\byearly\b|\bannually\b|every year/iu],
+  ['daily', /ежедневн\p{L}*|раз в день|\bdaily\b|every day/iu],
 ];
 
 // Words that describe the operation rather than identify a particular charge.
@@ -93,96 +113,124 @@ function refinement(text) {
   const include = /^(?:оставь только|выбери только|только|keep only|only include|select only|only) (.+)$/iu.exec(clean);
   if (include) return { only: include[1] };
   const omit = /^(?:без|кроме|пропусти|исключи|except(?: for)?|excluding|skip|exclude|without) (.+)$/iu.exec(clean);
-  return omit ? { except: omit[1], additive: /^(?:а |и )?(?:ещ[её]|также)|^(?:and )?also/iu.test(text) } : null;
+  if (!omit) return null;
+  const replacement = /^(?:только|only) (.+)$/iu.exec(omit[1]);
+  return { except: replacement?.[1] ?? omit[1], replace: Boolean(replacement) };
 }
 
 // The context identifies a report to re-read for the signed-in actor. It never
 // supplies a row to write. Exceptions come from the user's own turns after it.
-export function recurringPlanIntent(messages, auditContext, today) {
+export function recurringPlanIntent(messages, auditContext, today, resolvedScope = null) {
   const last = messages.at(-1);
   if (last?.role !== 'user') return null;
   const text = last.content.trim();
   const reply = messages.at(-2);
   const original = messages.at(-3);
-  if (reply?.role === 'assistant' && original?.role === 'user' && text.length <= 160 &&
-      [...Object.values(scopePrompt), ...Object.values(refreshPrompt)].includes(reply.content.trim()) &&
-      !/[?？]/u.test(text) && !createVerb.test(text) && !editVerb.test(text) && !cancel.test(text)) {
-    const scope = explicitScope(text, today);
-    if (scope.specified && scope.month) {
-      const resumed = recurringPlanIntent([original], { category: '', month: scope.month }, today);
-      if (resumed) return { ...resumed, scope: { month: scope.month, question: text } };
+  const prompt = reply?.role === 'assistant' ? reply.content.split('\n')[0].trim() : '';
+  if (original?.role === 'user' && Object.values(cadencePrompt).includes(prompt)) {
+    const answer = text.replace(/^(?:тогда |давай |please )/iu, '').replace(/[.!]+$/u, '').trim();
+    const chosen = cadences.find(([, pattern]) => new RegExp(`^(?:${pattern.source})$`, 'iu').test(answer));
+    const namedInterval = new Map([['день','daily'], ['неделя','weekly'], ['две недели','biweekly'],
+      ['месяц','monthly'], ['квартал','quarterly'], ['год','yearly']]).get(answer.toLowerCase());
+    const frequency = chosen?.[0] ?? namedInterval;
+    if (frequency || yes.test(text)) {
+      const previous = recurringPlanIntent(messages.slice(0, -2), auditContext, today, resolvedScope);
+      if (previous?.clarify === cadencePrompt) return frequency ? { ...previous, frequency, clarify: undefined } : previous;
     }
+  }
+  const categoryPromptMonth = clarificationMonth(prompt);
+  const clarifyingScope = categoryPromptMonth || [...Object.values(scopePrompt), ...Object.values(refreshPrompt), ...Object.values(planMonthPrompt)].includes(prompt);
+  if (clarifyingScope && original?.role === 'user' && text.length <= 160 &&
+      !/[?？]/u.test(text) && !createVerb.test(text) && !editVerb.test(text) && !cancel.test(text) && !yes.test(text)) {
+    const answer = explicitScope(text, today);
+    const month = resolvedScope?.month ?? (answer.specified ? answer.month : categoryPromptMonth);
+    if (!month) return { clarify: planMonthPrompt };
+    // A month-only answer leaves the category from the request in effect; a
+    // category choice may carry a month already resolved several turns ago.
+    const words = text.toLowerCase().replace(/20\d{2}-(?:0[1-9]|1[0-2])/gu, ' ').match(/[\p{L}\p{N}]+/gu) ?? [];
+    const monthOnly = answer.specified && words.every(word => monthWord.test(word) ||
+      /^(?:за|в|тогда|только|месяц|месяце|этот|этом|прошлый|прошлом|предыдущий|год|года|г|in|for|just|last|previous|this|month)$/u.test(word));
+    const originalInstruction = requestParts(original.content).instruction;
+    const scope = resolvedScope ?? (monthOnly && auditContext?.category && !namesCategory.test(originalInstruction)
+      ? { month, category: auditContext.category }
+      : { month, question: monthOnly ? originalInstruction : text });
+    const resumed = recurringPlanIntent(messages.slice(0, -2), auditContext, today, scope);
+    // A category name or numeric month is a selection in the current conversation.
+    if (resumed) return { ...resumed, language: /\p{Script=Cyrillic}/u.test(prompt) ? 'ru' : 'en' };
+    return null;
   }
   const history = auditContext ? messages.slice(auditContext.fromIndex ?? 0, -1) : [];
   const base = auditContext ? { category: auditContext.category, month: auditContext.month } : null;
-  if (cancel.test(text) || /^(?:нет|no)[.!\s]*$/iu.test(text) || /^(?:ничего не |не )(?:создавай|создавать|добавляй|добавлять|меняй|исправляй|изменяй)|^do(?: not|n['’]t) (?:create|add|change|fix|edit|update)/iu.test(text) && !/[,;]\s*\S/iu.test(text)) {
-    return base ? { scope: base, cancelled: true } : null;
-  }
+  const previousMentionsSchedule = scheduleWord.test(reply?.content ?? '');
+  const cancelled = cancel.test(text) && (!history.length || scheduleWord.test(text) || previousMentionsSchedule)
+    || /^(?:нет|no)[.!\s]*$/iu.test(text) && previousMentionsSchedule;
+  const declinesWrite = /^(?:ничего не |не )(?:создавай|создавать|добавляй|добавлять|меняй|исправляй|изменяй)|^do(?: not|n['’]t) (?:create|add|change|fix|edit|update)/iu.test(text)
+    && !/[,;]\s*\S/iu.test(text);
+  if (cancelled || declinesWrite) return base ? { scope: base, cancelled: true } : null;
   const parts = requestParts(text);
   const currentRefinement = refinement(text);
-  // Trace a chain of adjacent user refinements back to the original request;
-  // a question on a different topic breaks the chain.
-  const refinements = [];
-  let previous, prior;
-  for (const turn of history.filter(({ role }) => role === 'user').reverse()) {
-    const parts = requestParts(turn.content);
-    prior = actionIn(parts.instruction, true);
-    if (prior) { previous = turn; break; }
-    const edit = refinement(turn.content);
-    if (edit) refinements.unshift(edit);
-    else if (!yes.test(turn.content.trim())) break;
+  const refersBack = Boolean(parts.excluded && referenceException.test(parts.excluded));
+  const carryingRows = /(?:остальн\p{L}*|упомянут\p{L}*|(?:создай|добавь|исправь)\s+их(?:\s|$)|\b(?:the remaining|the rest|add them|fix them)\b)/iu.test(parts.instruction);
+  const shortReply = yes.test(text) || Boolean(currentRefinement);
+  // Resolve the preceding user turn with its own history. This follows old
+  // confirmation buttons and successive refinements back to the original
+  // restrictions, stopping at a new topic or the source audit.
+  const recentReply = history.at(-1);
+  const resumesReview = shortReply && recentReply?.role === 'assistant' && scheduleWord.test(recentReply.content);
+  const prior = (resumesReview || refersBack || carryingRows) && original?.role === 'user' && history.length >= 2
+    ? recurringPlanIntent(messages.slice(0, -2), auditContext, today)
+    : null;
+  const pending = prior && !prior.cancelled && (prior.create || prior.update);
+  if (resumesReview && pending) {
+    if (prior.clarify || !currentRefinement) return prior;
+    const exclusions = currentRefinement.replace ? [] : prior.exceptionTexts ?? [];
+    return {
+      ...prior,
+      exceptionTexts: currentRefinement.except ? [...new Set([...exclusions, currentRefinement.except])] : exclusions,
+      only: currentRefinement.only ?? prior.only,
+    };
   }
-  const resumed = Boolean(base && prior && (yes.test(text) || currentRefinement) && scheduleWord.test(history.at(-1)?.content ?? ''));
-  const action = actionIn(parts.instruction, Boolean(base)) ?? (resumed ? prior : null);
+  const action = actionIn(parts.instruction, Boolean(base));
   if (!action) {
-    if (base && auditContext.historyTruncated && (currentRefinement || yes.test(text))) {
+    if (base && auditContext.historyTruncated && shortReply && !original) {
       return { scope: base, create: true, update: true, manualSelection: true, clarify: selectRows };
     }
     return null;
   }
 
   const scope = explicitScope(parts.instruction, today);
-  if (!base && (!scope.specified || !scope.month)) return { ...action, clarify: scopePrompt };
-  if (base && scope.specified && !scope.month) return { ...action, clarify: scopePrompt };
-  const categoryNamed = /категори\p{L}*\s+[«"“]?([\p{L}\d&/-]+)|\bcategory\s+[“"]?([\p{L}\d&/-]+)|\bin (?:the )?([\p{L}\d&/-]+) category\b/iu.exec(parts.instruction);
-  const differentCategory = base && categoryNamed && ![categoryNamed[1],categoryNamed[2],categoryNamed[3]].filter(Boolean)
-    .every(name => auditWords(base.category).includes(name.toLowerCase()));
-  if (differentCategory && !(scope.specified && scope.month)) return { ...action, clarify: refreshPrompt };
-  const requestedScope = !base || differentCategory
+  const categoryExplicit = namesCategory.test(parts.instruction);
+  if (!resolvedScope && (!scope.month || !base && !scope.specified)) {
+    return { ...action, clarify: base || categoryExplicit ? planMonthPrompt : scopePrompt };
+  }
+  const requestedScope = resolvedScope ?? (!base || categoryExplicit
     ? { month: scope.specified ? scope.month : base?.month, question: parts.instruction }
-    : { ...base, ...(scope.specified ? { month: scope.month } : {}) };
-  const filter = resumed ? null : parts.excluded;
-  const previousParts = previous && requestParts(previous.content);
-  const refersBack = !!filter && referenceException.test(filter);
-  const carryingRows = /(?:остальн\p{L}*|упомянут\p{L}*|(?:создай|добавь|исправь)\s+их(?:\s|$)|\b(?:the remaining|the rest|add them|fix them)\b)/iu.test(parts.instruction);
-  if (refersBack && !previousParts?.excluded || resumed && auditContext.historyTruncated || !resumed && !action.bulk && auditContext?.historyTruncated) {
+    : { ...base, ...(scope.specified ? { month: scope.month } : {}) });
+  const carry = pending && (refersBack || carryingRows);
+  if ((refersBack && !prior?.exceptionTexts?.length) || (carry && prior.clarify) || (!action.bulk && auditContext?.historyTruncated)) {
     return { ...action, scope: requestedScope, manualSelection: true, clarify: missingReference };
   }
-  const exclusion = resumed || refersBack || carryingRows && prior ? previousParts?.excluded : filter;
-  if (exclusion && referenceException.test(exclusion)) return { ...action, scope: requestedScope, manualSelection: true, clarify: missingReference };
-  let exceptionTexts = exclusion ? [exclusion] : [];
-  let only;
-  if (resumed || refersBack || carryingRows && prior) {
-    for (const edit of [...refinements, ...(currentRefinement ? [currentRefinement] : [])]) {
-      if (edit.only) only = edit.only;
-      if (edit.except) exceptionTexts = edit.additive ? [...exceptionTexts, edit.except] : [edit.except];
-    }
-  }
-  const cadenceText = resumed ? previous.content : parts.instruction;
+  const exceptionTexts = carry ? [...(prior.exceptionTexts ?? [])] : [];
+  if (!refersBack && parts.excluded) exceptionTexts.push(parts.excluded);
+  const cadenceText = parts.instruction;
   const frequency = cadences.filter(([, pattern]) => pattern.test(cadenceText)).map(([kind]) => kind);
   // Unsupported changes of frequency/amount or arbitrary row predicates need
   // explicit row selection. Never interpret an unknown restriction as “all”.
   const cadenceRemainder = cadenceText.replace(/раз в две недели|каждые две недели|every two weeks/giu, '');
-  if (frequency.length > 1 || /\b(?:every|each)\s+(?:\d+|two|three|four)|кажды[ей]\s+\d+|раз в \d+/iu.test(cadenceRemainder)) {
-    return { ...action, scope: requestedScope, clarify: copy('Для новых расписаний доступны интервалы день, неделя, две недели, месяц, квартал и год. Какой выбрать?',
-      'New schedules currently support daily, weekly, biweekly, monthly, quarterly, and yearly. Which one should I use?') };
-  }
-  if (!resumed && !refersBack && /\b(?:under|above|over|less than|more than|cheapest|largest|smallest|first|last)\s+(?:the\s+)?(?:\d|charge|row|payment)|(?:сумм\p{L}* (?:меньше|больше)|дешевле|дороже|первые \d|последние \d)|(?:только|\bonly)\s+(?!в Recurr?ing|для (?:непарных|списаний без пары)|(?:the )?(?:unmatched|missing|matched)|(?:отсутствующ|недостающ))/iu.test(parts.instruction)) {
+  const chooseCadence = frequency.length > 1 || /\b(?:every|each)\s+(?:\d+|two|three|four)|кажды[ей]\s+\d+|раз в \d+/iu.test(cadenceRemainder);
+  if (!refersBack && /\b(?:under|above|over|less than|more than|cheapest|largest|smallest|first|last)\s+(?:the\s+)?(?:\d|charge|row|payment)|(?:сумм\p{L}* (?:меньше|больше)|дешевле|дороже|первые \d|последние \d)|(?:только|\bonly)\s+(?!в Recurr?ing|для (?:непарных|списаний без пары)|(?:the )?(?:unmatched|missing|matched)|(?:отсутствующ|недостающ))/iu.test(parts.instruction)) {
     return { ...action, scope: requestedScope, manualSelection: true, clarify: selectRows };
   }
+  // On a cadence clarification keep merchant/amount filters and the resolved
+  // month. Only a syntactically recognized interval can be removed from them.
+  const instruction = chooseCadence ? parts.instruction.replace(
+    /(?:кажды[ей]|раз в|every|each)\s+(?:\d+|two|three|four)\s+(?:месяц\p{L}*|недел\p{L}*|дн(?:я|ей)|год[а]?|лет|months?|weeks?|days?|years?)(?!\p{L})/giu, ' ',
+  ) : parts.instruction;
   return {
-    ...action, scope: requestedScope, instruction: resumed ? requestParts(previous.content).instruction : parts.instruction,
-    exceptionTexts, only, frequency: frequency[0] ?? 'monthly',
+    ...action, scope: requestedScope, instruction,
+    exceptionTexts: [...new Set(exceptionTexts)], only: carry ? prior.only : undefined,
+    frequency: frequency[0] ?? (carry ? prior.frequency : null) ?? 'monthly',
+    ...(chooseCadence && { clarify: cadencePrompt }),
   };
 }
 

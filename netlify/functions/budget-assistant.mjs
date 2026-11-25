@@ -1,14 +1,14 @@
 import { projectionAtOpening } from '../../frontend/src/lib/projectedBalance.js';
 import { createClient } from '@supabase/supabase-js';
-import { assistantTools, CHANGES_TOOL, compareExpenseCategories, executeAssistantTool, getCategoryDrilldown, getRecurringDateAudit, getUpcomingPaymentsPlan, isWriteTool, summarizeTransactions, ToolInputError } from './_lib/assistant-data.mjs';
+import { assistantTools, AuditCategoryChoice, CHANGES_TOOL, compareExpenseCategories, executeAssistantTool, getCategoryDrilldown, getRecurringDateAudit, getUpcomingPaymentsPlan, isWriteTool, summarizeTransactions, ToolInputError } from './_lib/assistant-data.mjs';
 import { BudgetReviewError, getBudgetReview, getBudgetSuggestions, getComparisonBudgetFlags } from './_lib/assistant-budget.mjs';
 import { loadAssistantImportOptions } from './_lib/assistant-import-data.mjs';
 import { attachmentInput, confirmAssistantImport, draftAssistantImport, ImportRequestError, prepareAssistantImport } from './_lib/assistant-import.mjs';
 import { addWarnings, differenceNote, linesTotal, missingNote, planFormat, planInstructions, readReceipt, receiptAtPostedCad, receiptFormat, receiptInstructions, receiptMessage, signReceipt, verifyReceipt } from './_lib/assistant-receipt.mjs';
 import { parseAssistantReply, replyFormat } from './_lib/assistant-reply.mjs';
 import { AssistantProviderError, providerHttpError } from './_lib/assistant-provider-error.mjs';
-import { auditMonthChoices, auditMonthPrompt, recurringAuditTurn } from './_lib/assistant-recurring-intent.mjs';
-import { recurringPlanIntent } from './_lib/assistant-recurring-plan.mjs';
+import { auditCategoryPrompt, auditMonthChoices, auditMonthPrompt, auditYearPrompt, recurringAuditTurn } from './_lib/assistant-recurring-intent.mjs';
+import { recurringPlanCategoryPrompt, recurringPlanIntent } from './_lib/assistant-recurring-plan.mjs';
 import { applyRecurringReview, recurringContext, recurringReviewReply } from './_lib/assistant-recurring-review.mjs';
 import { closeToReceipt, resolveSplits, SplitInputError } from './_lib/assistant-split.mjs';
 import { confirmAssistantChanges, confirmAssistantTransaction, TransactionReviewError } from './_lib/assistant-transaction.mjs';
@@ -460,7 +460,8 @@ export default async function budgetAssistant(request) {
   const today = currentDate(body.timeZone);
   const auditContext = mode === 'chat' ? recurringContext(messages, body.auditContext) : null;
   const planIntent = mode === 'chat' && !body.analysisOnly ? recurringPlanIntent(messages, auditContext, today) : null;
-  const auditTurn = mode === 'chat' && !planIntent ? recurringAuditTurn(messages, today) : null;
+  const recurringLanguage = planIntent?.language ?? preferredChatLanguage(body, messages);
+  const auditTurn = mode === 'chat' && !planIntent ? recurringAuditTurn(messages, today, auditContext) : null;
   const isRecurringAudit = mode === 'recurring_date_audit' || Boolean(auditTurn);
   const isDirectReport = isBudgetReview || isFinancialSummary || isCategoryComparison || isCategoryDrilldown || isUpcomingPayments || isRecurringAudit;
   const withVisuals = body.visuals === true && (mode === 'chat' || isBudgetReview);
@@ -513,7 +514,7 @@ export default async function budgetAssistant(request) {
     budgetContext = { supabase, userId: data.user.id };
 
     if (planIntent || mode === 'confirm_recurring_changes') {
-      const language = preferredChatLanguage(body, messages);
+      const language = recurringLanguage;
       if (readOnly) return json({ error: language === 'ru' ? 'Этот режим поддерживает только просмотр.' : 'This preview is read-only.' }, 403);
       const context = { ...budgetContext, today, language, signingKey: apiKey };
       if (planIntent) return json(await recurringReviewReply({ ...context, intent: planIntent }));
@@ -525,7 +526,13 @@ export default async function budgetAssistant(request) {
     }
 
     if (isRecurringAudit) {
-      const language = preferredChatLanguage(body, messages);
+      const language = auditTurn?.language ?? preferredChatLanguage(body, messages);
+      if (auditTurn?.cancelled) return json({
+        message: language === 'ru' ? 'Сверка отменена.' : 'Audit cancelled.', choices: [], actions: [],
+      });
+      if (auditTurn?.yearChoices) return json({
+        message: auditYearPrompt[language], choices: auditTurn.yearChoices.slice(0, 4), actions: [],
+      });
       const month = auditTurn ? auditTurn.month : body.month ?? today.slice(0, 7);
       if (month == null) return json({
         message: auditMonthPrompt[language],
@@ -533,7 +540,7 @@ export default async function budgetAssistant(request) {
         actions: [],
       });
       const audit = await getRecurringDateAudit(supabase, data.user.id, {
-        month, category: auditTurn ? undefined : body.category, question: auditTurn?.question ?? body.question,
+        month, category: auditTurn ? auditTurn.category : body.category, question: auditTurn?.question ?? body.question,
       }, today);
       return json({
         message: [recurringAuditMessage(audit, language), companyChargeNote(audit, language)].filter(Boolean).join('\n\n'),
@@ -1065,9 +1072,19 @@ export default async function budgetAssistant(request) {
     if ((error instanceof ImportRequestError || error instanceof TransactionReviewError) && !cardsPrepared) {
       return json({ error: error.message }, error.status);
     }
+    const requestedMonth = planIntent?.scope?.month ?? auditTurn?.month;
+    if (error instanceof AuditCategoryChoice && requestedMonth) {
+      const language = auditTurn?.language ?? recurringLanguage;
+      if (!error.choices.length) return json({
+        message: language === 'ru' ? 'В твоих данных пока нет категорий расходов для сверки.' : 'There are no expense categories to reconcile yet.',
+        choices: [], actions: [],
+      });
+      const prompt = planIntent ? recurringPlanCategoryPrompt : auditCategoryPrompt;
+      return json({ message: prompt(requestedMonth, language), choices: error.choices, actions: [] });
+    }
     if (planIntent || mode === 'confirm_recurring_changes') {
       if (error instanceof ToolInputError || error instanceof BudgetReviewError) return json({ error: error.message }, error.status ?? 400);
-      const ru = preferredChatLanguage(body, messages) === 'ru';
+      const ru = recurringLanguage === 'ru';
       if (signal.aborted) return json({ error: ru ? 'Проверка Recurring заняла слишком много времени. Повтори запрос.' : 'The Recurring request timed out. Try again.' }, 504);
       return json({ error: ru ? 'Не удалось проверить изменения в Recurring. Повтори запрос.' : 'Could not verify the Recurring changes. Try again.' }, 502);
     }
@@ -1103,7 +1120,8 @@ export default async function budgetAssistant(request) {
       return json({ error: 'The upcoming payments could not load. Please try again.' }, 502);
     }
     if (isRecurringAudit) {
-      const russian = preferredChatLanguage(body, messages) === 'ru';
+      const language = auditTurn?.language ?? preferredChatLanguage(body, messages);
+      const russian = language === 'ru';
       if (signal.aborted) return json({ error: russian ? 'Сверка дат заняла слишком много времени.' : 'The date check timed out.' }, 504);
       if (error instanceof BudgetReviewError) return json({ error: error.message }, error.status);
       if (error instanceof ToolInputError) return json({ error: error.message }, 400);
