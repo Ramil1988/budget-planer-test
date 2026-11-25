@@ -166,6 +166,30 @@ Chakra UI's default breakpoints:
 - **Padding:** 8 (32px) horizontal padding on containers
 - **Vertical Spacing:** 16 (64px) between major sections
 
+### Redesigned pages (2026-11-24)
+
+Budget, Recurring, Reports, Assets & Liabilities, Transactions and Add transaction are built
+the same way, and differently from the pages that still use Chakra components throughout:
+
+| Layer | Where | What it holds |
+|-------|-------|---------------|
+| Page | `src/pages/<Page>.jsx` | Loading and saving (unchanged from before the redesign) and the layout |
+| Components | `src/components/<page>/` | The page's own charts, lists, forms and dialogs |
+| View helpers | `src/lib/<page>View.js` (`budgetMath.js` for Budget) | Pure functions that turn records into what is drawn; unit-tested with `node --test` |
+| Shared styles | `src/styles/ledger.css` | Tokens (`--bw-*`) and classes (`bw-*`): masthead, tabs, ledger of figures, panels, forms, dialogs |
+| Page styles | `src/styles/<page>.css` | What only that page has |
+
+- A page's root carries `bw-surface bw-page`. The tokens are defined on `.bw-surface` and
+  again under `.dark .bw-surface`, so anything rendered outside the page (a dialog) must
+  carry `bw-surface` too. `components/DialogFrame.jsx` does this for every dialog
+- Charts are HTML and SVG written by hand. A line chart is an SVG stretched to its plot
+  (`preserveAspectRatio="none"`, `vector-effect: non-scaling-stroke`) with the points and
+  figures as ordinary elements laid over it, so text keeps its size on a phone
+- Dropdowns are native `<select>` elements; no click-outside handling is needed
+- Each page has one chart that is its own: the pace ruler (Budget), the month strip
+  (Recurring), the year chart, treemap and heat map (Reports), the balance sheet to scale
+  (Assets & Liabilities), the steps of what had been spent (Transactions)
+
 ## State Management
 
 Currently using React's built-in state management:
@@ -242,6 +266,16 @@ BudgetWise uses **Supabase** as its Backend-as-a-Service platform, providing Pos
 -- Trigger: calc_running_balance()
 -- Calculates and stores the running balance for each transaction
 -- Maintains historical balance at the time of each transaction
+```
+
+#### Liability Balances
+```sql
+-- Trigger function: recalculate_liabilities_on_transaction()  (011_liability_interest.sql)
+-- Fires after a transaction is inserted, updated or deleted. A liability's balance is
+-- worked out again from its anchor (liabilities.balance_anchor, _date, _at): each payment
+-- in the linked category first covers balance x rate x days / 365 of interest, the rest
+-- reduces the debt. Trashed transactions do not count. Editing a liability's balance,
+-- link, start date or rate sets a new anchor (anchor_liability_balance()).
 ```
 
 #### Budget Tracking

@@ -1,0 +1,1166 @@
+/* Assets & Liabilities. The shared paper, ink, masthead, ledger, panels and forms come from
+   ledger.css; this file holds what only this page has: the balance sheet drawn to scale,
+   the net worth line, the health score, the emergency ruler and the debts. */
+
+/* ---- Masthead controls ------------------------------------------------------------------ */
+
+.assets-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.assets-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.assets-controls .bw-select,
+.assets-controls .bw-button {
+  height: 40px;
+  min-height: 40px;
+}
+
+/* ---- The sentence under the figures ------------------------------------------------------- */
+
+.assets-headline {
+  margin: 0;
+  padding: 16px clamp(16px, 2.3vw, 28px) 4px;
+  border-top: 1px solid var(--bw-border);
+  font-size: clamp(1.0625rem, 1.6vw, 1.3125rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.assets-headline[data-tone='bad'] {
+  color: var(--bw-negative);
+}
+
+.bw-figure small[data-tone='good'] {
+  color: var(--bw-positive);
+  font-weight: 600;
+}
+
+.bw-figure small[data-tone='bad'] {
+  color: var(--bw-negative);
+  font-weight: 600;
+}
+
+/* ---- The balance sheet, to scale ---------------------------------------------------------- */
+
+.assets-sheet {
+  display: grid;
+  gap: 18px;
+  padding: 14px clamp(16px, 2.3vw, 28px) 22px;
+}
+
+.assets-sheet__row h3 {
+  margin: 0 0 7px;
+  color: var(--bw-muted) !important;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Both bars are the same width, so a segment of one can be read against the other. */
+.assets-sheet__bar {
+  display: flex;
+  height: 46px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--bw-track);
+  list-style: none;
+}
+
+.assets-sheet__segment {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  background: color-mix(in srgb, var(--bw-ink) var(--strength), var(--bw-paper));
+  color: var(--bw-ink);
+  container-type: inline-size;
+}
+
+.assets-sheet__segment + .assets-sheet__segment {
+  box-shadow: inset 2px 0 0 var(--bw-paper);
+}
+
+.assets-sheet__segment[data-dark='true'] {
+  color: var(--bw-paper);
+}
+
+.assets-sheet__segment[data-kind='owed'] {
+  background: color-mix(in srgb, var(--bw-negative) var(--strength), var(--bw-paper));
+}
+
+.assets-sheet__segment[data-kind='yours'] {
+  background: var(--bw-positive);
+}
+
+.assets-sheet__segment span {
+  overflow: hidden;
+  padding: 0 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A narrow segment has no room for its name; the key under the bar has every name. */
+@container (max-width: 140px) {
+  .assets-sheet__segment span {
+    display: none;
+  }
+}
+
+.assets-sheet__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 20px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-sheet__key + .assets-sheet__key {
+  margin-top: 5px;
+}
+
+.assets-sheet__key li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.assets-sheet__key i {
+  align-self: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bw-ink) var(--strength), var(--bw-paper));
+}
+
+.assets-sheet__key li[data-kind='owed'] i {
+  background: color-mix(in srgb, var(--bw-negative) var(--strength), var(--bw-paper));
+}
+
+.assets-sheet__key li[data-kind='yours'] i {
+  background: var(--bw-positive);
+}
+
+.assets-sheet__key span {
+  color: var(--bw-muted);
+}
+
+.assets-sheet__key b {
+  font-weight: 600;
+}
+
+.assets-sheet__key li[data-kind='yours'] b {
+  color: var(--bw-positive);
+}
+
+.assets-sheet__key small {
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+.assets-sheet__short {
+  margin: 8px 0 0;
+  color: var(--bw-negative);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* ---- Panels ------------------------------------------------------------------------------- */
+
+/* Two columns, each a stack of panels: the wide one holds the line and the list, the
+   narrow one the score and the emergency fund. */
+.assets-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(16px, 2vw, 24px);
+}
+
+.assets-stack {
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+  min-width: 0;
+}
+
+.assets-stack > * {
+  min-width: 0;
+}
+
+.assets-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 14px;
+  padding: 16px clamp(14px, 2vw, 22px) 10px;
+}
+
+.assets-panel__head h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.assets-panel__head p {
+  margin: 2px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-panel__head p[data-tone='good'] {
+  color: var(--bw-positive);
+}
+
+.assets-panel__head p[data-tone='bad'] {
+  color: var(--bw-negative);
+}
+
+.assets-panel__head > span {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-panel__head > span[data-tone='good'] {
+  color: var(--bw-positive);
+  font-weight: 600;
+}
+
+.assets-panel__head > span[data-tone='caution'] {
+  color: var(--bw-caution);
+  font-weight: 600;
+}
+
+.assets-panel__head > span[data-tone='bad'] {
+  color: var(--bw-negative);
+  font-weight: 600;
+}
+
+/* ---- Net worth over time ------------------------------------------------------------------ */
+
+.assets-trend__manage {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.assets-trend__body {
+  padding: 0 clamp(14px, 2vw, 22px) 16px;
+}
+
+/* Room above the plot for the figure that sits over the picked point. */
+.assets-trend__plot {
+  position: relative;
+  height: clamp(170px, 22vw, 230px);
+  margin: 26px 6px 8px;
+}
+
+.assets-trend__plot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.assets-trend__area[data-side='above'] {
+  fill: var(--bw-positive);
+  opacity: 0.14;
+}
+
+.assets-trend__area[data-side='below'] {
+  fill: var(--bw-negative);
+  opacity: 0.14;
+}
+
+/* The SVG is stretched, so strokes keep their width in screen pixels. */
+.assets-trend__zero,
+.assets-trend__line {
+  vector-effect: non-scaling-stroke;
+}
+
+.assets-trend__zero {
+  stroke: var(--bw-border);
+  stroke-width: 1.5;
+}
+
+.assets-trend__line {
+  fill: none;
+  stroke: var(--bw-ink);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.assets-trend__zero-label {
+  position: absolute;
+  left: 0;
+  color: var(--bw-muted);
+  font-size: 0.6875rem;
+  line-height: 1;
+  transform: translateY(calc(-100% - 4px));
+}
+
+/* The point is small; the button around it is large enough for a finger. */
+.assets-trend__dot {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.assets-trend__dot::before {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border: 2.25px solid var(--bw-positive);
+  border-radius: 50%;
+  background: var(--bw-paper);
+}
+
+.assets-trend__dot[data-tone='bad']::before {
+  border-color: var(--bw-negative);
+}
+
+.assets-trend__dot:hover::before {
+  inset: 7px;
+}
+
+.assets-trend__dot[aria-pressed='true']::before {
+  inset: 6px;
+  background: var(--bw-positive);
+}
+
+.assets-trend__dot[aria-pressed='true'][data-tone='bad']::before {
+  background: var(--bw-negative);
+}
+
+.assets-trend__label {
+  position: absolute;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: var(--bw-paper);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.assets-trend__label[data-side='below'] {
+  transform: translate(-50%, 13px);
+}
+
+.assets-trend__label[data-edge='end'] {
+  transform: translate(calc(-100% + 8px), calc(-100% - 12px));
+}
+
+.assets-trend__label[data-edge='end'][data-side='below'] {
+  transform: translate(calc(-100% + 8px), 13px);
+}
+
+.assets-trend__label[data-edge='start'] {
+  transform: translate(-8px, calc(-100% - 12px));
+}
+
+.assets-trend__label[data-edge='start'][data-side='below'] {
+  transform: translate(-8px, 13px);
+}
+
+.assets-trend__axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+.assets-trend__picked {
+  margin: 12px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--bw-border);
+  color: var(--bw-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-trend__picked b {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.assets-trend__picked span[data-tone='good'] {
+  color: var(--bw-positive);
+}
+
+.assets-trend__picked span[data-tone='bad'] {
+  color: var(--bw-negative);
+}
+
+/* ---- Financial health --------------------------------------------------------------------- */
+
+.assets-health__score {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 2px clamp(14px, 2vw, 22px) 14px;
+}
+
+.assets-health__score > b {
+  font-family: var(--font-display);
+  font-size: 3.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.assets-health__score > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.assets-health__score strong {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.assets-health__score[data-tone='good'] :is(b, strong) {
+  color: var(--bw-positive);
+}
+
+.assets-health__score[data-tone='caution'] :is(b, strong) {
+  color: var(--bw-caution);
+}
+
+.assets-health__score[data-tone='bad'] :is(b, strong) {
+  color: var(--bw-negative);
+}
+
+.assets-health__scale,
+.assets-health__meter {
+  display: block;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bw-track);
+}
+
+.assets-health__scale i,
+.assets-health__meter i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--bw-fill);
+}
+
+.assets-health__score[data-tone='caution'] .assets-health__scale i {
+  background: var(--bw-caution);
+}
+
+.assets-health__score[data-tone='bad'] .assets-health__scale i {
+  background: var(--bw-negative);
+}
+
+.assets-health__parts {
+  margin: 0;
+  padding: 0 0 6px;
+  list-style: none;
+}
+
+.assets-health__parts li {
+  border-top: 1px solid var(--bw-border);
+}
+
+.assets-health__part {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px auto 16px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px clamp(14px, 2vw, 22px);
+  border: 0;
+  background: none;
+  color: var(--bw-ink);
+  font-size: 0.875rem;
+  text-align: start;
+  cursor: pointer;
+}
+
+.assets-health__part:hover {
+  background: var(--bw-hover);
+}
+
+.assets-health__part b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.assets-health__part svg {
+  color: var(--bw-muted);
+  transition: transform 0.15s ease;
+}
+
+.assets-health__part[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.assets-health__why {
+  padding: 0 clamp(14px, 2vw, 22px) 13px;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+.assets-health__why p {
+  margin: 0 0 5px;
+}
+
+.assets-health__why p:last-child {
+  margin-bottom: 0;
+  color: var(--bw-ink);
+}
+
+.assets-health__sum {
+  color: var(--bw-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Emergency fund ----------------------------------------------------------------------- */
+
+.assets-cushion__body {
+  padding: 0 clamp(14px, 2vw, 22px) 14px;
+}
+
+.assets-cushion__months {
+  margin: 0 0 12px;
+  color: var(--bw-muted);
+  font-size: 0.875rem;
+}
+
+.assets-cushion__months b {
+  margin-right: 4px;
+  color: var(--bw-ink);
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+/* A ruler: the fill is how far along, the marks are the stops on the way. */
+.assets-ruler {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bw-track);
+}
+
+.assets-ruler i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--bw-fill);
+}
+
+.assets-ruler[data-tone='caution'] i {
+  background: var(--bw-caution);
+}
+
+.assets-ruler[data-tone='bad'] i {
+  background: var(--bw-negative);
+}
+
+.assets-ruler span {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1.5px;
+  background: var(--bw-paper);
+  box-shadow: 0 0 0 0.5px var(--bw-muted);
+}
+
+.assets-ruler__marks {
+  position: relative;
+  height: 18px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-ruler__marks li {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.assets-ruler__marks li:first-child {
+  transform: none;
+}
+
+.assets-ruler__marks li:last-child {
+  transform: translateX(-100%);
+}
+
+.assets-cushion__basis {
+  margin: 8px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-facts {
+  margin: 0;
+  padding: 0 clamp(14px, 2vw, 22px) 12px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-facts div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--bw-border);
+}
+
+.assets-facts dt {
+  color: var(--bw-muted);
+}
+
+.assets-facts dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: end;
+}
+
+.assets-facts dd small {
+  display: block;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+/* ---- What is owned ------------------------------------------------------------------------ */
+
+.assets-list .assets-panel__head {
+  border-bottom: 1px solid var(--bw-border);
+}
+
+.assets-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(60px, 0.5fr) auto auto;
+  grid-template-areas: 'body share amount actions';
+  align-items: center;
+  gap: 4px 16px;
+  padding: 9px clamp(14px, 2vw, 22px);
+}
+
+.assets-row + .assets-row {
+  border-top: 1px solid var(--bw-border);
+}
+
+.assets-rows {
+  padding: 0;
+}
+
+.assets-row:hover {
+  background: var(--bw-hover);
+}
+
+.assets-row__body {
+  grid-area: body;
+  min-width: 0;
+}
+
+.assets-row__name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.assets-row__meta {
+  margin: 1px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.assets-row__share {
+  grid-area: share;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bw-track);
+}
+
+.assets-row__share i {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--bw-fill);
+}
+
+.assets-row__amount {
+  grid-area: amount;
+  min-width: 84px;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.assets-row__amount b {
+  display: block;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.assets-row__amount small {
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-row__actions {
+  grid-area: actions;
+  display: flex;
+  gap: 2px;
+}
+
+.assets-row__actions button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.assets-row__actions button:hover {
+  background: var(--bw-soft);
+  color: var(--bw-ink);
+}
+
+.assets-row__actions button[data-action='delete']:hover {
+  color: var(--bw-negative);
+}
+
+/* ---- What is owed ------------------------------------------------------------------------- */
+
+.assets-debts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assets-debt {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 14px clamp(20px, 3vw, 40px);
+  padding: 18px clamp(14px, 2vw, 22px) 20px;
+}
+
+.assets-debt + .assets-debt {
+  border-top: 1px solid var(--bw-border);
+}
+
+.assets-debt__head {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 18px;
+}
+
+.assets-debt__head .assets-row__actions {
+  grid-area: auto;
+}
+
+.assets-debt__head h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+
+.assets-debt__head p {
+  margin: 2px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+.assets-debt__balance {
+  text-align: end;
+}
+
+.assets-debt__balance b {
+  display: block;
+  color: var(--bw-negative);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+
+.assets-debt__balance small {
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+.assets-debt__progress {
+  grid-column: 1 / -1;
+}
+
+.assets-debt__progress p,
+.assets-debt__cost p {
+  margin: 7px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-debt__progress p b {
+  color: var(--bw-positive);
+  font-weight: 600;
+}
+
+.assets-debt__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px 18px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-debt__facts dt {
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+.assets-debt__facts dd {
+  margin: 2px 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.assets-debt__facts dd[data-tone='bad'] {
+  color: var(--bw-negative);
+}
+
+.assets-debt__facts dd small {
+  display: block;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.assets-debt__note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+.assets-debt__note[data-tone='bad'] {
+  color: var(--bw-negative);
+  font-weight: 600;
+}
+
+/* What is still to be paid, split into the debt itself and the interest on top of it. */
+.assets-debt__split {
+  display: flex;
+  overflow: hidden;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.assets-debt__split i[data-part='principal'] {
+  background: color-mix(in srgb, var(--bw-negative) 78%, var(--bw-paper));
+}
+
+.assets-debt__split i[data-part='interest'] {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--bw-negative) 62%, var(--bw-paper)) 0 4px,
+      color-mix(in srgb, var(--bw-negative) 22%, var(--bw-paper)) 4px 8px
+    );
+  box-shadow: inset 2px 0 0 var(--bw-paper);
+}
+
+.assets-debt__cost span[data-part] {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.assets-debt__cost span[data-part]::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bw-negative) 78%, var(--bw-paper));
+}
+
+.assets-debt__cost span[data-part='interest']::before {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--bw-negative) 62%, var(--bw-paper)) 0 2px,
+      color-mix(in srgb, var(--bw-negative) 22%, var(--bw-paper)) 2px 4px
+    );
+}
+
+.assets-debt__payments {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 22px;
+  padding-top: 13px;
+  border-top: 1px solid var(--bw-border);
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-debt__payments p {
+  margin: 0;
+}
+
+.assets-debt__payments p b {
+  color: var(--bw-positive);
+  font-weight: 600;
+}
+
+.assets-debt__payments ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assets-debt__payments li b {
+  margin-left: 6px;
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+/* ---- Dialogs ------------------------------------------------------------------------------ */
+
+.assets-confirm {
+  padding: 16px 20px 20px;
+  font-size: 0.9375rem;
+}
+
+.assets-confirm p {
+  margin: 0 0 18px;
+  color: var(--bw-muted);
+}
+
+.assets-confirm p b {
+  color: var(--bw-ink);
+}
+
+.assets-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.assets-confirm__actions .bw-button {
+  min-height: 40px;
+}
+
+.assets-confirm__delete {
+  background: var(--bw-negative);
+  color: var(--bw-paper);
+}
+
+.assets-snapshots {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assets-snapshots th,
+.assets-snapshots td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--bw-border);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.assets-snapshots :is(th, td):first-child {
+  padding-left: 20px;
+  text-align: start;
+}
+
+.assets-snapshots :is(th, td):last-child {
+  padding-right: 14px;
+}
+
+.assets-snapshots thead th {
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.assets-snapshots tbody th {
+  font-weight: 600;
+}
+
+.assets-snapshots td[data-tone='good'] {
+  color: var(--bw-positive);
+  font-weight: 600;
+}
+
+.assets-snapshots td[data-tone='bad'] {
+  color: var(--bw-negative);
+  font-weight: 600;
+}
+
+.assets-snapshots tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.assets-snapshots button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.assets-snapshots button:hover {
+  background: var(--bw-soft);
+  color: var(--bw-negative);
+}
+
+.assets-hidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- Narrow screens ----------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .assets-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .assets-controls {
+    width: 100%;
+  }
+
+  .assets-controls label {
+    flex: 1 1 130px;
+  }
+
+  .assets-controls .bw-select {
+    width: 100%;
+  }
+
+  .assets-controls .bw-button {
+    flex: 1 1 100%;
+  }
+
+  .assets-sheet__bar {
+    height: 40px;
+  }
+
+  .assets-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'body amount'
+      'share share'
+      'actions actions';
+    padding-block: 11px 4px;
+  }
+
+  .assets-row__actions {
+    justify-content: flex-end;
+  }
+
+  .assets-row__actions button {
+    min-height: 28px;
+  }
+
+  .assets-debt {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assets-debt__head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .assets-debt__head .assets-row__actions {
+    grid-column: 1 / -1;
+    margin: -4px 0 -6px;
+  }
+
+  .assets-snapshots th,
+  .assets-snapshots td {
+    padding-inline: 5px;
+    font-size: 0.8125rem;
+  }
+
+  .assets-snapshots :is(th, td):first-child {
+    padding-left: 14px;
+  }
+}

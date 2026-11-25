@@ -95,7 +95,7 @@ anywhere.
 
 **And here's the gotcha hiding inside the gotcha**, the thing I'd never have predicted:
 
-The balance triggers (`update_balance`, `update_spent`, `update_liability_on_transaction`) are
+The balance triggers (`update_balance`, `update_spent`, and the liability one — `update_liability_on_transaction`, since migration 011 `recalculate_liabilities_on_transaction`) are
 plain `plpgsql` functions. They are **not** `SECURITY DEFINER`. That means they execute as whichever
 role wrote the row. So writing a single transaction needs `UPDATE` on `accounts`, `UPDATE` on
 `budget_categories`, and `SELECT, UPDATE` on `liabilities` — privileges that **no query anywhere in
@@ -178,26 +178,34 @@ Small, pure, and the only code with unit tests. This is where the thinking lives
 - **`importUtils.js`** — Google Sheets CSV fetching and parsing.
 - **`notifications.js`** — browser notifications and budget-threshold alerts.
 - **`useDarkModeColors.js`** — semantic colour tokens (`cardBg`, `textPrimary`, `dangerBg`…).
-- **`recurringUtils.test.js`** — the *only* unit test file, `node --test`. Not a coverage failure:
-  it tests the one thing with real algorithmic risk. More on that below.
+- **`recurringUtils.test.js`** — for a long time the *only* unit test file, `node --test`. Not a
+  coverage failure: it tests the one thing with real algorithmic risk. More on that below.
+- **`budgetMath.js`, `recurringView.js`, `reportView.js`, `assetsView.js`, `transactionView.js`** —
+  one per redesigned page: pure functions that turn records into what the page draws (the pace of a
+  budget, a treemap, a health score, the steps of a month's spending). Each has a test file beside
+  it, and they are where a wrong number on a page gets found.
 
 ### `frontend/src/pages` — be honest about this
 
 ```
-AssetsLiabilities.jsx   3,227 lines
-Dashboard.jsx           2,078 lines
-Budget.jsx              2,046 lines
-Transactions.jsx        1,978 lines
-ImportTransactions.jsx  1,449 lines
-RecurringPayments.jsx   1,446 lines
-CategoryManager.jsx     1,400 lines
-Reports.jsx             1,211 lines
+                        before    after the redesign of 2026-11-24
+AssetsLiabilities.jsx   3,227       687
+Budget.jsx              2,046       919
+Transactions.jsx        1,978       984
+RecurringPayments.jsx   1,446       498
+Reports.jsx             1,211       322
+Dashboard.jsx                     1,541
+ImportTransactions.jsx            1,431
+CategoryManager.jsx               1,400
 ```
 
-`AssetsLiabilities.jsx` alone contains eleven components defined inside it —
+Until November 2026 `AssetsLiabilities.jsx` alone held eleven components defined inside it —
 `AssetAllocationChart`, `NetWorthTrendChart`, `FinancialHealthScore`, `EmergencyFundIndicator`,
 `DebtPayoffCard`, `AssetModal`, `LiabilityModal`, `DeleteConfirmDialog`, `SummaryCard`, `AssetRow`,
-`LiabilityRow`.
+`LiabilityRow`. The five pages in the left column were then rebuilt (section 4.15): what is drawn
+moved to `components/<page>/`, the sums behind it to `lib/<page>View.js`, and what stayed in the
+page file is the loading and saving, untouched. The paragraphs below are the reasoning from before
+that, and they still describe the three pages that have not been rebuilt.
 
 Is that bad? **Honest answer: less bad than it looks, and the reason is interesting.** The rule
 this codebase follows in practice is *a component moves to `components/` when a second page needs
@@ -979,6 +987,86 @@ One redesign fixed all three:
   the screenshot — read-only, pressing nothing. That run is now a step before every push of this flow.
 
 ---
+
+### 4.15 Five pages rebuilt without touching what they do (2026-11-24)
+
+Budget, Recurring, Reports, Assets & Liabilities and Transactions (and the small Add transaction
+form) got the Dashboard's look in one stretch. The interesting part is not the look; it is how a
+3,227-line page gets a new face without a new bug.
+
+**The cut that made it safe.** Every one of those files was three things in one: fetching and
+saving, sums, and markup. Only the markup was being replaced. So each page was reassembled from
+three pieces: a new head (imports and state), the old middle **copied by line range, not retyped**
+(every `supabase.from(...)` call exactly as it was), and a new tail (the layout). The sums that
+used to be buried in JSX moved out into `lib/<page>View.js` as pure functions. That is the whole
+trick: the risky code was moved, not rewritten, and the new code that had to be written is the kind
+that can be unit-tested without a browser.
+
+**What the pure functions bought.** `healthScore()` has a test that pays a debt down in four steps
+and checks the score never drops. Nobody would write that test against a component. `treemap()` has
+one that checks every value gets a rectangle of exactly its share. When Ramil asked "are the proportions right?", the
+answer was a number (the largest gap between a tile's area and its amount: 0.00), not a shrug.
+
+**Lessons that cost something to learn:**
+- **A minimum size is a lie.** The first treemap gave tiny tiles a floor so their labels fit. They
+  were then bigger than their share. Ramil caught it. The rule since: draw to scale or do not draw;
+  whatever is too small is named in a sentence under the chart.
+- **The page was quietly breaking words.** "Subscriptio ns", "Autocredi t". A global rule let long
+  words break anywhere, so a name that did not fit never *looked* like it did not fit to the code
+  that checks. Setting `overflow-wrap: normal` made the overflow visible, and the tile could then
+  shrink its type instead.
+- **Stretch the SVG, not the text.** A chart drawn in a `viewBox` and scaled down to a phone has
+  six-pixel labels. Stretching the SVG (`preserveAspectRatio="none"`) with
+  `vector-effect: non-scaling-stroke` and laying the labels over it as HTML keeps both right.
+- **Explain every mark.** Hatched tails, shaded columns: each drew a "what is this?" The fix was
+  never to remove the mark; it was one line of text beside it.
+- **A portal leaves the page.** The tokens live on `.bw-surface`. A dialog is rendered at the end
+  of `<body>`, outside it, and came up unstyled until it carried the class itself.
+- **A test that can write will, one day.** On Transactions the trash button acts at once. The
+  tests never press it, and they also listen: any request to `/rest/v1/` that is not a read fails
+  the test. That check found nothing, which is the point of having it.
+
+### 4.16 The mortgage that was paying itself off too fast (2026-11-24)
+
+**Symptom:** none. That is what makes this one worth writing down. The Assets page said the
+mortgage was "2.0% paid off: $10,881 of $539,700" after four payments, and everything on the page
+agreed with everything else.
+
+**How it was found:** Ramil asked whether the health score "makes sense". Reading the score led to
+the debt ratio, the debt ratio to the balance, and the balance to four payments of $2,720.26 that
+added up to exactly $10,881.04. A mortgage payment is mostly interest in its first years. Nothing
+that is mostly interest comes off a balance in full.
+
+**Diagnosis:** the trigger from migration 005 did `outstanding_balance - NEW.amount`. Correct for a
+loan from your brother; wrong for anything with a rate. At 3.59% on $539,700 about $1,600 of each
+payment is interest, so the stored balance fell about $1,600 a month too fast, net worth rose with
+it, and left alone it would have shown the house paid off in about sixteen years instead of
+twenty-four.
+
+**The fix, and why it is not "subtract less":** the obvious patch is to take the interest out of
+each payment as it arrives. It breaks on the first edit: delete a payment, change its amount, import
+one dated last month, and an adjust-as-you-go balance is wrong with no way back. Migration 011
+stops adjusting. It keeps an **anchor** (a balance known to be true on a date) and works the balance
+out again from the anchor through every payment, each time anything changes. Order of arrival no
+longer matters, a trashed payment drops out and comes back when restored, and typing the bank's
+figure into the form simply sets a new anchor.
+
+**Two details that are easy to get wrong:**
+- The trigger has to tell *you* editing the balance from *itself* writing the result, or every
+  recalculation would move the anchor. `pg_trigger_depth()` does it: a direct edit runs at depth 1,
+  the trigger's own update one level down.
+- There was no PostgreSQL on the machine. The migration was run on PGlite (PostgreSQL compiled to
+  WebAssembly) with the old triggers and the real sequence of payments loaded first, then eighteen
+  scenarios. Its clock ticks in milliseconds, which made one "recorded after the anchor" test fail
+  for a reason that has nothing to do with the migration; a real server ticks in microseconds.
+
+**The same review changed the score itself.** Two of its four parts were the same ratio counted
+twice, and the investment part divided by net worth, so paying the mortgage down made it *worse*.
+It has three parts now, each measuring something different.
+
+**The lesson:** a number can be wrong and perfectly consistent. Every figure on that page agreed
+with the others because they all came from the same balance. What exposed it was asking what a
+figure *means* and whether the real world works that way, not whether the page added up.
 
 ## 5. War Stories
 

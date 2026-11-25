@@ -1,33 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Input,
-  VStack,
-  HStack,
-  Text,
-  Spinner,
-  Badge,
-} from '@chakra-ui/react';
+import { useState, useEffect } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Box, Heading, Spinner } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { notifyNewTransaction, checkBudgetAndNotify } from '../lib/notifications';
-import { useDarkModeColors } from '../lib/useDarkModeColors';
+import { today } from '../lib/transactionView';
+import '../styles/ledger.css';
+import '../styles/transactions.css';
 
+/**
+ * AddTransaction - Page for manually adding income or expense transactions
+ */
 export default function AddTransaction() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const colors = useDarkModeColors();
 
   // Form state
   const [type, setType] = useState('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // The day here, not in UTC: in the evening those are different dates.
+  const [date, setDate] = useState(() => today());
 
   // Data state
   const [categories, setCategories] = useState([]);
@@ -36,26 +30,11 @@ export default function AddTransaction() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Custom dropdown state
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const categoryDropdownRef = useRef(null);
-
   useEffect(() => {
     if (user) {
       loadCategories();
     }
   }, [user]);
-
-  // Handle click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
-        setCategoryDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const loadCategories = async () => {
     setLoading(true);
@@ -178,268 +157,108 @@ export default function AddTransaction() {
 
   if (loading) {
     return (
-      <Flex w="100%" minH="calc(100vh - 140px)" align="center" justify="center">
-        <VStack gap={4}>
-          <Spinner size="xl" />
-          <Text>Loading...</Text>
-        </VStack>
-      </Flex>
+      <Box className="bw-surface bw-page">
+        <Box className="bw-layout tx-add">
+          <div className="bw-status" role="status">
+            <Spinner size="sm" color="currentColor" />
+            Loading…
+          </div>
+        </Box>
+      </Box>
     );
   }
 
+  const kind = type === 'income' ? 'income' : 'expense';
+  const counts = {
+    expense: categories.filter((c) => c.type === 'expense').length,
+    income: categories.filter((c) => c.type === 'income').length,
+  };
+
   return (
-    <Box w="100%" h="100%" bg={colors.pageBg} p={6}>
-      <Box w="100%" maxW="800px" mx="auto">
-        <VStack gap={6} align="stretch" w="100%">
-          <Flex justify="space-between" align="flex-start">
-            <Box>
-              <Heading size="xl" color={colors.textPrimary}>Add Transaction</Heading>
-              <Text color={colors.textSecondary} mt={1}>
-                Record a new income or expense
-              </Text>
-            </Box>
-            <Button
-              variant="ghost"
-              onClick={() => navigate(-1)}
-              color={colors.textSecondary}
-              _hover={{ bg: colors.rowStripedBg, color: colors.textPrimary }}
-              fontSize="2xl"
-              fontWeight="300"
-              p={2}
-              minW="auto"
-              h="auto"
-              borderRadius="full"
-            >
-              ×
-            </Button>
-          </Flex>
+    <Box className="bw-surface bw-page">
+      <Box className="bw-layout tx-add">
+        <header className="bw-masthead">
+          <div>
+            <Heading as="h1" className="bw-title">Add transaction</Heading>
+            <p className="bw-subtitle">Record income or an expense by hand</p>
+          </div>
+          <RouterLink className="bw-link" to="/transactions">Back to transactions</RouterLink>
+        </header>
 
-        {/* Success Message */}
-        {success && (
-          <Box p={4} bg={colors.successBg} borderRadius="md" borderColor={colors.successBorder} borderWidth="1px">
-            <Text color={colors.success}>{success}</Text>
-          </Box>
-        )}
+        {success && <p className="bw-note" role="status">{success}</p>}
+        {error && <p className="bw-note" data-tone="bad" role="alert">{error}</p>}
 
-        {/* Error Message */}
-        {error && (
-          <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
-            <Text color={colors.danger}>{error}</Text>
-          </Box>
-        )}
+        <form className="bw-panel bw-form" onSubmit={handleSubmit} noValidate>
+          <div className="bw-segment bw-segment--wide" role="group" aria-label="Type">
+            {[['expense', 'Expense'], ['income', 'Income']].map(([value, label]) => (
+              <button
+                type="button"
+                aria-pressed={type === value}
+                onClick={() => {
+                  setType(value);
+                  setCategoryId(''); // The categories of the other type do not apply.
+                }}
+                key={value}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {/* Transaction Form */}
-        <Box
-          as="form"
-          onSubmit={handleSubmit}
-          p={6}
-          borderRadius="lg"
-          borderWidth="1px"
-          borderColor={colors.borderColor}
-          bg={colors.cardBg}
-        >
-          <VStack gap={5} align="stretch">
-            {/* Type Toggle */}
-            <Box>
-              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Transaction Type</Text>
-              <HStack gap={2}>
-                <Button
-                  flex={1}
-                  size="lg"
-                  variant={type === 'expense' ? 'solid' : 'outline'}
-                  colorScheme="red"
-                  onClick={() => {
-                    setType('expense');
-                    setCategoryId('');
-                  }}
-                >
-                  Expense
-                </Button>
-                <Button
-                  flex={1}
-                  size="lg"
-                  variant={type === 'income' ? 'solid' : 'outline'}
-                  colorScheme="green"
-                  onClick={() => {
-                    setType('income');
-                    setCategoryId('');
-                  }}
-                >
-                  Income
-                </Button>
-              </HStack>
-            </Box>
+          <div className="bw-field">
+            <label htmlFor="add-amount">Amount</label>
+            <input
+              id="add-amount"
+              className="bw-input tx-add__amount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+          </div>
 
-            {/* Amount */}
-            <Box>
-              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Amount</Text>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                size="lg"
-                fontSize="xl"
-                bg={colors.cardBg}
-                borderColor={colors.borderColor}
-                color={colors.textPrimary}
-              />
-            </Box>
+          <div className="bw-field">
+            <label htmlFor="add-category">Category</label>
+            {filteredCategories.length > 0 ? (
+              <select id="add-category" className="bw-select" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+                <option value="">Choose a category</option>
+                {filteredCategories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
+              </select>
+            ) : (
+              <p className="bw-note" data-tone="bad">
+                There are no {kind} categories yet. <RouterLink className="bw-link" to="/categories">Add one in Categories</RouterLink> first.
+              </p>
+            )}
+          </div>
 
-            {/* Category */}
-            <Box>
-              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Category</Text>
-              {filteredCategories.length > 0 ? (
-                <Box ref={categoryDropdownRef} position="relative" w="100%">
-                  {/* Dropdown Trigger */}
-                  <Box
-                    onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                    cursor="pointer"
-                    p={3}
-                    h="48px"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="space-between"
-                    borderRadius="8px"
-                    borderWidth="1px"
-                    borderColor={categoryDropdownOpen ? 'blue.500' : colors.borderColor}
-                    bg={colors.cardBg}
-                    _hover={{ borderColor: 'blue.400' }}
-                    transition="all 0.2s"
-                  >
-                    <Text
-                      color={categoryId ? colors.textPrimary : colors.textMuted}
-                      fontSize="md"
-                      noOfLines={1}
-                    >
-                      {categoryId ? filteredCategories.find(c => c.id === categoryId)?.name : 'Select a category'}
-                    </Text>
-                    <Box
-                      as="span"
-                      transform={categoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                      transition="transform 0.2s"
-                      color={colors.textSecondary}
-                    >
-                      ▼
-                    </Box>
-                  </Box>
+          <div className="bw-field">
+            <label htmlFor="add-description">Description, if any</label>
+            <input
+              id="add-description"
+              className="bw-input"
+              placeholder={type === 'income' ? 'Monthly salary' : 'Grocery shopping'}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
 
-                  {/* Dropdown List */}
-                  {categoryDropdownOpen && (
-                    <Box
-                      position="absolute"
-                      top="100%"
-                      left={0}
-                      right={0}
-                      zIndex={1000}
-                      mt={1}
-                      bg={colors.cardBg}
-                      borderWidth="1px"
-                      borderColor={colors.borderColor}
-                      borderRadius="12px"
-                      boxShadow="lg"
-                      maxH={{ base: '280px', md: '320px' }}
-                      overflowY="auto"
-                    >
-                      <VStack gap={0} align="stretch" p={1}>
-                        {filteredCategories.map((cat) => {
-                          const isSelected = cat.id === categoryId;
-                          return (
-                            <HStack
-                              key={cat.id}
-                              px={3}
-                              py={2.5}
-                              cursor="pointer"
-                              bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                              _hover={{ bg: colors.rowStripedBg }}
-                              borderRadius="8px"
-                              onClick={() => {
-                                setCategoryId(cat.id);
-                                setCategoryDropdownOpen(false);
-                              }}
-                              justify="space-between"
-                              transition="background 0.1s"
-                            >
-                              <Text
-                                color={colors.textPrimary}
-                                fontSize="sm"
-                                fontWeight={isSelected ? '600' : '400'}
-                              >
-                                {cat.name}
-                              </Text>
-                              {isSelected && (
-                                <Text color="blue.500" fontSize="sm">✓</Text>
-                              )}
-                            </HStack>
-                          );
-                        })}
-                      </VStack>
-                    </Box>
-                  )}
-                </Box>
-              ) : (
-                <Box p={4} bg={colors.warningBg} borderRadius="md" borderColor={colors.warningBorder} borderWidth="1px">
-                  <Text color={colors.warning}>
-                    No {type} categories found. Please add {type} categories in the Categories page first.
-                  </Text>
-                </Box>
-              )}
-            </Box>
+          <div className="bw-field">
+            <label htmlFor="add-date">Date</label>
+            <input id="add-date" className="bw-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </div>
 
-            {/* Description */}
-            <Box>
-              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Description (optional)</Text>
-              <Input
-                placeholder={type === 'income' ? 'e.g., Monthly salary' : 'e.g., Grocery shopping'}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                size="lg"
-                bg={colors.cardBg}
-                borderColor={colors.borderColor}
-                color={colors.textPrimary}
-              />
-            </Box>
+          <button type="submit" className="bw-button bw-button--wide" disabled={submitting}>
+            {submitting ? 'Adding…' : `Add ${kind}`}
+          </button>
+        </form>
 
-            {/* Date */}
-            <Box>
-              <Text fontWeight="medium" mb={2} color={colors.textPrimary}>Date</Text>
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                size="lg"
-                bg={colors.cardBg}
-                borderColor={colors.borderColor}
-                color={colors.textPrimary}
-              />
-            </Box>
-
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              colorScheme={type === 'income' ? 'green' : 'red'}
-              size="lg"
-              isLoading={submitting}
-              loadingText="Adding..."
-              disabled={!amount || !categoryId || submitting}
-            >
-              Add {type === 'income' ? 'Income' : 'Expense'}
-            </Button>
-          </VStack>
-        </Box>
-
-        {/* Quick Stats */}
-        <HStack justify="center" gap={4}>
-          <Badge colorScheme="red" px={3} py={1} fontSize="sm">
-            {categories.filter(c => c.type === 'expense').length} expense categories
-          </Badge>
-          <Badge colorScheme="green" px={3} py={1} fontSize="sm">
-            {categories.filter(c => c.type === 'income').length} income categories
-          </Badge>
-        </HStack>
-        </VStack>
+        <p className="tx-add__counts">
+          {counts.expense} expense {counts.expense === 1 ? 'category' : 'categories'}, {counts.income} income {counts.income === 1 ? 'category' : 'categories'}.{' '}
+          <RouterLink className="bw-link" to="/categories">Manage categories</RouterLink>
+        </p>
       </Box>
     </Box>
   );

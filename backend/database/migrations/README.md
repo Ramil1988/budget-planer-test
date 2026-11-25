@@ -53,6 +53,20 @@ Grants the Data API roles explicit privileges on every table (required since Sup
   `007_dismissed_suggestions.sql`) now grant their own tables, so a fresh install
   ends up with the same privileges without it
 
+### 011_liability_interest.sql
+Makes a payment on a linked liability pay its interest first, instead of taking the whole
+payment off the balance:
+- Adds `liabilities.balance_anchor`, `balance_anchor_date`, `balance_anchor_at`: a balance known
+  to be true on a date. Creating a liability, or editing its balance, link, start date or rate,
+  sets a new anchor
+- Replaces the three transaction triggers of 005/007 with one function that works the balance
+  out again from the anchor: each payment covers `balance x rate x days / 365` of interest and
+  the rest reduces the debt. Trashed transactions no longer count; restoring one counts it again
+- Corrects existing balances where it can prove the old arithmetic (balance at the start, less
+  every payment since, equals the stored balance) and prints each change as a `NOTICE`.
+  Other liabilities keep their balance and get interest from now on
+- Needs no grants and is safe to re-run. Until it is applied the app works as before
+
 ## How to Apply Migrations
 
 ### Option 1: Supabase SQL Editor (Recommended)
@@ -101,8 +115,9 @@ psql "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
 4. `004_auto_seed_assets_liabilities.sql` (auto-seeds data)
 5. `005_link_liabilities_to_categories.sql` (links liabilities to spending categories)
 6. `007_dismissed_suggestions.sql` (creates the dismissed-suggestions table)
-7. `009_data_api_grants.sql` (**last** — grants Data API access on every table, so it
-   has to run after everything that creates one)
+7. `009_data_api_grants.sql` (**last** of the table-creating set — grants Data API access on
+   every table, so it has to run after everything that creates one)
+8. `011_liability_interest.sql` (after 005, 006 and 007, whose triggers it replaces)
 
 ## Verification
 

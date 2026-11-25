@@ -1,0 +1,645 @@
+/* Transactions. The shared paper, ink, masthead, tabs, ledger, panels and forms come from
+   ledger.css; this file holds what only this page has: the steps of what had been spent,
+   the toolbar, and the list under a heading for each day. */
+
+/* ---- Masthead actions --------------------------------------------------------------------- */
+
+.tx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tx-actions .bw-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.bw-button:disabled {
+  cursor: not-allowed;
+}
+
+.bw-button[data-tone='bad'] {
+  background: var(--bw-negative);
+  color: var(--bw-paper);
+}
+
+.bw-button--quiet[data-tone='bad'] {
+  background: var(--bw-paper);
+  color: var(--bw-negative);
+}
+
+/* The net carries cents and can run to six figures: it stays on one line, a size down. */
+.tx-ledger .bw-figure--lead dd {
+  font-size: clamp(2rem, 3.7vw, 3.25rem);
+  white-space: nowrap;
+}
+
+/* ---- Spent so far ------------------------------------------------------------------------- */
+
+.tx-chart {
+  padding: 16px clamp(16px, 2.3vw, 28px) 16px;
+  border-top: 1px solid var(--bw-border);
+}
+
+.tx-chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 14px;
+}
+
+.tx-chart__head h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.tx-chart__head span {
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+/* Room above the plot for the figure at the end of the line. */
+.tx-chart__plot {
+  position: relative;
+  height: clamp(120px, 15vw, 170px);
+  margin-top: 26px;
+  border-bottom: 1.5px solid var(--bw-border);
+}
+
+.tx-chart__plot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.tx-chart__area {
+  fill: var(--bw-negative);
+  opacity: 0.13;
+}
+
+/* The SVG is stretched, so the stroke keeps its width in screen pixels. */
+.tx-chart__line {
+  fill: none;
+  stroke: var(--bw-negative);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.tx-chart__total {
+  position: absolute;
+  top: 0;
+  padding: 0 0 5px 6px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-100%);
+}
+
+.tx-chart__total[data-edge='end'] {
+  padding: 0 0 5px;
+  transform: translate(-100%, -100%);
+}
+
+.tx-chart__today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1.5px dashed var(--bw-muted);
+  pointer-events: none;
+}
+
+.tx-chart__today i {
+  position: absolute;
+  bottom: 4px;
+  left: 5px;
+  color: var(--bw-muted);
+  font-size: 0.6875rem;
+  font-style: normal;
+  line-height: 1;
+}
+
+/* One column for each day, as wide as the day: the whole column is the button. */
+.tx-chart__columns {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--count), minmax(0, 1fr));
+}
+
+.tx-chart__column {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px 3px 0 0;
+  background: none;
+  cursor: pointer;
+}
+
+.tx-chart__column[data-weekend='true'] {
+  background: color-mix(in srgb, var(--bw-ink) 5%, transparent);
+}
+
+.tx-chart__column:disabled {
+  cursor: default;
+}
+
+.tx-chart__column:not(:disabled):hover {
+  background: color-mix(in srgb, var(--bw-ink) 10%, transparent);
+}
+
+.tx-chart__column[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--bw-accent) 22%, transparent);
+  box-shadow: inset 0 2px 0 var(--bw-accent);
+}
+
+.tx-chart__axis {
+  display: grid;
+  grid-template-columns: repeat(var(--count), minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--bw-muted);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tx-chart__axis li {
+  position: relative;
+  min-width: 0;
+  padding-top: 9px;
+  white-space: nowrap;
+}
+
+.tx-chart__axis li[data-today='true'] {
+  color: var(--bw-ink);
+  font-weight: 700;
+}
+
+/* Income that day: a green mark between the plot and the number. */
+.tx-chart__axis li[data-income='true']::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: min(70%, 14px);
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bw-positive);
+  transform: translateX(-50%);
+}
+
+.tx-chart__picked {
+  margin: 10px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-chart__picked b {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.tx-chart__picked .bw-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.tx-chart__key {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  margin-right: 3px;
+  border-radius: 2px;
+  background: var(--bw-positive);
+  vertical-align: middle;
+}
+
+.tx-chart__key[data-kind='weekend'] {
+  width: 10px;
+  height: 10px;
+  margin-left: 8px;
+  background: color-mix(in srgb, var(--bw-ink) 12%, transparent);
+}
+
+/* ---- Toolbar ------------------------------------------------------------------------------ */
+
+.tx-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tx-toolbar .bw-input,
+.tx-toolbar .bw-select,
+.tx-toolbar .bw-button {
+  height: 40px;
+  min-height: 40px;
+}
+
+.tx-toolbar__search {
+  flex: 1 1 240px;
+  width: auto;
+  max-width: 420px;
+}
+
+.tx-toolbar__filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tx-toolbar__reset,
+.tx-picked .bw-link {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.tx-filter-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px clamp(14px, 2vw, 22px);
+}
+
+.tx-filter-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tx-filter-panel__actions .bw-button {
+  min-height: 40px;
+}
+
+/* ---- The list ----------------------------------------------------------------------------- */
+
+.tx-day + .tx-day {
+  border-top: 1px solid var(--bw-border);
+}
+
+.tx-day__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 13px clamp(14px, 2vw, 22px) 5px;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-day__head h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+}
+
+.tx-day__head b {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.tx-day__head b[data-tone='good'] {
+  color: var(--bw-positive);
+}
+
+.tx-day__sofar {
+  margin-left: auto;
+}
+
+.tx-rows {
+  padding: 0 0 4px;
+}
+
+.tx-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 36px;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 7px clamp(14px, 2vw, 22px);
+}
+
+.tx-row:hover {
+  background: var(--bw-hover);
+}
+
+.tx-row__body {
+  min-width: 0;
+}
+
+.tx-row__name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tx-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  margin-top: 1px;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+/* The category reads as text and is a button: the dotted line says it can be changed. */
+.tx-row__category {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bw-accent);
+  font-size: inherit;
+  font-weight: 600;
+  text-align: start;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tx-row__category:hover {
+  text-decoration-style: solid;
+}
+
+.tx-row__select {
+  height: 32px;
+  max-width: 100%;
+  font-size: 0.8125rem;
+}
+
+.tx-row__cancel {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--bw-muted);
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.tx-row__cancel:hover {
+  color: var(--bw-ink);
+}
+
+.tx-row__amount {
+  text-align: end;
+  white-space: nowrap;
+}
+
+.tx-row__figure {
+  padding: 4px 6px;
+  margin-right: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--bw-ink);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+button.tx-row__figure {
+  cursor: text;
+}
+
+button.tx-row__figure:hover {
+  background: var(--bw-paper);
+  box-shadow: inset 0 0 0 1px var(--bw-border);
+}
+
+.tx-row[data-type='income'] .tx-row__figure {
+  color: var(--bw-positive);
+}
+
+.tx-row__input {
+  width: 112px;
+  height: 32px;
+  text-align: end;
+}
+
+.tx-row__trash {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--bw-muted);
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.tx-row:hover .tx-row__trash,
+.tx-row__trash:focus-visible {
+  opacity: 1;
+}
+
+.tx-row__trash:hover {
+  background: var(--bw-paper);
+  color: var(--bw-negative);
+}
+
+/* In the trash a row is quieter and has two actions in words. */
+.tx-row--trashed {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.tx-row--trashed + .tx-row--trashed {
+  border-top: 1px solid var(--bw-border);
+}
+
+.tx-row--trashed .tx-row__name,
+.tx-row--trashed .tx-row__figure {
+  color: var(--bw-muted);
+}
+
+.tx-row__actions {
+  display: flex;
+  gap: 2px;
+}
+
+.tx-row__actions button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--bw-ink);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.tx-row__actions button:hover {
+  background: var(--bw-paper);
+}
+
+.tx-row__actions button[data-action='delete'] {
+  color: var(--bw-muted);
+}
+
+.tx-row__actions button[data-action='delete']:hover {
+  color: var(--bw-negative);
+}
+
+/* Everything to the trash: at the foot of the list, away from the everyday buttons. */
+.tx-foot {
+  margin: 0;
+  text-align: center;
+}
+
+.tx-foot button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tx-foot button:hover {
+  color: var(--bw-negative);
+}
+
+/* ---- Add transaction: one narrow form ----------------------------------------------------- */
+
+.tx-add {
+  max-width: 600px;
+}
+
+.tx-add .bw-masthead .bw-title {
+  font-size: clamp(2.4rem, 5vw, 3.5rem);
+}
+
+.tx-add .bw-masthead .bw-link {
+  padding-bottom: 6px;
+}
+
+.tx-add__amount {
+  height: 56px !important;
+  font-family: var(--font-display);
+  font-size: 1.625rem !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.tx-add__counts {
+  margin: 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+/* ---- Dialogs ------------------------------------------------------------------------------ */
+
+.tx-confirm {
+  padding: 16px 20px 20px;
+  font-size: 0.9375rem;
+}
+
+.tx-confirm p {
+  margin: 0 0 18px;
+  color: var(--bw-muted);
+}
+
+.tx-confirm p b {
+  color: var(--bw-ink);
+  overflow-wrap: anywhere;
+}
+
+.tx-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tx-confirm__actions .bw-button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 0.875rem;
+}
+
+/* ---- Narrow screens ----------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .tx-ledger .bw-figure--lead dd {
+    font-size: clamp(1.9rem, 9vw, 2.6rem);
+  }
+
+  .tx-actions {
+    width: 100%;
+  }
+
+  .tx-actions .bw-button {
+    flex: 1;
+  }
+
+  /* Thirty day numbers do not fit a phone: every fifth is shown. */
+  .tx-chart__axis li[data-major='false'] span {
+    visibility: hidden;
+  }
+
+  .tx-chart__head span {
+    display: none;
+  }
+
+  .tx-toolbar__search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .tx-toolbar .bw-select {
+    flex: 1;
+  }
+
+  .tx-day__sofar {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .tx-row {
+    grid-template-columns: minmax(0, 1fr) auto 30px;
+    gap: 4px 8px;
+  }
+
+  .tx-row__trash {
+    width: 30px;
+    opacity: 0.7;
+  }
+
+  .tx-row--trashed {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .tx-row--trashed .tx-row__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    margin-top: -4px;
+  }
+}

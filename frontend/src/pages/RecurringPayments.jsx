@@ -1,37 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
-import {
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Input,
-  VStack,
-  HStack,
-  Text,
-  Spinner,
-  Badge,
-  Dialog,
-  Portal,
-  CloseButton,
-  SimpleGrid,
-  Menu,
-  IconButton,
-} from '@chakra-ui/react';
+import { useState, useEffect } from 'react';
+import { Box, Heading, IconButton, Input, Spinner } from '@chakra-ui/react';
+import { FiChevronLeft, FiChevronRight, FiPlus } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import PageContainer from '../components/PageContainer';
-import { useDarkModeColors } from '../lib/useDarkModeColors';
 import {
   getNextPaymentDate,
   getUpcomingPayments,
   getMonthlyProjection,
-  formatFrequency,
-  formatDate,
   FREQUENCY_CONFIG,
   MAX_FREQUENCY_INTERVAL,
   isValidFrequencyInterval,
 } from '../lib/recurringUtils';
+import { agendaDays, groupByDue, monthDays, withNextDue } from '../lib/recurringView';
+import MonthStrip from '../components/recurring/MonthStrip';
+import PaymentList from '../components/recurring/PaymentList';
+import Agenda from '../components/recurring/Agenda';
+import PaymentForm, { customSchedule } from '../components/recurring/PaymentForm';
+import '../styles/ledger.css';
+import '../styles/recurring.css';
 
 // Current month as 'YYYY-MM' — the month the summary opens on.
 const currentMonthKey = () => {
@@ -39,42 +25,10 @@ const currentMonthKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-// Express legacy presets in the units offered by the custom editor.
-const customSchedule = (frequency, interval = 1) => ({
-  custom_frequency: frequency === 'biweekly' ? 'weekly' : frequency === 'quarterly' ? 'monthly' : frequency,
-  frequency_interval: interval * (frequency === 'biweekly' ? 2 : frequency === 'quarterly' ? 3 : 1),
-});
-
-// Category colors
-const categoryColors = {
-  'Food': '#EF4444',
-  'Food/Costco': '#F97316',
-  'Fuel': '#F59E0B',
-  'Clothes': '#EAB308',
-  'Haircut': '#84CC16',
-  'Massage': '#22C55E',
-  'Mortgage': '#10B981',
-  'Insurance': '#14B8A6',
-  'Electricity': '#06B6D4',
-  'Mobile/Internet': '#0EA5E9',
-  'Household items/Car': '#3B82F6',
-  'Pharmacy': '#6366F1',
-  'Subscriptions': '#8B5CF6',
-  'Government Loan': '#A855F7',
-  'Autocredit': '#D946EF',
-  'Property tax': '#EC4899',
-  'Afterschool': '#F43F5E',
-  'Weekend': '#FF6B6B',
-  'Unexpected': '#94A3B8',
-};
-
-const getCategoryColor = (categoryName) => {
-  return categoryColors[categoryName] || '#6B7280';
-};
+const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
 export default function RecurringPayments() {
   const { user } = useAuth();
-  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -110,9 +64,8 @@ export default function RecurringPayments() {
     match_description: '',
   });
 
-  // Custom dropdown state
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const categoryDropdownRef = useRef(null);
+  // The day picked on the month strip, remembered with its month so another month starts fresh.
+  const [pickedDay, setPickedDay] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -120,17 +73,6 @@ export default function RecurringPayments() {
       loadData();
     }
   }, [user]);
-
-  // Handle click outside to close dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
-        setCategoryDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -365,1082 +307,192 @@ export default function RecurringPayments() {
 
   if (loading) {
     return (
-      <PageContainer>
-        <Flex w="100%" minH="60vh" align="center" justify="center">
-          <VStack gap={4}>
-            <Spinner size="xl" />
-            <Text>Loading recurring payments...</Text>
-          </VStack>
-        </Flex>
-      </PageContainer>
+      <Box className="bw-surface bw-page">
+        <Box className="bw-layout">
+          <div className="bw-status" role="status">
+            <Spinner size="sm" color="currentColor" />
+            Loading recurring payments…
+          </div>
+        </Box>
+      </Box>
     );
   }
 
+  const active = recurringPayments.filter((payment) => payment.is_active);
+  const bills = active.filter((payment) => payment.type === 'expense').length;
+  const incomes = active.length - bills;
+  const paused = recurringPayments.length - active.length;
+  const onSchedule = active.length === 0
+    ? 'Nothing is on a schedule yet'
+    : [bills > 0 && plural(bills, 'bill', 'bills'), incomes > 0 && plural(incomes, 'income', 'incomes')].filter(Boolean).join(' and ');
+
+  // The strip opens on today, or on the next day something moves.
+  const days = monthDays(projection.payments, summaryMonth);
+  const busy = days.filter((day) => day.payments.length > 0);
+  const todayIndex = days.findIndex((day) => day.isToday);
+  const opensOn = (busy.find((day) => day.day - 1 >= todayIndex) ?? busy[0])?.day ?? null;
+  const shownDay = pickedDay?.month === summaryMonth ? pickedDay.day : opensOn;
+
+  const groups = groupByDue(withNextDue(filteredPayments));
+  const kind = activeTab === 'expense' ? 'expenses' : 'income';
+  const stepButton = { variant: 'ghost', minW: '36px', h: '40px', color: 'var(--bw-muted)', _hover: { bg: 'var(--bw-hover)' } };
+
   return (
-    <PageContainer>
-      <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
-        {/* Header */}
-        <Flex
-          justify="space-between"
-          align={{ base: 'stretch', sm: 'center' }}
-          direction={{ base: 'column', sm: 'row' }}
-          gap={3}
-        >
-          <Box>
-            <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Recurring Payments</Heading>
-            <Text color={colors.textSecondary} mt={1} fontSize={{ base: 'sm', md: 'md' }}>Manage your recurring bills and income</Text>
-          </Box>
-          <Button
-            onClick={openCreateModal}
-            bg="linear-gradient(135deg, #18181B 0%, #2563EB 100%)"
-            color="white"
-            px={{ base: 4, md: 6 }}
-            fontWeight="600"
-            borderRadius="12px"
-            size={{ base: 'md', md: 'lg' }}
-            w={{ base: '100%', sm: 'auto' }}
-            _hover={{ transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)' }}
-          >
-            + Add Recurring
-          </Button>
-        </Flex>
+    <Box className="bw-surface bw-page">
+      <Box className="bw-layout">
+        <header className="bw-masthead">
+          <div>
+            <Heading as="h1" className="bw-title">Recurring Payments</Heading>
+            <p className="bw-subtitle">
+              {onSchedule}{active.length > 0 && ' on a schedule'}{paused > 0 && `, ${paused} paused`}
+            </p>
+          </div>
 
-        {/* Success/Error Messages */}
-        {success && (
-          <Box p={3} bg={colors.successBg} borderColor={colors.successBorder} borderWidth="1px" borderRadius="md">
-            <Text color={colors.success} fontWeight="medium">{success}</Text>
-          </Box>
-        )}
-        {error && (
-          <Box p={3} bg={colors.dangerBg} borderColor={colors.dangerBorder} borderWidth="1px" borderRadius="md">
-            <Text color={colors.danger} fontWeight="medium">{error}</Text>
-          </Box>
-        )}
+          <div className="recurring-actions">
+            <div className="bw-month-control">
+              <IconButton {...stepButton} aria-label="Go to previous month" onClick={() => shiftSummaryMonth(-1)}>
+                <FiChevronLeft />
+              </IconButton>
+              <Input
+                type="month"
+                aria-label="Month shown"
+                value={summaryMonth}
+                onChange={(event) => event.target.value && setSummaryMonth(event.target.value)}
+                variant="flushed"
+                w="166px"
+                minW="0"
+                px={2}
+                h="40px"
+                color="var(--bw-ink)"
+                border="0"
+                fontSize="sm"
+                fontWeight="600"
+                css={{ colorScheme: 'light', '.dark &': { colorScheme: 'dark' } }}
+                _focusVisible={{ outline: '2px solid', outlineColor: 'var(--bw-accent)', outlineOffset: '-2px', boxShadow: 'none' }}
+              />
+              <IconButton {...stepButton} aria-label="Go to next month" onClick={() => shiftSummaryMonth(1)}>
+                <FiChevronRight />
+              </IconButton>
+            </div>
+            <button type="button" className="bw-button" onClick={openCreateModal}>
+              <FiPlus aria-hidden="true" style={{ display: 'inline', verticalAlign: '-2px', marginRight: 6 }} />
+              Add recurring
+            </button>
+          </div>
+        </header>
 
-        {/* Month picker for the summary below */}
-        <Flex align="center" justify="space-between" gap={2}>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => shiftSummaryMonth(-1)}
-            color={colors.textSecondary}
-            aria-label="Previous month"
-          >
-            ←
-          </Button>
-          <HStack gap={2}>
-            <Text fontWeight="700" fontSize={{ base: 'sm', md: 'md' }} color={colors.textPrimary}>
-              {summaryMonthLabel}
-            </Text>
-            {summaryMonth !== currentMonthKey() && (
-              <Button
-                size="xs"
-                variant="outline"
-                borderRadius="full"
-                onClick={() => setSummaryMonth(currentMonthKey())}
+        {success && <p className="bw-note" role="status">{success}</p>}
+        {error && !isModalOpen && <p className="bw-note" data-tone="bad" role="alert">{error}</p>}
+
+        <section className="bw-ledger" aria-label={`Recurring payments in ${summaryMonthLabel}`}>
+          <dl className="bw-figures" data-count="3">
+            <div className="bw-figure bw-figure--lead">
+              <dt>Net in {summaryMonthLabel}</dt>
+              <dd data-tone={summary.net < 0 ? 'bad' : 'good'}>{summary.net > 0 ? '+' : ''}{formatCurrency(summary.net)}</dd>
+            </div>
+            <div className="bw-figure">
+              <dt>Income</dt>
+              <dd>{formatCurrency(summary.income)}</dd>
+              <small>{plural(summary.incomeCount, 'payment', 'payments')}</small>
+            </div>
+            <div className="bw-figure">
+              <dt>Expenses</dt>
+              <dd>{formatCurrency(summary.expenses)}</dd>
+              <small>{plural(summary.expenseCount, 'payment', 'payments')}</small>
+            </div>
+          </dl>
+
+          <MonthStrip
+            days={days}
+            selectedDay={shownDay}
+            onSelect={(day) => setPickedDay({ month: summaryMonth, day })}
+            formatCurrency={formatCurrency}
+          />
+        </section>
+
+        <div className="bw-switches">
+          <div className="bw-tabs" role="tablist" aria-label="Expenses or income">
+            {[['expense', 'Expenses'], ['income', 'Income']].map(([value, label]) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === value}
+                className="bw-tab"
+                onClick={() => { setActiveTab(value); setSelectedCategory(null); }}
+                key={value}
               >
-                Today
-              </Button>
+                {label} ({recurringPayments.filter((payment) => payment.type === value && (showInactive || payment.is_active)).length})
+              </button>
+            ))}
+          </div>
+
+          <div className="bw-tools" style={{ marginBottom: 8 }}>
+            {availableCategories.length > 0 && (
+              <select
+                className="bw-select"
+                aria-label="Category"
+                value={selectedCategory ?? ''}
+                onChange={(event) => setSelectedCategory(event.target.value || null)}
+              >
+                <option value="">All categories</option>
+                {availableCategories.map((name) => <option value={name} key={name}>{name}</option>)}
+              </select>
             )}
-          </HStack>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => shiftSummaryMonth(1)}
-            color={colors.textSecondary}
-            aria-label="Next month"
-          >
-            →
-          </Button>
-        </Flex>
+            <button type="button" className="bw-button bw-button--quiet" aria-pressed={showInactive} onClick={() => setShowInactive(!showInactive)}>
+              {showInactive ? 'Hide paused' : 'Show paused'}
+            </button>
+          </div>
+        </div>
 
-        {/* Monthly Projection Summary */}
-        <SimpleGrid columns={{ base: 1, sm: 3 }} gap={{ base: 3, md: 4 }}>
-          <Box
-            p={{ base: 4, md: 5 }}
-            borderRadius={{ base: '12px', md: '16px' }}
-            bg="linear-gradient(135deg, #10B981 0%, #059669 100%)"
-            color="white"
-          >
-            <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
-              <Text fontSize="sm" opacity={0.9}>Income in {summaryMonthLabel}</Text>
-              <Text fontSize="lg" fontWeight="700">{formatCurrency(summary.income)}</Text>
-            </Flex>
-            <Box display={{ base: 'none', sm: 'block' }}>
-              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Income in {summaryMonthLabel}</Text>
-              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(summary.income)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>
-                {summary.incomeCount} {summary.incomeCount === 1 ? 'payment' : 'payments'}
-              </Text>
-            </Box>
-          </Box>
-          <Box
-            p={{ base: 4, md: 5 }}
-            borderRadius={{ base: '12px', md: '16px' }}
-            bg="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)"
-            color="white"
-          >
-            <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
-              <Text fontSize="sm" opacity={0.9}>Expenses in {summaryMonthLabel}</Text>
-              <Text fontSize="lg" fontWeight="700">{formatCurrency(summary.expenses)}</Text>
-            </Flex>
-            <Box display={{ base: 'none', sm: 'block' }}>
-              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Expenses in {summaryMonthLabel}</Text>
-              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{formatCurrency(summary.expenses)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>
-                {summary.expenseCount} {summary.expenseCount === 1 ? 'payment' : 'payments'}
-              </Text>
-            </Box>
-          </Box>
-          <Box
-            p={{ base: 4, md: 5 }}
-            borderRadius={{ base: '12px', md: '16px' }}
-            bg={summary.net >= 0 ? 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)' : 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)'}
-            color="white"
-          >
-            <Flex justify="space-between" align="center" display={{ base: 'flex', sm: 'none' }}>
-              <Text fontSize="sm" opacity={0.9}>Net Cash Flow</Text>
-              <Text fontSize="lg" fontWeight="700">{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</Text>
-            </Flex>
-            <Box display={{ base: 'none', sm: 'block' }}>
-              <Text fontSize={{ sm: 'xs', md: 'sm' }} opacity={0.9}>Net Cash Flow</Text>
-              <Text fontSize={{ sm: 'lg', md: '2xl' }} fontWeight="700">{summary.net >= 0 ? '+' : ''}{formatCurrency(summary.net)}</Text>
-              <Text fontSize={{ sm: '10px', md: 'xs' }} opacity={0.8}>{summary.net >= 0 ? 'Surplus' : 'Deficit'}</Text>
-            </Box>
-          </Box>
-        </SimpleGrid>
-
-        {/* Tab Navigation */}
-        <Flex gap={{ base: 2, md: 4 }} wrap="wrap" align="center">
-          <Button
-            size={{ base: 'sm', md: 'lg' }}
-            variant={activeTab === 'expense' ? 'solid' : 'outline'}
-            colorPalette="red"
-            onClick={() => { setActiveTab('expense'); setSelectedCategory(null); }}
-            fontSize={{ base: 'xs', md: 'md' }}
-            px={{ base: 3, md: 4 }}
-            flexShrink={0}
-          >
-            Expenses ({recurringPayments.filter(p => p.type === 'expense' && (showInactive || p.is_active)).length})
-          </Button>
-          <Button
-            size={{ base: 'sm', md: 'lg' }}
-            variant={activeTab === 'income' ? 'solid' : 'outline'}
-            colorPalette="green"
-            onClick={() => { setActiveTab('income'); setSelectedCategory(null); }}
-            fontSize={{ base: 'xs', md: 'md' }}
-            px={{ base: 3, md: 4 }}
-            flexShrink={0}
-          >
-            Income ({recurringPayments.filter(p => p.type === 'income' && (showInactive || p.is_active)).length})
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowInactive(!showInactive)}
-            color={showInactive ? 'blue.600' : colors.textMuted}
-            fontSize={{ base: 'xs', md: 'sm' }}
-            flexShrink={0}
-          >
-            {showInactive ? 'Hide' : 'Show'} Inactive
-          </Button>
-        </Flex>
-
-        {/* Category Filter Chips */}
-        {availableCategories.length > 0 && (
-          <Box
-            overflowX="auto"
-            css={{
-              '&::-webkit-scrollbar': { display: 'none' },
-              scrollbarWidth: 'none',
-            }}
-          >
-            <Flex gap={2} align="center" pb={1} flexWrap={{ base: 'nowrap', md: 'wrap' }}>
-              <Text fontSize="sm" color={colors.textMuted} fontWeight="500" flexShrink={0}>
-                Filter:
-              </Text>
-              {selectedCategory && (
-                <Badge
-                  px={3}
-                  py={1}
-                  borderRadius="full"
-                  cursor="pointer"
-                  bg={colors.textMuted}
-                  color="white"
-                  fontSize="xs"
-                  fontWeight="600"
-                  onClick={() => setSelectedCategory(null)}
-                  _hover={{ opacity: 0.8 }}
-                  flexShrink={0}
-                >
-                  Clear ✕
-                </Badge>
-              )}
-              {availableCategories.map((catName) => (
-                <Badge
-                  key={catName}
-                  px={3}
-                  py={1}
-                  borderRadius="full"
-                  cursor="pointer"
-                  bg={selectedCategory === catName ? getCategoryColor(catName) : colors.rowStripedBg}
-                  color={selectedCategory === catName ? 'white' : colors.textSecondary}
-                  border="1px solid"
-                  borderColor={selectedCategory === catName ? getCategoryColor(catName) : colors.borderColor}
-                  fontSize="xs"
-                  fontWeight="500"
-                  onClick={() => setSelectedCategory(selectedCategory === catName ? null : catName)}
-                  _hover={{
-                    bg: selectedCategory === catName ? getCategoryColor(catName) : colors.primaryBg,
-                    borderColor: getCategoryColor(catName),
-                  }}
-                  transition="all 0.15s"
-                  flexShrink={0}
-                  whiteSpace="nowrap"
-                >
-                  {catName}
-                </Badge>
-              ))}
-            </Flex>
-          </Box>
+        {selectedCategory && filteredPayments.length > 0 && (
+          // The total of the payments listed, not a slice of the month: a payment that is not
+          // due in the month shown still belongs to its category.
+          <p className="bw-note">
+            {selectedCategory}: {plural(filteredPayments.length, 'payment', 'payments')},{' '}
+            {formatCurrency(filteredPayments.reduce((sum, payment) => sum + Number(payment.amount), 0))} in total
+          </p>
         )}
 
-        {/* Category Total when filtered */}
-        {selectedCategory && filteredPayments.length > 0 && (() => {
-          // The total of the recurring payments listed below, not a month slice —
-          // a payment that is not due in the selected month still belongs to the
-          // category and still has to show up in its total.
-          const categoryTotal = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-          return (
-            <Flex
-              align="center"
-              justify="space-between"
-              px={4}
-              py={2.5}
-              borderRadius="12px"
-              bg={colors.cardBg}
-              border="1px solid"
-              borderColor={colors.borderSubtle}
-            >
-              <HStack gap={2}>
-                <Box
-                  w="10px"
-                  h="10px"
-                  borderRadius="full"
-                  bg={getCategoryColor(selectedCategory)}
-                />
-                <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
-                  {selectedCategory}
-                </Text>
-                <Text fontSize="sm" color={colors.textMuted}>
-                  ({filteredPayments.length} {filteredPayments.length === 1 ? 'payment' : 'payments'})
-                </Text>
-              </HStack>
-              <Text
-                fontSize="md"
-                fontWeight="700"
-                color={activeTab === 'expense' ? '#E11D48' : '#059669'}
-              >
-                {activeTab === 'expense' ? '-' : '+'}{formatCurrency(categoryTotal)}
-                <Text as="span" fontSize="xs" fontWeight="500" color={colors.textMuted}> total</Text>
-              </Text>
-            </Flex>
-          );
-        })()}
+        <div className="recurring-columns">
+          {groups.length > 0 ? (
+            <PaymentList
+              groups={groups}
+              formatCurrency={formatCurrency}
+              onToggle={handleToggleActive}
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+            />
+          ) : (
+            <div className="bw-panel">
+              <p className="bw-nothing">
+                {selectedCategory ? `No recurring ${kind} in “${selectedCategory}”.` : `No recurring ${kind} yet.`}
+              </p>
+              <p className="bw-nothing" style={{ paddingTop: 0 }}>
+                {selectedCategory ? (
+                  <button type="button" className="bw-button bw-button--quiet" onClick={() => setSelectedCategory(null)}>Show all categories</button>
+                ) : (
+                  <button type="button" className="bw-button" onClick={openCreateModal}>Add the first one</button>
+                )}
+              </p>
+            </div>
+          )}
 
-        {/* Recurring Payments List */}
-        {filteredPayments.length === 0 ? (
-          <Box
-            p={8}
-            borderRadius="16px"
-            bg={colors.cardBg}
-            boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid" borderColor={colors.borderSubtle}
-            textAlign="center"
-          >
-            {selectedCategory ? (
-              <VStack gap={3}>
-                <Text fontSize="lg" color={colors.textMuted}>
-                  No {activeTab} payments in "{selectedCategory}"
-                </Text>
-                <Button size="sm" variant="outline" onClick={() => setSelectedCategory(null)}>
-                  Clear filter
-                </Button>
-              </VStack>
-            ) : (
-              <>
-                <Text fontSize="lg" color={colors.textMuted} mb={4}>
-                  No {activeTab} recurring payments yet
-                </Text>
-                <Button onClick={openCreateModal} colorPalette="blue">
-                  Add your first {activeTab}
-                </Button>
-              </>
-            )}
-          </Box>
-        ) : (
-          <VStack gap={{ base: 2, md: 3 }} align="stretch">
-            {filteredPayments.map((payment) => {
-              const nextDate = getNextPaymentDate(payment.start_date, payment.frequency, new Date(), payment.end_date, payment.business_days_only || false, payment.last_business_day_of_month || false, payment.frequency_interval);
-              const daysUntil = nextDate ? Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+          <Agenda days={agendaDays(upcomingPayments)} formatCurrency={formatCurrency} />
+        </div>
+      </Box>
 
-              return (
-                <Box
-                  key={payment.id}
-                  p={{ base: 3, md: 4 }}
-                  borderRadius={{ base: '12px', md: '16px' }}
-                  bg={colors.cardBg}
-                  boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-                  border="1px solid" borderColor={colors.borderSubtle}
-                  opacity={payment.is_active ? 1 : 0.6}
-                  _hover={{ boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                  transition="all 0.2s"
-                >
-                  {/* Mobile Layout */}
-                  <Box display={{ base: 'block', md: 'none' }}>
-                    <Flex justify="space-between" align="flex-start" gap={2}>
-                      <HStack gap={2} flex={1} minW={0}>
-                        <Box
-                          w="36px"
-                          h="36px"
-                          borderRadius="10px"
-                          bg={payment.type === 'expense' ? colors.expenseIconBg : colors.incomeIconBg}
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          flexShrink={0}
-                        >
-                          <Box
-                            w="10px"
-                            h="10px"
-                            borderRadius="full"
-                            bg={getCategoryColor(payment.categories?.name)}
-                          />
-                        </Box>
-                        <Box flex={1} minW={0}>
-                          <HStack gap={1} mb={0.5}>
-                            <Text
-                              fontWeight="600"
-                              fontSize="sm"
-                              color={colors.textPrimary}
-                              overflow="hidden"
-                              textOverflow="ellipsis"
-                              whiteSpace="nowrap"
-                              maxW={{ base: '120px', xs: '160px' }}
-                            >
-                              {payment.name}
-                            </Text>
-                            {!payment.is_active && (
-                              <Badge colorPalette="gray" size="sm" fontSize="10px" flexShrink={0}>Paused</Badge>
-                            )}
-                          </HStack>
-                          <Flex gap={1} flexWrap="wrap" align="center">
-                            <Badge colorPalette={payment.type === 'expense' ? 'red' : 'green'} variant="subtle" fontSize="10px">
-                              {payment.categories?.name || 'Uncategorized'}
-                            </Badge>
-                            <Text fontSize="10px" color={colors.textMuted}>
-                              {formatFrequency(payment.frequency, payment.frequency_interval)}
-                            </Text>
-                            {payment.business_days_only && (
-                              <Badge colorPalette="blue" variant="subtle" fontSize="10px">
-                                Weekdays
-                              </Badge>
-                            )}
-                            {payment.auto_add && (
-                              <Badge colorPalette="green" variant="subtle" fontSize="10px">
-                                Auto
-                              </Badge>
-                            )}
-                          </Flex>
-                        </Box>
-                      </HStack>
-                      <VStack gap={0} align="flex-end" flexShrink={0}>
-                        <Text
-                          fontWeight="700"
-                          fontSize="sm"
-                          color={payment.type === 'expense' ? '#E11D48' : '#059669'}
-                        >
-                          {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
-                        </Text>
-                        {nextDate && payment.is_active && (
-                          <Text
-                            fontSize="10px"
-                            color={daysUntil <= 3 ? '#DC2626' : '#71717A'}
-                            fontWeight={daysUntil <= 3 ? '600' : '400'}
-                          >
-                            {daysUntil === 0 ? 'Due today' : daysUntil === 1 ? 'Tomorrow' : `${daysUntil}d`}
-                          </Text>
-                        )}
-                      </VStack>
-                    </Flex>
-                    <Flex gap={2} justify="flex-end" pt={2} mt={2} borderTop="1px solid" borderColor={colors.borderSubtle}>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => handleToggleActive(payment)}
-                        colorPalette={payment.is_active ? 'orange' : 'green'}
-                        fontSize="xs"
-                        px={3}
-                        borderRadius="full"
-                      >
-                        {payment.is_active ? 'Pause' : 'Resume'}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => openEditModal(payment)}
-                        fontSize="xs"
-                        px={3}
-                        borderRadius="full"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        colorPalette="red"
-                        onClick={() => handleDelete(payment.id)}
-                        fontSize="xs"
-                        px={3}
-                        borderRadius="full"
-                      >
-                        Delete
-                      </Button>
-                    </Flex>
-                  </Box>
-
-                  {/* Desktop Layout */}
-                  <Flex display={{ base: 'none', md: 'flex' }} justify="space-between" align="center" gap={3}>
-                    <HStack gap={4}>
-                      <Box
-                        w="48px"
-                        h="48px"
-                        borderRadius="12px"
-                        bg={payment.type === 'expense' ? colors.expenseIconBg : colors.incomeIconBg}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <Box
-                          w="12px"
-                          h="12px"
-                          borderRadius="full"
-                          bg={getCategoryColor(payment.categories?.name)}
-                        />
-                      </Box>
-                      <Box>
-                        <HStack gap={2} mb={1}>
-                          <Text fontWeight="600" fontSize="md" color={colors.textPrimary}>
-                            {payment.name}
-                          </Text>
-                          {!payment.is_active && (
-                            <Badge colorPalette="gray" size="sm">Paused</Badge>
-                          )}
-                        </HStack>
-                        <HStack gap={2} flexWrap="wrap">
-                          <Badge colorPalette={payment.type === 'expense' ? 'red' : 'green'} variant="subtle">
-                            {payment.categories?.name || 'Uncategorized'}
-                          </Badge>
-                          <Text fontSize="xs" color={colors.textMuted}>
-                            {formatFrequency(payment.frequency, payment.frequency_interval)}
-                          </Text>
-                          {payment.business_days_only && (
-                            <Badge colorPalette="blue" variant="subtle" size="sm">
-                              Weekdays
-                            </Badge>
-                          )}
-                          {payment.last_business_day_of_month && (
-                            <Badge colorPalette="purple" variant="subtle" size="sm">
-                              Last biz day
-                            </Badge>
-                          )}
-                          {payment.auto_add && (
-                            <Badge colorPalette="green" variant="subtle" size="sm">
-                              Auto-added
-                            </Badge>
-                          )}
-                          {payment.end_date && (
-                            <Text fontSize="xs" color={colors.textMuted}>
-                              until {formatDate(payment.end_date)}
-                            </Text>
-                          )}
-                        </HStack>
-                      </Box>
-                    </HStack>
-
-                    <HStack gap={4}>
-                      <Box textAlign="right">
-                        <Text
-                          fontWeight="700"
-                          fontSize="lg"
-                          color={payment.type === 'expense' ? '#E11D48' : '#059669'}
-                        >
-                          {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
-                        </Text>
-                        {nextDate && payment.is_active && (
-                          <Text
-                            fontSize="xs"
-                            color={daysUntil <= 3 ? '#DC2626' : '#71717A'}
-                            fontWeight={daysUntil <= 3 ? '600' : '400'}
-                          >
-                            {daysUntil === 0 ? 'Due today' : daysUntil === 1 ? 'Due tomorrow' : `In ${daysUntil} days`}
-                          </Text>
-                        )}
-                        {!nextDate && payment.is_active && (
-                          <Text fontSize="xs" color={colors.textMuted}>Ended</Text>
-                        )}
-                      </Box>
-
-                      <HStack gap={1}>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleToggleActive(payment)}
-                          color={payment.is_active ? 'orange.500' : 'green.500'}
-                        >
-                          {payment.is_active ? 'Pause' : 'Resume'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openEditModal(payment)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          colorPalette="red"
-                          onClick={() => handleDelete(payment.id)}
-                        >
-                          Delete
-                        </Button>
-                      </HStack>
-                    </HStack>
-                  </Flex>
-                </Box>
-              );
-            })}
-          </VStack>
-        )}
-
-        {/* Upcoming Payments Preview */}
-        {upcomingPayments.length > 0 && (
-          <Box
-            p={{ base: 3, md: 5 }}
-            borderRadius={{ base: '12px', md: '16px' }}
-            bg={colors.cardBg}
-            boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid" borderColor={colors.borderSubtle}
-          >
-            <Heading size={{ base: 'sm', md: 'md' }} mb={{ base: 3, md: 4 }} color={colors.textPrimary}>Next 30 Days</Heading>
-            <VStack gap={{ base: 1, md: 2 }} align="stretch" maxH="300px" overflowY="auto">
-              {upcomingPayments.slice(0, 10).map((payment, index) => (
-                <Flex
-                  key={`${payment.id}-${index}`}
-                  align="center"
-                  justify="space-between"
-                  p={{ base: 2, md: 3 }}
-                  borderRadius={{ base: '8px', md: '10px' }}
-                  bg={payment.daysUntil === 0 ? colors.itemDueTodayBg : payment.daysUntil <= 3 ? colors.itemDueSoonBg : colors.rowStripedBg}
-                >
-                  <HStack gap={{ base: 2, md: 3 }}>
-                    <Box
-                      w={{ base: '6px', md: '8px' }}
-                      h={{ base: '6px', md: '8px' }}
-                      borderRadius="full"
-                      bg={getCategoryColor(payment.categories?.name)}
-                      flexShrink={0}
-                    />
-                    <Box>
-                      <Text fontWeight="500" fontSize={{ base: 'xs', md: 'sm' }} color={colors.textPrimary}>{payment.name}</Text>
-                      <Text fontSize={{ base: '10px', md: 'xs' }} color={colors.textMuted}>
-                        {formatDate(payment.nextDate)}
-                      </Text>
-                    </Box>
-                  </HStack>
-                  <Text
-                    fontWeight="600"
-                    fontSize={{ base: 'xs', md: 'sm' }}
-                    color={payment.type === 'expense' ? '#E11D48' : '#059669'}
-                    flexShrink={0}
-                  >
-                    {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
-                  </Text>
-                </Flex>
-              ))}
-            </VStack>
-          </Box>
-        )}
-      </VStack>
-
-      {/* Add/Edit Modal */}
-      <Dialog.Root open={isModalOpen} onOpenChange={(e) => !e.open && closeModal()}>
-        <Portal>
-          <Dialog.Backdrop bg="blackAlpha.600" />
-          <Dialog.Positioner>
-            <Dialog.Content
-              bg={colors.cardBg}
-              borderRadius="20px"
-              p={0}
-              maxW="500px"
-              w="90vw"
-              overflow="hidden"
-            >
-              <Box
-                bg={formData.type === 'expense' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)'}
-                p={5}
-              >
-                <Flex justify="space-between" align="center">
-                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
-                    {editingPayment ? 'Edit' : 'Add'} Recurring {formData.type === 'expense' ? 'Expense' : 'Income'}
-                  </Dialog.Title>
-                  <Dialog.CloseTrigger asChild>
-                    <CloseButton color="white" />
-                  </Dialog.CloseTrigger>
-                </Flex>
-              </Box>
-
-              <Box p={6}>
-                <form onSubmit={handleSubmit}>
-                  <VStack gap={4} align="stretch">
-                    {/* Type Toggle */}
-                    <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Type</Text>
-                      <HStack gap={2}>
-                        <Button
-                          flex={1}
-                          variant={formData.type === 'expense' ? 'solid' : 'outline'}
-                          colorPalette="red"
-                          onClick={() => setFormData({ ...formData, type: 'expense', category_id: '' })}
-                          type="button"
-                        >
-                          Expense
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={formData.type === 'income' ? 'solid' : 'outline'}
-                          colorPalette="green"
-                          onClick={() => setFormData({ ...formData, type: 'income', category_id: '' })}
-                          type="button"
-                        >
-                          Income
-                        </Button>
-                      </HStack>
-                    </Box>
-
-                    {/* Name */}
-                    <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Name *</Text>
-                      <Input
-                        placeholder="e.g., Netflix, Mortgage, Salary"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                        bg={colors.cardBg}
-                        borderColor={colors.borderColor}
-                        color={colors.textPrimary}
-                      />
-                    </Box>
-
-                    {/* Amount */}
-                    <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Amount *</Text>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                        required
-                        bg={colors.cardBg}
-                        borderColor={colors.borderColor}
-                        color={colors.textPrimary}
-                      />
-                    </Box>
-
-                    {/* Category */}
-                    <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Category</Text>
-                      <Box ref={categoryDropdownRef} position="relative" w="100%">
-                        {/* Dropdown Trigger */}
-                        <Box
-                          onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                          cursor="pointer"
-                          px={3}
-                          py={2.5}
-                          h="42px"
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="space-between"
-                          borderRadius="8px"
-                          borderWidth="1px"
-                          borderColor={categoryDropdownOpen ? 'blue.500' : colors.borderColor}
-                          bg={colors.cardBg}
-                          _hover={{ borderColor: 'blue.400' }}
-                          transition="all 0.2s"
-                        >
-                          <Text
-                            color={formData.category_id ? colors.textPrimary : colors.textMuted}
-                            fontSize="sm"
-                            noOfLines={1}
-                          >
-                            {formData.category_id ? filteredCategories.find(c => c.id === formData.category_id)?.name : 'Select category...'}
-                          </Text>
-                          <Box
-                            as="span"
-                            transform={categoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                            transition="transform 0.2s"
-                            color={colors.textSecondary}
-                            fontSize="xs"
-                          >
-                            ▼
-                          </Box>
-                        </Box>
-
-                        {/* Dropdown List */}
-                        {categoryDropdownOpen && (
-                          <Box
-                            position="absolute"
-                            top="100%"
-                            left={0}
-                            right={0}
-                            zIndex={1000}
-                            mt={1}
-                            bg={colors.cardBg}
-                            borderWidth="1px"
-                            borderColor={colors.borderColor}
-                            borderRadius="12px"
-                            boxShadow="lg"
-                            maxH={{ base: '280px', md: '320px' }}
-                            overflowY="auto"
-                          >
-                            <VStack gap={0} align="stretch" p={1}>
-                              {filteredCategories.map((cat) => {
-                                const isSelected = cat.id === formData.category_id;
-                                return (
-                                  <HStack
-                                    key={cat.id}
-                                    px={3}
-                                    py={2.5}
-                                    cursor="pointer"
-                                    bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                                    _hover={{ bg: colors.rowStripedBg }}
-                                    borderRadius="8px"
-                                    onClick={() => {
-                                      setFormData({ ...formData, category_id: cat.id });
-                                      setCategoryDropdownOpen(false);
-                                    }}
-                                    justify="space-between"
-                                    transition="background 0.1s"
-                                  >
-                                    <Text
-                                      color={colors.textPrimary}
-                                      fontSize="sm"
-                                      fontWeight={isSelected ? '600' : '400'}
-                                    >
-                                      {cat.name}
-                                    </Text>
-                                    {isSelected && (
-                                      <Text color="blue.500" fontSize="sm">✓</Text>
-                                    )}
-                                  </HStack>
-                                );
-                              })}
-                            </VStack>
-                          </Box>
-                        )}
-                      </Box>
-                    </Box>
-
-                    {/* Frequency */}
-                    <Box>
-                      <Text as="label" htmlFor="recurring-frequency" display="block" fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Frequency *</Text>
-                      <Box
-                        as="select"
-                        id="recurring-frequency"
-                        value={formData.frequency}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          frequency: e.target.value,
-                          ...(e.target.value === 'custom' ? customSchedule(formData.frequency) : {}),
-                          last_business_day_of_month: e.target.value === 'custom'
-                            ? !!FREQUENCY_CONFIG[formData.frequency]?.months && formData.last_business_day_of_month
-                            : !!FREQUENCY_CONFIG[e.target.value]?.months && formData.last_business_day_of_month,
-                        })}
-                        w="100%" h="42px" px={3} borderRadius="8px" borderWidth="1px"
-                        borderColor={colors.borderColor} bg={colors.cardBg} color={colors.textPrimary}
-                        fontSize="sm" _focusVisible={{ outline: '2px solid', outlineColor: 'blue.500' }}
-                      >
-                        {Object.entries(FREQUENCY_CONFIG).map(([key, config]) => (
-                          <option key={key} value={key}>{config.label}</option>
-                        ))}
-                        <option value="custom">Custom...</option>
-                      </Box>
-                      {formData.frequency === 'custom' && (
-                        <Box mt={3} p={3} borderRadius="10px" bg={colors.rowStripedBg}>
-                          <Text as="label" htmlFor="recurring-interval" display="block" fontWeight="600" fontSize="sm" mb={2} color={colors.textSecondary}>Repeat every</Text>
-                          <HStack gap={3}>
-                            <Input
-                              id="recurring-interval"
-                              type="number" min={1} max={MAX_FREQUENCY_INTERVAL} step={1} required
-                              inputMode="numeric" w="90px" flexShrink={0}
-                              value={formData.frequency_interval}
-                              onChange={(e) => setFormData({ ...formData, frequency_interval: e.target.value })}
-                              bg={colors.cardBg} borderColor={colors.borderColor} color={colors.textPrimary}
-                            />
-                            <Box
-                              as="select" aria-label="Repeat period" flex={1} minW={0}
-                              value={formData.custom_frequency}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                custom_frequency: e.target.value,
-                                last_business_day_of_month: !!FREQUENCY_CONFIG[e.target.value]?.months && formData.last_business_day_of_month,
-                              })}
-                              h="40px" px={3} borderRadius="8px" borderWidth="1px"
-                              bg={colors.cardBg} borderColor={colors.borderColor} color={colors.textPrimary}
-                              _focusVisible={{ outline: '2px solid', outlineColor: 'blue.500' }}
-                            >
-                              <option value="daily">day(s)</option>
-                              <option value="weekly">week(s)</option>
-                              <option value="monthly">month(s)</option>
-                              <option value="yearly">year(s)</option>
-                            </Box>
-                          </HStack>
-                          <Text fontSize="xs" color={colors.textMuted} mt={2}>
-                            Repeats from Start Date. Choose a known payment date to keep the right schedule.
-                          </Text>
-                          {formNextDate && (
-                            <Text fontSize="sm" color={colors.textPrimary} mt={2} aria-live="polite">
-                              {formatFrequency(formFrequency, formInterval)} · Next: {formatDate(formNextDate)}
-                            </Text>
-                          )}
-                        </Box>
-                      )}
-                    </Box>
-
-                    {/* Dates */}
-                    <SimpleGrid columns={2} gap={4}>
-                      <Box>
-                        <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Start Date *</Text>
-                        <Input
-                          type="date"
-                          aria-label="Start Date"
-                          value={formData.start_date}
-                          onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                          required
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                        />
-                      </Box>
-                      <Box>
-                        <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>End Date</Text>
-                        <Input
-                          type="date"
-                          value={formData.end_date}
-                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                          placeholder="Optional"
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                        />
-                      </Box>
-                    </SimpleGrid>
-
-                    {/* Business Days Only */}
-                    <Box>
-                      <Flex
-                        align="center"
-                        gap={3}
-                        p={3}
-                        borderRadius="10px"
-                        bg={formData.business_days_only ? colors.primaryBg : colors.rowStripedBg}
-                        border="1px solid"
-                        borderColor={formData.business_days_only ? 'blue.300' : colors.borderColor}
-                        cursor="pointer"
-                        onClick={() => setFormData({ ...formData, business_days_only: !formData.business_days_only })}
-                        transition="all 0.2s"
-                        _hover={{ borderColor: 'blue.300' }}
-                      >
-                        <Box
-                          w="20px"
-                          h="20px"
-                          borderRadius="4px"
-                          border="2px solid"
-                          borderColor={formData.business_days_only ? 'blue.500' : colors.borderColor}
-                          bg={formData.business_days_only ? 'blue.500' : 'transparent'}
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          flexShrink={0}
-                        >
-                          {formData.business_days_only && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </Box>
-                        <Box flex="1">
-                          <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
-                            Business days only
-                          </Text>
-                          <Text fontSize="xs" color={colors.textMuted}>
-                            Adjust weekend dates to nearest weekday (Sat→Fri, Sun→Mon)
-                          </Text>
-                        </Box>
-                      </Flex>
-                    </Box>
-
-                    {/* Last Business Day of Month - only show for monthly/quarterly/yearly */}
-                    {!!FREQUENCY_CONFIG[formFrequency]?.months && (
-                      <Box>
-                        <Flex
-                          align="center"
-                          gap={3}
-                          p={3}
-                          borderRadius="10px"
-                          bg={formData.last_business_day_of_month ? 'purple.50' : colors.rowStripedBg}
-                          border="1px solid"
-                          borderColor={formData.last_business_day_of_month ? 'purple.300' : colors.borderColor}
-                          cursor="pointer"
-                          onClick={() => setFormData({ ...formData, last_business_day_of_month: !formData.last_business_day_of_month })}
-                          transition="all 0.2s"
-                          _hover={{ borderColor: 'purple.300' }}
-                        >
-                          <Box
-                            w="20px"
-                            h="20px"
-                            borderRadius="4px"
-                            border="2px solid"
-                            borderColor={formData.last_business_day_of_month ? 'purple.500' : colors.borderColor}
-                            bg={formData.last_business_day_of_month ? 'purple.500' : 'transparent'}
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                            flexShrink={0}
-                          >
-                            {formData.last_business_day_of_month && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </Box>
-                          <Box flex="1">
-                            <Text fontWeight="600" fontSize="sm" color={formData.last_business_day_of_month ? 'purple.800' : colors.textPrimary}>
-                              Last business day of month
-                            </Text>
-                            <Text fontSize="xs" color={formData.last_business_day_of_month ? 'purple.600' : colors.textMuted}>
-                              Schedule on the last weekday (Mon-Fri) of each payment month
-                            </Text>
-                          </Box>
-                        </Flex>
-                      </Box>
-                    )}
-
-                    {/* Auto-add to transactions */}
-                    <Box>
-                      <Flex
-                        align="center"
-                        gap={3}
-                        p={3}
-                        borderRadius="10px"
-                        bg={formData.auto_add ? colors.successBg : colors.rowStripedBg}
-                        border="1px solid"
-                        borderColor={formData.auto_add ? colors.successBorder : colors.borderColor}
-                        cursor="pointer"
-                        onClick={() => setFormData({ ...formData, auto_add: !formData.auto_add })}
-                        transition="all 0.2s"
-                        _hover={{ borderColor: colors.successBorder }}
-                      >
-                        <Box
-                          w="20px"
-                          h="20px"
-                          borderRadius="4px"
-                          border="2px solid"
-                          borderColor={formData.auto_add ? 'green.500' : colors.borderColor}
-                          bg={formData.auto_add ? 'green.500' : 'transparent'}
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          flexShrink={0}
-                        >
-                          {formData.auto_add && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </Box>
-                        <Box flex="1">
-                          <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
-                            Add to transactions automatically
-                          </Text>
-                          <Text fontSize="xs" color={colors.textMuted}>
-                            {editingPayment?.auto_add && editingPayment.auto_add_from
-                              ? `Recording automatically since ${formatDate(editingPayment.auto_add_from)}`
-                              : 'Records itself when the date arrives — starting today, past dates are left alone'}
-                          </Text>
-                        </Box>
-                      </Flex>
-                    </Box>
-
-                    {/* Bank description — used to recognise the same payment coming from the sheet */}
-                    {formData.auto_add && (
-                      <Box>
-                        <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>
-                          Bank description
-                        </Text>
-                        <Input
-                          placeholder="e.g., PAYROLL DEP, HYDRO BILL PMT"
-                          value={formData.match_description}
-                          onChange={(e) => setFormData({ ...formData, match_description: e.target.value })}
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                        />
-                        <Text fontSize="xs" color={colors.textMuted} mt={1.5}>
-                          Optional. How this payment reads on your statement — if the same amount shows
-                          up in the Google Sheets import within a few days, it won't be added twice.
-                        </Text>
-                      </Box>
-                    )}
-
-                    {/* Notes */}
-                    <Box>
-                      <Text fontWeight="600" mb={2} fontSize="sm" color={colors.textSecondary}>Notes</Text>
-                      <Input
-                        placeholder="Optional notes..."
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        bg={colors.cardBg}
-                        borderColor={colors.borderColor}
-                        color={colors.textPrimary}
-                      />
-                    </Box>
-
-                    {/* Submit Button */}
-                    <Button
-                      type="submit"
-                      loading={saving}
-                      loadingText={editingPayment ? 'Updating...' : 'Creating...'}
-                      bg={formData.type === 'expense' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)'}
-                      color="white"
-                      w="100%"
-                      size="lg"
-                      fontWeight="600"
-                      borderRadius="12px"
-                      _hover={{ transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
-                    >
-                      {editingPayment ? 'Update' : 'Add'} Recurring Payment
-                    </Button>
-                  </VStack>
-                </form>
-              </Box>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-    </PageContainer>
+      <PaymentForm
+        open={isModalOpen}
+        editing={editingPayment}
+        form={formData}
+        onChange={setFormData}
+        categories={filteredCategories}
+        schedule={{ frequency: formFrequency, interval: formInterval, nextDate: formNextDate }}
+        error={error}
+        saving={saving}
+        onSubmit={handleSubmit}
+        onClose={closeModal}
+      />
+    </Box>
   );
 }

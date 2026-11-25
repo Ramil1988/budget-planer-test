@@ -1,329 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import {
-  Box,
-  Flex,
-  Heading,
-  VStack,
-  HStack,
-  Text,
-  Spinner,
-  Input,
-  Button,
-  Tabs,
-  Dialog,
-  Portal,
-  CloseButton,
-} from '@chakra-ui/react';
+import { useState, useEffect } from 'react';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { Box, Heading, IconButton, Input, Spinner } from '@chakra-ui/react';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import PageContainer from '../components/PageContainer';
-import { useDarkModeColors } from '../lib/useDarkModeColors';
 import { getPaymentDatesInRange, getMonthlyEquivalent, formatFrequency } from '../lib/recurringUtils';
+import { monthProgress, paceSummary } from '../lib/budgetMath';
 import BudgetRecommendations from '../components/BudgetRecommendations';
-
-// Circular Progress Ring Component
-const ProgressRing = ({ percent, size = 120, strokeWidth = 8, color = '#3B82F6' }) => {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const cappedPercent = Math.min(percent, 100);
-  const offset = circumference - (cappedPercent / 100) * circumference;
-
-  return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      {/* Background circle */}
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke="#E5E7EB"
-        strokeWidth={strokeWidth}
-      />
-      {/* Progress circle */}
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={percent > 100 ? '#EF4444' : percent > 80 ? '#F59E0B' : color}
-        strokeWidth={strokeWidth}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{
-          transition: 'stroke-dashoffset 0.8s ease-out, stroke 0.3s ease',
-        }}
-      />
-    </svg>
-  );
-};
-
-// Progress Bar Component
-const ProgressBar = ({ percent, height = '8px', showOverflow = true }) => {
-  const cappedPercent = Math.min(percent, 100);
-  const isOver = percent > 100;
-  const isWarning = percent > 80 && percent <= 100;
-
-  return (
-    <Box
-      w="100%"
-      h={height}
-      bg="#E5E7EB"
-      borderRadius="full"
-      overflow="hidden"
-      position="relative"
-    >
-      <Box
-        h="100%"
-        w={`${cappedPercent}%`}
-        bg={isOver ? '#EF4444' : isWarning ? '#F59E0B' : '#10B981'}
-        borderRadius="full"
-        transition="width 0.6s ease-out, background-color 0.3s ease"
-      />
-      {showOverflow && isOver && (
-        <Box
-          position="absolute"
-          right="0"
-          top="0"
-          h="100%"
-          w="4px"
-          bg="#DC2626"
-          animation="pulse 1.5s infinite"
-        />
-      )}
-    </Box>
-  );
-};
-
-const money = (amount) =>
-  `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Marks a category that is driven by recurring payments. Hovering (or tapping,
-// on touch devices) breaks down which recurrings feed it and what they cost.
-const RECURRING_PANEL_WIDTH = 240;
-
-const RecurringBadge = ({ info, colors }) => {
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState(null);
-  const anchorRef = useRef(null);
-
-  // Close the panel if the page moves under it, since it's positioned in
-  // viewport coordinates (via a portal) rather than anchored to the badge.
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [open]);
-
-  if (!info) return null;
-
-  const isFinePointer = () => window.matchMedia('(pointer: fine)').matches;
-
-  const openPanel = () => {
-    const rect = anchorRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const margin = 12;
-    const left = Math.min(
-      Math.max(margin, rect.left),
-      window.innerWidth - margin - RECURRING_PANEL_WIDTH
-    );
-    setCoords({ top: rect.bottom + 8, left });
-    setOpen(true);
-  };
-
-  return (
-    <Box
-      ref={anchorRef}
-      position="relative"
-      display="inline-flex"
-      onMouseEnter={() => isFinePointer() && openPanel()}
-      onMouseLeave={() => isFinePointer() && setOpen(false)}
-      onClick={(e) => {
-        // Don't let the tap fall through to the card's own click handler
-        e.stopPropagation();
-        if (!isFinePointer()) {
-          if (open) setOpen(false);
-          else openPanel();
-        }
-      }}
-      cursor="pointer"
-    >
-      <Text
-        as="span"
-        fontSize="xs"
-        fontWeight="600"
-        color="purple.400"
-        bg="rgba(168,85,247,0.12)"
-        px={1.5}
-        py={0.5}
-        borderRadius="4px"
-        whiteSpace="nowrap"
-      >
-        🔁 {info.count}
-      </Text>
-
-      {open && coords && (
-        <Portal>
-          <Box
-            // Fixed + portalled to <body> so the panel positions itself in
-            // viewport coordinates, clamped to stay on-screen, instead of
-            // being clipped/misplaced by the card's own layout and transform.
-            position="fixed"
-            top={`${coords.top}px`}
-            left={`${coords.left}px`}
-            bg={colors.cardBg}
-            border="1px solid"
-            borderColor="purple.400"
-            borderRadius="12px"
-            boxShadow="0 12px 32px rgba(0,0,0,0.35)"
-            p={3}
-            zIndex={1400}
-            w={`${RECURRING_PANEL_WIDTH}px`}
-          >
-              <Text fontSize="xs" fontWeight="700" color={colors.textMuted} mb={2} textTransform="uppercase" letterSpacing="0.05em">
-                Recurring payments
-              </Text>
-
-              <VStack align="stretch" gap={1.5}>
-                {info.items.map((item) => (
-                  <Flex key={item.name} justify="space-between" gap={3} align="baseline">
-                    <Box minW="0">
-                      <Text fontSize="sm" color={colors.textPrimary} truncate>{item.name}</Text>
-                      <Text fontSize="10px" color={colors.textMuted} textTransform="capitalize">
-                        {item.frequency}
-                      </Text>
-                    </Box>
-                    <Text fontSize="sm" fontWeight="600" color={colors.textPrimary} whiteSpace="nowrap">
-                      {money(item.amount)}
-                    </Text>
-                  </Flex>
-                ))}
-              </VStack>
-
-              <Flex justify="space-between" align="baseline" mt={2} pt={2} borderTop="1px solid" borderColor={colors.borderSubtle}>
-                <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>Total</Text>
-                <Text fontSize="sm" fontWeight="700" color="purple.400" whiteSpace="nowrap">
-                  {money(info.monthly)}/mo
-                </Text>
-              </Flex>
-          </Box>
-        </Portal>
-      )}
-    </Box>
-  );
-};
-
-// Category Budget Card Component
-const BudgetCard = ({ item, formatCurrency, index, onClick, colors, percentOfTotal, recurringInfo }) => {
-  const isOver = item.percentOfLimit > 100;
-  const isWarning = item.percentOfLimit > 80 && item.percentOfLimit <= 100;
-  const hasLimit = item.limit > 0;
-
-  return (
-    <Box
-      p={5}
-      bg={colors.cardBg}
-      borderRadius="16px"
-      boxShadow="0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)"
-      border="1px solid"
-      borderColor={isOver ? 'red.200' : colors.borderSubtle}
-      transition="all 0.3s ease"
-      position="relative"
-      _hover={{
-        transform: 'translateY(-2px)',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        cursor: 'pointer',
-        // Keep the recurring tooltip above neighbouring cards: the hover
-        // transform makes this card its own stacking context.
-        zIndex: 5,
-      }}
-      style={{
-        animation: `fadeSlideIn 0.4s ease-out ${index * 0.05}s both`,
-      }}
-      onClick={onClick}
-    >
-      <Flex justify="space-between" align="flex-start" mb={3}>
-        <Box flex="1">
-          <HStack gap={2} mb={1}>
-            <Text
-              fontWeight="600"
-              fontSize="md"
-              color={colors.textPrimary}
-            >
-              {item.name}
-            </Text>
-            {percentOfTotal > 0 && (
-              <Text
-                fontSize="xs"
-                fontWeight="600"
-                color="blue.400"
-                bg="rgba(59,130,246,0.1)"
-                px={1.5}
-                py={0.5}
-                borderRadius="4px"
-              >
-                {percentOfTotal < 1 ? '<1' : percentOfTotal.toFixed(0)}%
-              </Text>
-            )}
-            <RecurringBadge info={recurringInfo} colors={colors} />
-          </HStack>
-          <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
-            {formatCurrency(item.spent)}
-          </Text>
-        </Box>
-        {hasLimit && (
-          <Box textAlign="right">
-            <Text
-              fontSize="xs"
-              fontWeight="600"
-              textTransform="uppercase"
-              letterSpacing="0.05em"
-              color={isOver ? 'red.500' : isWarning ? 'yellow.600' : 'green.500'}
-              mb={1}
-            >
-              {isOver ? 'Over Budget' : isWarning ? 'Warning' : 'On Track'}
-            </Text>
-            <Text fontSize="sm" color={colors.textMuted}>
-              of {formatCurrency(item.limit)}
-            </Text>
-          </Box>
-        )}
-      </Flex>
-
-      {hasLimit ? (
-        <>
-          <ProgressBar percent={item.percentOfLimit} />
-          <Flex justify="space-between" mt={3}>
-            <Text fontSize="sm" color={colors.textMuted}>
-              {item.percentOfLimit.toFixed(0)}% used
-            </Text>
-            <Text
-              fontSize="sm"
-              fontWeight="600"
-              color={item.remaining < 0 ? 'red.500' : 'green.500'}
-            >
-              {item.remaining < 0 ? '-' : '+'}{formatCurrency(Math.abs(item.remaining))} {item.remaining < 0 ? 'over' : 'left'}
-            </Text>
-          </Flex>
-        </>
-      ) : (
-        <Text fontSize="sm" color={colors.textMuted} mt={2}>
-          No limit set
-        </Text>
-      )}
-    </Box>
-  );
-};
+import PaceLedger from '../components/budget/PaceLedger';
+import CategoryList from '../components/budget/CategoryList';
+import SetupPanel from '../components/budget/SetupPanel';
+import CategoryTransactionsDialog from '../components/budget/CategoryTransactionsDialog';
+import '../styles/ledger.css';
+import '../styles/budget.css';
 
 export default function Budget() {
   const { user } = useAuth();
-  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -345,18 +37,26 @@ export default function Budget() {
   const [viewMode, setViewMode] = useState('current'); // 'current' or 'projected'
   const [previousMonthLimits, setPreviousMonthLimits] = useState({}); // Previous month's budget limits for comparison
   const [setupSortBy, setSetupSortBy] = useState('amount'); // 'amount' or 'name'
-  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  const sortDropdownRef = useRef(null);
   const [committedLimits, setCommittedLimits] = useState({}); // Used for sorting - only updates on blur
+  const [savedLimits, setSavedLimits] = useState({}); // What the setup tab was loaded with, to tell when it has changes
   const [categorySearch, setCategorySearch] = useState(''); // Search filter for categories
   const [recommendationsKey, setRecommendationsKey] = useState(0); // Key to force refresh recommendations
 
-  const changeMonth = (event) => {
-    const month = event.target.value;
+  const setMonth = (month) => {
     if (!month) return;
     const next = new URLSearchParams(searchParams);
     next.set('month', month);
     setSearchParams(next, { replace: true });
+  };
+
+  const stepMonth = (step) => {
+    // The address changes at once, but the render that follows can still be pending when the
+    // next click arrives, so a quick second click reads the month from the address.
+    const inAddress = new URLSearchParams(window.location.search).get('month');
+    const from = /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(inAddress ?? '') ? inAddress : selectedMonth;
+    const [year, month] = from.split('-').map(Number);
+    const date = new Date(year, month - 1 + step, 1);
+    setMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
   };
 
   useEffect(() => {
@@ -378,17 +78,6 @@ export default function Budget() {
       calculateForecast();
     }
   }, [budgetData, recurringPayments, selectedMonth]);
-
-  // Handle click outside to close sort dropdown
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
-        setSortDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const calculateForecast = () => {
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -603,6 +292,7 @@ export default function Budget() {
       }
       setBudgetLimits(limitsMap);
       setCommittedLimits(limitsMap); // Sync committed limits for sorting
+      setSavedLimits(limitsMap);
 
       // Load transactions for this month to calculate spent
       const { data: transactions, error: txError } = await supabase
@@ -952,10 +642,6 @@ export default function Budget() {
     }).format(amount);
   };
 
-  const formatPercent = (percent) => {
-    return percent.toFixed(2) + '%';
-  };
-
   const getMonthName = (monthStr) => {
     // Parse year and month from 'YYYY-MM' format to avoid timezone issues
     const [year, month] = monthStr.split('-').map(Number);
@@ -966,8 +652,6 @@ export default function Budget() {
   // Calculate totals
   const totalLimit = budgetData.reduce((sum, item) => sum + item.limit, 0);
   const totalSpent = budgetData.reduce((sum, item) => sum + item.spent, 0);
-  const totalRemaining = totalLimit - totalSpent;
-  const totalPercentSpent = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0;
 
   // Which categories are driven by recurring payments, and what they cost per
   // month. Used to flag those categories in both Budget Tracking and Setup.
@@ -1005,138 +689,152 @@ export default function Budget() {
 
   if (loading && categories.length === 0) {
     return (
-      <PageContainer>
-        <Flex w="100%" minH="60vh" align="center" justify="center">
-          <VStack gap={4}>
-            <Spinner size="xl" />
-            <Text>Loading budget...</Text>
-          </VStack>
-        </Flex>
-      </PageContainer>
+      <Box className="bw-surface bw-page">
+        <Box className="bw-layout">
+          <div className="bw-status" role="status">
+            <Spinner size="sm" color="currentColor" />
+            Loading budget…
+          </div>
+        </Box>
+      </Box>
     );
   }
 
   if (!loading && categories.length === 0) {
     return (
-      <PageContainer>
-        <Flex w="100%" minH="60vh" align="center" justify="center">
-          <VStack gap={4} textAlign="center" p={6}>
-            <Heading size="lg" color={colors.textPrimary}>No Budget Categories</Heading>
-            <Text color={colors.textSecondary}>
-              You need to create expense categories first before setting up a budget.
-            </Text>
-            <Text color={colors.textMuted} fontSize="sm">
-              Go to Categories and add some expense categories to get started.
-            </Text>
-          </VStack>
-        </Flex>
-      </PageContainer>
+      <Box className="bw-surface bw-page">
+        <Box className="bw-layout">
+          <div className="bw-empty">
+            <h1>No expense categories yet</h1>
+            <p>A budget is a limit per category, so it needs categories first.</p>
+            <RouterLink className="bw-link" to="/categories">Add expense categories</RouterLink>
+          </div>
+        </Box>
+      </Box>
     );
   }
 
+  const progress = monthProgress(selectedMonth);
+  const monthName = getMonthName(selectedMonth);
+  const [monthWord] = monthName.split(' ');
+  const [selectedYear, selectedMonthNumber] = selectedMonth.split('-').map(Number);
+  const shortMonth = new Date(selectedYear, selectedMonthNumber - 1, 1).toLocaleDateString('en-US', { month: 'short' });
+  const monthState = progress.state === 'current'
+    ? `${progress.daysLeft} ${progress.daysLeft === 1 ? 'day' : 'days'} left`
+    : progress.state === 'past' ? 'closed' : 'not started';
+
+  // What recurring payments will still take, and what the open categories are expected to use.
+  const scheduled = forecastData.reduce((sum, item) => sum + item.upcomingAmount, 0);
+  const expected = forecastData.reduce((sum, item) => sum + item.nonRecurringRemaining, 0);
+  const canProject = forecastData.length > 0 && totalLimit > 0;
+  const mode = canProject ? viewMode : 'current';
+
+  const projectedOver = Math.max(0, totalSpent + scheduled + expected - totalLimit);
+  const exceeding = forecastData.filter((item) => item.willExceed).length;
+  const summary = mode === 'projected'
+    ? {
+      tone: projectedOver > 0 ? 'bad' : 'good',
+      headline: projectedOver > 0 ? `Heading for ${formatCurrency(projectedOver)} over budget` : 'On course to finish within budget',
+      detail: `${formatCurrency(totalSpent)} spent, ${formatCurrency(scheduled)} scheduled and ${formatCurrency(expected)} expected in the categories that are still open.${
+        exceeding > 0 ? ` ${exceeding} ${exceeding === 1 ? 'category' : 'categories'} will go over.` : ''}`,
+    }
+    : paceSummary({ limit: totalLimit, spent: totalSpent, scheduled, progress, monthName: monthWord, money: formatCurrency });
+
+  const matches = (item) => item.name.toLowerCase().includes(categorySearch.toLowerCase());
+  const listed = mode === 'projected'
+    ? forecastData.filter((item) => item.limit > 0 && matches(item))
+    : budgetData.filter(matches);
+  const dirty = categories.some(({ id }) => Number(budgetLimits[id] || 0) !== Number(savedLimits[id] || 0));
+  const stepButton = { variant: 'ghost', minW: '36px', h: '40px', color: 'var(--bw-muted)', _hover: { bg: 'var(--bw-hover)' } };
+
   return (
-    <PageContainer>
-      <VStack gap={{ base: 4, md: 6 }} align="stretch" w="100%">
-        {/* Header */}
-        <Flex justify="space-between" align={{ base: 'stretch', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} wrap="wrap" gap={{ base: 3, md: 4 }}>
-          <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Monthly Budget</Heading>
-          <Input
-            type="month"
-            value={selectedMonth}
-            onChange={changeMonth}
-            size="md"
-            w={{ base: '100%', sm: '200px' }}
-            bg={colors.cardBg}
-            borderColor={colors.borderColor}
-            color={colors.textPrimary}
-          />
-        </Flex>
+    <Box className="bw-surface bw-page">
+      <Box className="bw-layout">
+        <header className="bw-masthead">
+          <div>
+            <Heading as="h1" className="bw-title">Monthly Budget</Heading>
+            <p className="bw-subtitle">{monthName}, {monthState}</p>
+          </div>
 
-        {/* Month Display */}
-        <Text fontSize={{ base: 'md', md: 'lg' }} color={colors.textSecondary}>
-          {getMonthName(selectedMonth)}
-        </Text>
+          <div className="bw-month-control">
+            <IconButton {...stepButton} aria-label="Go to previous month" onClick={() => stepMonth(-1)}>
+              <FiChevronLeft />
+            </IconButton>
+            <Input
+              type="month"
+              aria-label="Budget month"
+              value={selectedMonth}
+              onChange={(event) => setMonth(event.target.value)}
+              variant="flushed"
+              w="166px"
+              minW="0"
+              px={2}
+              h="40px"
+              color="var(--bw-ink)"
+              border="0"
+              fontSize="sm"
+              fontWeight="600"
+              css={{ colorScheme: 'light', '.dark &': { colorScheme: 'dark' } }}
+              _focusVisible={{ outline: '2px solid', outlineColor: 'var(--bw-accent)', outlineOffset: '-2px', boxShadow: 'none' }}
+            />
+            <IconButton {...stepButton} aria-label="Go to next month" onClick={() => stepMonth(1)}>
+              <FiChevronRight />
+            </IconButton>
+          </div>
+        </header>
 
-        {/* Messages */}
-        {error && (
-          <Box p={4} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px">
-            <Text color={colors.danger}>{error}</Text>
-          </Box>
-        )}
-        {success && (
-          <Box p={4} bg={colors.successBg} borderRadius="md" borderColor={colors.successBorder} borderWidth="1px">
-            <Text color={colors.success}>{success}</Text>
-          </Box>
-        )}
+        <div className="bw-switches">
+          <div className="bw-tabs" role="tablist" aria-label="Budget views">
+            {[['tracking', 'Budget Tracking'], ['setup', 'Budget Setup']].map(([value, label]) => (
+              <button
+                type="button"
+                role="tab"
+                id={`budget-tab-${value}`}
+                aria-selected={activeTab === value}
+                aria-controls={`budget-panel-${value}`}
+                className="bw-tab"
+                onClick={() => setActiveTab(value)}
+                key={value}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {/* Tabs */}
-        <Tabs.Root
-          value={activeTab}
-          onValueChange={(e) => setActiveTab(e.value)}
-          variant="enclosed"
-        >
-          <Flex justify="center">
-            <Tabs.List>
-              <Tabs.Trigger value="tracking" px={6} py={3}>
-                Budget Tracking
-              </Tabs.Trigger>
-              <Tabs.Trigger value="setup" px={6} py={3}>
-                Budget Setup
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Flex>
+          {activeTab === 'tracking' && canProject && (
+            <div className="bw-segment" role="group" aria-label="Month so far or projected to its end">
+              {[['current', 'Current'], ['projected', 'Projected']].map(([value, label]) => (
+                <button type="button" aria-pressed={mode === value} onClick={() => setViewMode(value)} key={value}>{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
 
-          {/* Tracking Tab */}
-          <Tabs.Content value="tracking" pt={4}>
+        {error && <p className="bw-note" data-tone="bad" role="alert">{error}</p>}
+        {success && <p className="bw-note" role="status">{success}</p>}
+
+        {activeTab === 'tracking' && (
+          <Box display="grid" gap="inherit" role="tabpanel" id="budget-panel-tracking" aria-labelledby="budget-tab-tracking">
             {loading ? (
-              <VStack py={8}>
-                <Spinner />
-                <Text>Loading...</Text>
-              </VStack>
+              <div className="bw-status" role="status">
+                <Spinner size="sm" color="currentColor" />
+                Loading {monthName}…
+              </div>
             ) : (
-              <VStack gap={6} align="stretch">
-                {/* View Mode Toggle */}
-                {forecastData.length > 0 && totalLimit > 0 && (
-                  <Flex
-                    justify="center"
-                    p={1}
-                    bg={colors.cardBg}
-                    borderRadius="16px"
-                    border="1px solid"
-                    borderColor={colors.borderSubtle}
-                    w="fit-content"
-                    mx="auto"
-                  >
-                    <Button
-                      size="sm"
-                      px={6}
-                      py={2}
-                      borderRadius="12px"
-                      fontWeight="600"
-                      bg={viewMode === 'current' ? 'linear-gradient(135deg, #1E293B 0%, #334155 100%)' : 'transparent'}
-                      color={viewMode === 'current' ? 'white' : colors.textSecondary}
-                      _hover={{ bg: viewMode === 'current' ? undefined : colors.rowStripedBg }}
-                      onClick={() => setViewMode('current')}
-                    >
-                      Current
-                    </Button>
-                    <Button
-                      size="sm"
-                      px={6}
-                      py={2}
-                      borderRadius="12px"
-                      fontWeight="600"
-                      bg={viewMode === 'projected' ? 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)' : 'transparent'}
-                      color={viewMode === 'projected' ? 'white' : colors.textSecondary}
-                      _hover={{ bg: viewMode === 'projected' ? undefined : colors.rowStripedBg }}
-                      onClick={() => setViewMode('projected')}
-                    >
-                      Projected
-                    </Button>
-                  </Flex>
-                )}
+              <>
+                <PaceLedger
+                  mode={mode}
+                  limit={totalLimit}
+                  spent={totalSpent}
+                  scheduled={scheduled}
+                  expected={expected}
+                  progress={progress}
+                  summary={summary}
+                  firstDay={`${shortMonth} 1`}
+                  lastDay={`${shortMonth} ${progress.daysInMonth}`}
+                  formatCurrency={formatCurrency}
+                />
 
-                {/* Budget Recommendations */}
                 <BudgetRecommendations
                   key={recommendationsKey}
                   budgetId={null}
@@ -1145,914 +843,77 @@ export default function Budget() {
                   onRefresh={refreshRecommendations}
                 />
 
-                {/* Current View */}
-                {viewMode === 'current' && (
-                <>
-                <Box
-                  p={{ base: 5, md: 8 }}
-                  bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)"
-                  borderRadius="24px"
-                  color="white"
-                  position="relative"
-                  overflow="hidden"
-                  style={{ animation: 'fadeSlideIn 0.5s ease-out' }}
-                >
-                  {/* Background decoration */}
-                  <Box
-                    position="absolute"
-                    top="-50%"
-                    right="-10%"
-                    w="300px"
-                    h="300px"
-                    bg="rgba(255,255,255,0.03)"
-                    borderRadius="full"
-                    pointerEvents="none"
-                  />
-                  <Box
-                    position="absolute"
-                    bottom="-30%"
-                    left="-5%"
-                    w="200px"
-                    h="200px"
-                    bg="rgba(255,255,255,0.02)"
-                    borderRadius="full"
-                    pointerEvents="none"
-                  />
-
-                  <Flex
-                    direction={{ base: 'column', md: 'row' }}
-                    align={{ base: 'center', md: 'center' }}
-                    justify="space-between"
-                    gap={{ base: 6, md: 8 }}
-                    position="relative"
-                    zIndex={1}
-                  >
-                    {/* Left side - Main stats */}
-                    <VStack align={{ base: 'center', md: 'flex-start' }} gap={1}>
-                      <Text
-                        fontSize="xs"
-                        fontWeight="600"
-                        textTransform="uppercase"
-                        letterSpacing="0.1em"
-                        color="rgba(255,255,255,0.6)"
-                      >
-                        Total Spent
-                      </Text>
-                      <Text
-                        fontSize={{ base: '3xl', md: '4xl' }}
-                        fontWeight="800"
-                        letterSpacing="-0.02em"
-                      >
-                        {formatCurrency(totalSpent)}
-                      </Text>
-                      <Text fontSize="sm" color="rgba(255,255,255,0.7)">
-                        of {formatCurrency(totalLimit)} budget
-                      </Text>
-                    </VStack>
-
-                    {/* Center - Progress Ring */}
-                    <Box position="relative">
-                      <ProgressRing
-                        percent={totalPercentSpent}
-                        size={140}
-                        strokeWidth={10}
-                        color="#10B981"
-                      />
-                      <Box
-                        position="absolute"
-                        top="50%"
-                        left="50%"
-                        transform="translate(-50%, -50%)"
-                        textAlign="center"
-                      >
-                        <Text fontSize="2xl" fontWeight="800">
-                          {totalPercentSpent.toFixed(0)}%
-                        </Text>
-                        <Text fontSize="xs" color="rgba(255,255,255,0.6)">
-                          used
-                        </Text>
-                      </Box>
-                    </Box>
-
-                    {/* Right side - Remaining */}
-                    <VStack align={{ base: 'center', md: 'flex-end' }} gap={1}>
-                      <Text
-                        fontSize="xs"
-                        fontWeight="600"
-                        textTransform="uppercase"
-                        letterSpacing="0.1em"
-                        color="rgba(255,255,255,0.6)"
-                      >
-                        Remaining
-                      </Text>
-                      <Text
-                        fontSize={{ base: '2xl', md: '3xl' }}
-                        fontWeight="700"
-                        color={totalRemaining < 0 ? '#F87171' : '#34D399'}
-                      >
-                        {totalRemaining < 0 ? '-' : ''}{formatCurrency(Math.abs(totalRemaining))}
-                      </Text>
-                      <Text
-                        fontSize="sm"
-                        px={3}
-                        py={1}
-                        borderRadius="full"
-                        bg={totalRemaining < 0 ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}
-                        color={totalRemaining < 0 ? '#FCA5A5' : '#6EE7B7'}
-                      >
-                        {totalRemaining < 0 ? 'Over budget' : 'Under budget'}
-                      </Text>
-                    </VStack>
-                  </Flex>
-                </Box>
-
-                {/* Category Cards Grid */}
-                <Box>
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    mb={4}
-                    gap={4}
-                    direction={{ base: 'column', sm: 'row' }}
-                  >
-                    <Text
-                      fontSize="sm"
-                      fontWeight="600"
-                      textTransform="uppercase"
-                      letterSpacing="0.05em"
-                      color={colors.textMuted}
-                    >
-                      By Category
-                    </Text>
-                    <Input
-                      placeholder="Search categories..."
-                      value={categorySearch}
-                      onChange={(e) => setCategorySearch(e.target.value)}
-                      size="sm"
-                      w={{ base: '100%', sm: '200px' }}
-                      bg={colors.cardBg}
-                      borderColor={colors.borderColor}
-                      color={colors.textPrimary}
-                      borderRadius="8px"
-                      _placeholder={{ color: colors.textMuted }}
-                    />
-                  </Flex>
-                  <Box
-                    display="grid"
-                    gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
-                    gap={4}
-                  >
-                    {budgetData
-                      .filter(item => item.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                      .map((item, index) => (
-                      <BudgetCard
-                        key={item.id}
-                        item={item}
-                        formatCurrency={formatCurrency}
-                        index={index}
-                        onClick={() => loadCategoryTransactions(item.id, item.name)}
-                        colors={colors}
-                        percentOfTotal={totalLimit > 0 ? (item.limit / totalLimit) * 100 : 0}
-                        recurringInfo={recurringByCategory[item.id]}
-                      />
-                    ))}
-                    {categorySearch && budgetData.filter(item => item.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
-                      <Box gridColumn="1 / -1" textAlign="center" py={8}>
-                        <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
-                      </Box>
+                <div className="bw-section-head">
+                  <div>
+                    <h2>Categories</h2>
+                    {mode === 'projected' ? (
+                      <p>Each bar runs to the end of the month: what is spent, then scheduled payments, then what the category is expected to use. A striped tail shows how far past its limit a category will go.</p>
+                    ) : (
+                      <p>
+                        {progress.state === 'current' && 'The dashed line is today. A bar that reaches past it is spending faster than the month is passing. '}
+                        {budgetData.some((item) => item.limit > 0 && item.spent > item.limit) && 'A striped tail shows how far a category went past its limit.'}
+                      </p>
                     )}
-                  </Box>
-                </Box>
-                </>
-                )}
+                  </div>
+                  <div className="bw-tools">
+                    <input
+                      type="search"
+                      className="bw-input"
+                      placeholder="Search categories"
+                      aria-label="Search categories"
+                      value={categorySearch}
+                      onChange={(event) => setCategorySearch(event.target.value)}
+                    />
+                  </div>
+                </div>
 
-                {/* Projected View */}
-                {viewMode === 'projected' && forecastData.length > 0 && totalLimit > 0 && (
-                  <Box>
-
-                    {/* Forecast Summary Card */}
-                    {(() => {
-                      const totalUpcoming = forecastData.reduce((sum, f) => sum + f.upcomingAmount, 0);
-                      const totalNonRecurringRemaining = forecastData.reduce((sum, f) => sum + f.nonRecurringRemaining, 0);
-                      const totalProjected = forecastData.reduce((sum, f) => sum + f.projectedSpent, 0);
-                      // Calculate true over-budget based on total projected vs total limit (not sum of individual overages)
-                      const totalOverBudget = Math.max(0, totalProjected - totalLimit);
-                      const projectedRemaining = totalLimit - totalProjected;
-                      const willExceedTotal = totalProjected > totalLimit;
-                      const categoriesWillExceed = forecastData.filter(f => f.willExceed).length;
-
-                      return (
-                        <Box
-                          p={{ base: 4, md: 6 }}
-                          bg={willExceedTotal ? 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)' : 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)'}
-                          borderRadius="20px"
-                          color="white"
-                          position="relative"
-                          overflow="hidden"
-                          mb={4}
-                        >
-                          <Box
-                            position="absolute"
-                            top="-30%"
-                            right="-10%"
-                            w="200px"
-                            h="200px"
-                            bg="rgba(255,255,255,0.05)"
-                            borderRadius="full"
-                            pointerEvents="none"
-                          />
-                          <Flex
-                            direction={{ base: 'column', md: 'row' }}
-                            justify="space-between"
-                            align={{ base: 'stretch', md: 'center' }}
-                            gap={4}
-                            position="relative"
-                            zIndex={1}
-                          >
-                            <VStack align={{ base: 'center', md: 'flex-start' }} gap={1}>
-                              <Text
-                                fontSize="xs"
-                                fontWeight="600"
-                                textTransform="uppercase"
-                                letterSpacing="0.1em"
-                                color="rgba(255,255,255,0.7)"
-                              >
-                                Projected Total Spending
-                              </Text>
-                              <Text fontSize={{ base: '2xl', md: '3xl' }} fontWeight="800">
-                                {formatCurrency(totalProjected)}
-                              </Text>
-                              <HStack gap={2} flexWrap="wrap" justify={{ base: 'center', md: 'flex-start' }}>
-                                <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                  Spent: {formatCurrency(totalSpent)}
-                                </Text>
-                                {totalUpcoming > 0 && (
-                                  <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                    + Recurring: {formatCurrency(totalUpcoming)}
-                                  </Text>
-                                )}
-                                {totalNonRecurringRemaining > 0 && (
-                                  <Text fontSize="xs" color="rgba(255,255,255,0.8)">
-                                    + Remaining: {formatCurrency(totalNonRecurringRemaining)}
-                                  </Text>
-                                )}
-                              </HStack>
-                            </VStack>
-
-                            <VStack align={{ base: 'center', md: 'flex-end' }} gap={1}>
-                              <Text
-                                fontSize="xs"
-                                fontWeight="600"
-                                textTransform="uppercase"
-                                letterSpacing="0.1em"
-                                color="rgba(255,255,255,0.7)"
-                              >
-                                {willExceedTotal ? 'Over Budget By' : 'On Budget'}
-                              </Text>
-                              <Text
-                                fontSize={{ base: 'xl', md: '2xl' }}
-                                fontWeight="700"
-                                color={willExceedTotal ? '#FCA5A5' : '#A7F3D0'}
-                              >
-                                {willExceedTotal ? formatCurrency(totalOverBudget) : 'On Track'}
-                              </Text>
-                              {categoriesWillExceed > 0 && (
-                                <Text
-                                  fontSize="xs"
-                                  px={3}
-                                  py={1}
-                                  borderRadius="full"
-                                  bg="rgba(255,255,255,0.2)"
-                                  fontWeight="600"
-                                >
-                                  {categoriesWillExceed} categor{categoriesWillExceed === 1 ? 'y' : 'ies'} over
-                                </Text>
-                              )}
-                            </VStack>
-                          </Flex>
-                        </Box>
-                      );
-                    })()}
-
-                    {/* Categories with upcoming payments */}
-                    <Flex
-                      justify="space-between"
-                      align="center"
-                      mb={4}
-                      gap={4}
-                      direction={{ base: 'column', sm: 'row' }}
-                    >
-                      <Text
-                        fontSize="sm"
-                        fontWeight="600"
-                        textTransform="uppercase"
-                        letterSpacing="0.05em"
-                        color={colors.textMuted}
-                      >
-                        By Category
-                      </Text>
-                      <Input
-                        placeholder="Search categories..."
-                        value={categorySearch}
-                        onChange={(e) => setCategorySearch(e.target.value)}
-                        size="sm"
-                        w={{ base: '100%', sm: '200px' }}
-                        bg={colors.cardBg}
-                        borderColor={colors.borderColor}
-                        color={colors.textPrimary}
-                        borderRadius="8px"
-                        _placeholder={{ color: colors.textMuted }}
-                      />
-                    </Flex>
-                    <Box
-                      display="grid"
-                      gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
-                      gap={3}
-                    >
-                      {forecastData.filter(f => f.limit > 0 && f.name.toLowerCase().includes(categorySearch.toLowerCase())).map((item, index) => (
-                        <Box
-                          key={item.id}
-                          p={4}
-                          bg={colors.cardBg}
-                          borderRadius="16px"
-                          border="2px solid"
-                          borderColor={item.willExceed ? 'red.400' : item.projectedPercent > 80 ? 'yellow.400' : colors.borderSubtle}
-                          boxShadow={item.willExceed ? '0 0 20px rgba(239, 68, 68, 0.15)' : 'none'}
-                          style={{
-                            animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
-                          }}
-                        >
-                          <Flex justify="space-between" align="flex-start" mb={3}>
-                            <Box flex="1">
-                              <HStack gap={2} mb={1}>
-                                <Text fontWeight="600" fontSize="sm" color={colors.textPrimary}>
-                                  {item.name}
-                                </Text>
-                                {totalLimit > 0 && item.limit > 0 && (
-                                  <Text
-                                    fontSize="xs"
-                                    fontWeight="600"
-                                    color="blue.400"
-                                    bg="rgba(59,130,246,0.1)"
-                                    px={1.5}
-                                    py={0.5}
-                                    borderRadius="4px"
-                                  >
-                                    {((item.limit / totalLimit) * 100) < 1 ? '<1' : ((item.limit / totalLimit) * 100).toFixed(0)}%
-                                  </Text>
-                                )}
-                                {item.willExceed && (
-                                  <Text
-                                    fontSize="10px"
-                                    fontWeight="700"
-                                    color="white"
-                                    bg="red.500"
-                                    px={2}
-                                    py={0.5}
-                                    borderRadius="full"
-                                  >
-                                    OVER
-                                  </Text>
-                                )}
-                              </HStack>
-                              <Text fontSize="xs" color={colors.textMuted}>
-                                Budget: {formatCurrency(item.limit)}
-                              </Text>
-                            </Box>
-                            <Box textAlign="right">
-                              <Text fontSize="lg" fontWeight="700" color={item.willExceed ? 'red.500' : colors.textPrimary}>
-                                {formatCurrency(item.projectedSpent)}
-                              </Text>
-                              <Text fontSize="xs" color={colors.textMuted}>
-                                projected
-                              </Text>
-                            </Box>
-                          </Flex>
-
-                          {/* Stacked Progress Bar */}
-                          <Box w="100%" h="10px" bg="#E5E7EB" borderRadius="full" overflow="hidden" mb={3} display="flex">
-                            {/* Current spending - solid */}
-                            {item.spent > 0 && item.limit > 0 && (
-                              <Box
-                                h="100%"
-                                w={`${Math.min((item.spent / item.limit) * 100, 100)}%`}
-                                bg={item.willExceed ? '#EF4444' : item.projectedPercent > 80 ? '#F59E0B' : '#10B981'}
-                                flexShrink={0}
-                              />
-                            )}
-                            {/* Upcoming recurring - striped purple */}
-                            {item.upcomingAmount > 0 && item.limit > 0 && (
-                              <Box
-                                h="100%"
-                                w={`${Math.min((item.upcomingAmount / item.limit) * 100, 100 - (item.spent / item.limit) * 100)}%`}
-                                bg={item.willExceed ? '#EF4444' : '#8B5CF6'}
-                                backgroundImage="repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 4px)"
-                                flexShrink={0}
-                              />
-                            )}
-                            {/* Non-recurring remaining - dotted blue */}
-                            {item.nonRecurringRemaining > 0 && item.limit > 0 && (
-                              <Box
-                                h="100%"
-                                w={`${Math.min((item.nonRecurringRemaining / item.limit) * 100, 100)}%`}
-                                bg="#93C5FD"
-                                backgroundImage="repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(255,255,255,0.5) 3px, rgba(255,255,255,0.5) 6px)"
-                                flexShrink={0}
-                              />
-                            )}
-                          </Box>
-
-                          {/* Breakdown */}
-                          <VStack gap={1} align="stretch">
-                            <Flex justify="space-between" fontSize="xs">
-                              <HStack gap={2}>
-                                <Box w="8px" h="8px" borderRadius="sm" bg={item.willExceed ? '#EF4444' : '#10B981'} />
-                                <Text color={colors.textMuted}>Spent</Text>
-                              </HStack>
-                              <Text color={colors.textSecondary} fontWeight="500">{formatCurrency(item.spent)}</Text>
-                            </Flex>
-                            {item.upcomingAmount > 0 && (
-                              <Flex justify="space-between" fontSize="xs">
-                                <HStack gap={2}>
-                                  <Box w="8px" h="8px" borderRadius="sm" bg={item.willExceed ? '#EF4444' : '#8B5CF6'} backgroundImage="repeating-linear-gradient(45deg, transparent, transparent 1px, rgba(255,255,255,0.5) 1px, rgba(255,255,255,0.5) 2px)" />
-                                  <Text color="purple.500" fontWeight="500">Upcoming</Text>
-                                </HStack>
-                                <Text color="purple.500" fontWeight="500">{formatCurrency(item.upcomingAmount)}</Text>
-                              </Flex>
-                            )}
-                            {item.nonRecurringRemaining > 0 && (
-                              <Flex justify="space-between" fontSize="xs">
-                                <HStack gap={2}>
-                                  <Box w="8px" h="8px" borderRadius="sm" bg="#93C5FD" />
-                                  <Text color="blue.400" fontWeight="500">Remaining</Text>
-                                </HStack>
-                                <Text color="blue.400" fontWeight="500">{formatCurrency(item.nonRecurringRemaining)}</Text>
-                              </Flex>
-                            )}
-                            {item.willExceed && (
-                              <Flex justify="space-between" fontSize="xs" pt={1} borderTop="1px dashed" borderColor={colors.borderSubtle}>
-                                <Text color="red.500" fontWeight="600">Over by</Text>
-                                <Text color="red.500" fontWeight="600">{formatCurrency(item.overAmount)}</Text>
-                              </Flex>
-                            )}
-                          </VStack>
-
-                          {/* Upcoming payment details */}
-                          {item.upcomingPayments.length > 0 && (
-                            <Box mt={3} pt={3} borderTop="1px solid" borderColor={colors.borderSubtle}>
-                              <Text fontSize="xs" fontWeight="600" color={colors.textMuted} mb={2}>
-                                Upcoming Payments
-                              </Text>
-                              <VStack gap={1} align="stretch">
-                                {item.upcomingPayments.map((p, idx) => (
-                                  <Flex key={idx} justify="space-between" fontSize="xs">
-                                    <Text color={colors.textSecondary}>
-                                      {p.name} {p.occurrences > 1 && `(×${p.occurrences})`}
-                                    </Text>
-                                    <Text color="purple.500" fontWeight="500">
-                                      {formatCurrency(p.total)}
-                                    </Text>
-                                  </Flex>
-                                ))}
-                              </VStack>
-                            </Box>
-                          )}
-                        </Box>
-                      ))}
-                      {categorySearch && forecastData.filter(f => f.limit > 0 && f.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
-                        <Box gridColumn="1 / -1" textAlign="center" py={8}>
-                          <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
-                        </Box>
-                      )}
-                    </Box>
-                  </Box>
-                )}
-              </VStack>
+                <CategoryList
+                  mode={mode}
+                  items={listed}
+                  progress={progress}
+                  recurringByCategory={recurringByCategory}
+                  formatCurrency={formatCurrency}
+                  onOpen={(item) => loadCategoryTransactions(item.id, item.name)}
+                  search={categorySearch}
+                />
+              </>
             )}
-          </Tabs.Content>
+          </Box>
+        )}
 
-          {/* Setup Tab */}
-          <Tabs.Content value="setup" pt={4}>
-            <VStack gap={6} align="stretch" w="100%">
-              {/* Total Budget Summary Card */}
-              {(() => {
-                const currentTotal = Object.values(budgetLimits).reduce((sum, val) => sum + Number(val || 0), 0);
-                const prevTotal = Object.values(previousMonthLimits).reduce((sum, val) => sum + Number(val || 0), 0);
-                const totalDiff = currentTotal - prevTotal;
-                const hasPrevMonth = Object.keys(previousMonthLimits).length > 0;
+        {activeTab === 'setup' && (
+          <Box display="grid" gap="inherit" role="tabpanel" id="budget-panel-setup" aria-labelledby="budget-tab-setup">
+            <SetupPanel
+              categories={categories}
+              limits={budgetLimits}
+              committedLimits={committedLimits}
+              previousLimits={previousMonthLimits}
+              recurringByCategory={recurringByCategory}
+              search={categorySearch}
+              onSearch={setCategorySearch}
+              sortBy={setupSortBy}
+              onSortBy={setSetupSortBy}
+              onChange={handleLimitChange}
+              onBlur={handleLimitBlur}
+              onSave={saveBudget}
+              saving={saving}
+              dirty={dirty}
+              monthName={monthWord}
+              formatCurrency={formatCurrency}
+            />
+          </Box>
+        )}
+      </Box>
 
-                return (
-                  <Box
-                    p={6}
-                    bg="linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)"
-                    borderRadius="20px"
-                    color="white"
-                    position="relative"
-                    overflow="hidden"
-                    style={{ animation: 'fadeSlideIn 0.4s ease-out' }}
-                  >
-                    <Box
-                      position="absolute"
-                      top="-30%"
-                      right="-10%"
-                      w="200px"
-                      h="200px"
-                      bg="rgba(255,255,255,0.1)"
-                      borderRadius="full"
-                      pointerEvents="none"
-                    />
-                    <Flex justify="space-between" align="center" position="relative" zIndex={1}>
-                      <Box>
-                        <Text
-                          fontSize="xs"
-                          fontWeight="600"
-                          textTransform="uppercase"
-                          letterSpacing="0.1em"
-                          color="rgba(255,255,255,0.7)"
-                          mb={1}
-                        >
-                          Total Monthly Budget
-                        </Text>
-                        <Flex align="baseline" gap={3}>
-                          <Text fontSize="3xl" fontWeight="800">
-                            {formatCurrency(currentTotal)}
-                          </Text>
-                          {hasPrevMonth && totalDiff !== 0 && (
-                            <Text
-                              fontSize="sm"
-                              fontWeight="600"
-                              color={totalDiff > 0 ? 'green.200' : 'red.200'}
-                              bg={totalDiff > 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}
-                              px={2}
-                              py={0.5}
-                              borderRadius="full"
-                            >
-                              {totalDiff > 0 ? '▲' : '▼'} ${Math.abs(totalDiff).toLocaleString()}
-                            </Text>
-                          )}
-                        </Flex>
-                        {hasPrevMonth && (
-                          <Text fontSize="xs" color="rgba(255,255,255,0.6)" mt={1}>
-                            Last month: {formatCurrency(prevTotal)}
-                          </Text>
-                        )}
-                      </Box>
-                      <Box
-                        p={3}
-                        bg="rgba(255,255,255,0.2)"
-                        borderRadius="full"
-                      >
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                      </Box>
-                    </Flex>
-                  </Box>
-                );
-              })()}
-
-              {/* Category Limit Cards */}
-              <Box>
-                <Flex justify="space-between" align="center" mb={4}>
-                  <Text
-                    fontSize="sm"
-                    fontWeight="600"
-                    textTransform="uppercase"
-                    letterSpacing="0.05em"
-                    color={colors.textMuted}
-                  >
-                    Set Category Limits
-                  </Text>
-                  <HStack gap={3} flexWrap="wrap">
-                    <Input
-                      placeholder="Search categories..."
-                      value={categorySearch}
-                      onChange={(e) => setCategorySearch(e.target.value)}
-                      size="sm"
-                      w={{ base: '100%', sm: '180px' }}
-                      bg={colors.cardBg}
-                      borderColor={colors.borderColor}
-                      color={colors.textPrimary}
-                      borderRadius="8px"
-                      _placeholder={{ color: colors.textMuted }}
-                    />
-                    <HStack gap={2}>
-                      <Text fontSize="xs" color={colors.textMuted}>Sort:</Text>
-                      <Box ref={sortDropdownRef} position="relative">
-                        <Box
-                          onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-                          px={3}
-                          py={1.5}
-                          fontSize="13px"
-                          fontWeight="500"
-                          borderRadius="8px"
-                          borderWidth="1px"
-                          borderColor={sortDropdownOpen ? 'blue.500' : colors.borderColor}
-                          bg={colors.cardBg}
-                          color={colors.textPrimary}
-                          cursor="pointer"
-                          display="flex"
-                          alignItems="center"
-                          gap={2}
-                          _hover={{ borderColor: 'blue.400' }}
-                          minW="140px"
-                        >
-                          <Text flex="1">{setupSortBy === 'amount' ? 'Amount (Highest)' : 'Name (A-Z)'}</Text>
-                          <Box
-                            as="span"
-                            transform={sortDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                            transition="transform 0.2s"
-                            fontSize="10px"
-                          >
-                            ▼
-                          </Box>
-                        </Box>
-                        {sortDropdownOpen && (
-                          <Box
-                            position="absolute"
-                            top="100%"
-                            left={0}
-                            right={0}
-                            zIndex={1000}
-                            mt={1}
-                            bg={colors.cardBg}
-                            borderWidth="1px"
-                            borderColor={colors.borderColor}
-                            borderRadius="8px"
-                            boxShadow="lg"
-                            overflow="hidden"
-                          >
-                            <VStack gap={0} align="stretch">
-                              {[
-                                { value: 'amount', label: 'Amount (Highest)' },
-                                { value: 'name', label: 'Name (A-Z)' },
-                              ].map((option) => (
-                                <Box
-                                  key={option.value}
-                                  px={3}
-                                  py={2}
-                                  cursor="pointer"
-                                  bg={setupSortBy === option.value ? colors.rowStripedBg : 'transparent'}
-                                  _hover={{ bg: colors.rowStripedBg }}
-                                  onClick={() => {
-                                    setSetupSortBy(option.value);
-                                    setSortDropdownOpen(false);
-                                  }}
-                                  display="flex"
-                                  justifyContent="space-between"
-                                  alignItems="center"
-                                >
-                                  <Text fontSize="13px" color={colors.textPrimary}>{option.label}</Text>
-                                  {setupSortBy === option.value && (
-                                    <Text color="blue.500" fontSize="sm">✓</Text>
-                                  )}
-                                </Box>
-                              ))}
-                            </VStack>
-                          </Box>
-                        )}
-                      </Box>
-                    </HStack>
-                  </HStack>
-                </Flex>
-                <Box
-                  display="grid"
-                  gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }}
-                  gap={3}
-                >
-                  {(() => {
-                    const totalAllLimits = Object.values(committedLimits).reduce((sum, val) => sum + Number(val || 0), 0);
-                    return categories
-                    .slice() // Clone to avoid mutating original
-                    .filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                    .sort((a, b) => {
-                      if (setupSortBy === 'amount') {
-                        // Use committedLimits for sorting to prevent re-sorting while typing
-                        const aAmount = Number(committedLimits[a.id] || 0);
-                        const bAmount = Number(committedLimits[b.id] || 0);
-                        return bAmount - aAmount; // Largest first
-                      }
-                      return a.name.localeCompare(b.name);
-                    })
-                    .map((cat, index) => {
-                      const currentLimit = Number(budgetLimits[cat.id] || 0);
-                      const prevLimit = Number(previousMonthLimits[cat.id] || 0);
-                      const diff = currentLimit - prevLimit;
-                      const hasPrevData = prevLimit > 0 || (cat.id in previousMonthLimits);
-                      const percentage = totalAllLimits > 0 ? (Number(committedLimits[cat.id] || 0) / totalAllLimits) * 100 : 0;
-
-                      return (
-                        <Box
-                          key={cat.id}
-                          p={4}
-                          bg={colors.cardBg}
-                          borderRadius="12px"
-                          border="1px solid"
-                          borderColor={diff !== 0 && hasPrevData ? (diff > 0 ? 'green.300' : 'red.300') : colors.borderColor}
-                          transition="all 0.2s ease"
-                          position="relative"
-                          _hover={{ borderColor: 'blue.300', boxShadow: '0 2px 8px rgba(59,130,246,0.1)', zIndex: 5 }}
-                          style={{ animation: `fadeSlideIn 0.3s ease-out ${index * 0.03}s both` }}
-                        >
-                          <Flex justify="space-between" align="flex-start" mb={3}>
-                            <HStack gap={2}>
-                              <Text fontWeight="600" fontSize="sm" color={colors.textSecondary}>
-                                {cat.name}
-                              </Text>
-                              {percentage > 0 && (
-                                <Text
-                                  fontSize="xs"
-                                  fontWeight="600"
-                                  color="blue.400"
-                                  bg="rgba(59,130,246,0.1)"
-                                  px={1.5}
-                                  py={0.5}
-                                  borderRadius="4px"
-                                >
-                                  {percentage < 1 ? '<1' : percentage.toFixed(0)}%
-                                </Text>
-                              )}
-                              <RecurringBadge info={recurringByCategory[cat.id]} colors={colors} />
-                            </HStack>
-                            {/* Show difference indicator */}
-                            {hasPrevData && diff !== 0 && (
-                              <HStack gap={1}>
-                                <Text
-                                  fontSize="xs"
-                                  fontWeight="600"
-                                  color={diff > 0 ? 'green.500' : 'red.500'}
-                                >
-                                  {diff > 0 ? '▲' : '▼'} ${Math.abs(diff).toLocaleString()}
-                                </Text>
-                              </HStack>
-                            )}
-                          </Flex>
-                          <HStack>
-                            <Text color={colors.textMuted} fontSize="lg" fontWeight="500">$</Text>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={budgetLimits[cat.id] ?? ''}
-                              onChange={(e) => handleLimitChange(cat.id, e.target.value)}
-                              onBlur={() => handleLimitBlur(cat.id)}
-                              placeholder="0.00"
-                              size="md"
-                              border="none"
-                              bg={colors.rowStripedBg}
-                              borderRadius="8px"
-                              fontWeight="600"
-                              fontSize="lg"
-                              color={colors.textPrimary}
-                              _focus={{ bg: colors.primaryBg, boxShadow: 'none' }}
-                              _placeholder={{ color: colors.textMuted }}
-                            />
-                          </HStack>
-                          {/* Show last month's value */}
-                          {hasPrevData && (
-                            <Text fontSize="xs" color={colors.textMuted} mt={2}>
-                              Last month: ${prevLimit.toLocaleString()}
-                            </Text>
-                          )}
-                        </Box>
-                      );
-                    });
-                  })()}
-                    {categorySearch && categories.filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
-                      <Box gridColumn="1 / -1" textAlign="center" py={8}>
-                        <Text color={colors.textMuted}>No categories found matching "{categorySearch}"</Text>
-                      </Box>
-                    )}
-                </Box>
-              </Box>
-
-              {/* Save Button */}
-              <Box pt={2}>
-                <Button
-                  bg="linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)"
-                  color="white"
-                  size="lg"
-                  px={8}
-                  borderRadius="12px"
-                  fontWeight="600"
-                  onClick={saveBudget}
-                  loading={saving}
-                  loadingText="Saving..."
-                  _hover={{ transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
-                  transition="all 0.2s ease"
-                  w={{ base: '100%', md: 'auto' }}
-                >
-                  Save Budget
-                </Button>
-              </Box>
-            </VStack>
-          </Tabs.Content>
-        </Tabs.Root>
-      </VStack>
-
-      {/* Category Transactions Modal */}
-      <Dialog.Root open={!!selectedCategory} onOpenChange={(e) => !e.open && closeTransactionsModal()}>
-        <Portal>
-          <Dialog.Backdrop bg="blackAlpha.600" />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="500px"
-              w="90%"
-              maxH="80vh"
-              borderRadius="20px"
-              overflow="hidden"
-              bg={colors.cardBg}
-            >
-              <Dialog.Header
-                bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)"
-                color="white"
-                p={5}
-              >
-                <Flex justify="space-between" align="center">
-                  <Box>
-                    <Dialog.Title fontSize="lg" fontWeight="700" color="white">
-                      {selectedCategory?.name}
-                    </Dialog.Title>
-                    <Text fontSize="sm" color="rgba(255,255,255,0.7)" mt={1}>
-                      {getMonthName(selectedMonth)} Transactions
-                    </Text>
-                  </Box>
-                  <Dialog.CloseTrigger asChild>
-                    <CloseButton
-                      color="white"
-                      _hover={{ bg: 'whiteAlpha.200' }}
-                      borderRadius="full"
-                    />
-                  </Dialog.CloseTrigger>
-                </Flex>
-              </Dialog.Header>
-
-              <Dialog.Body p={0} overflowY="auto" maxH="calc(80vh - 140px)">
-                {loadingTransactions ? (
-                  <Flex justify="center" align="center" py={10}>
-                    <Spinner size="lg" color="blue.500" />
-                  </Flex>
-                ) : categoryTransactions.length === 0 ? (
-                  <Flex justify="center" align="center" py={10}>
-                    <Text color={colors.textMuted}>No transactions found</Text>
-                  </Flex>
-                ) : (
-                  <VStack gap={0} align="stretch">
-                    {categoryTransactions.map((tx, idx) => (
-                      <Box
-                        key={tx.id}
-                        px={5}
-                        py={4}
-                        borderBottomWidth={idx < categoryTransactions.length - 1 ? '1px' : '0'}
-                        borderColor={colors.borderSubtle}
-                        _hover={{ bg: colors.rowStripedBg }}
-                        transition="background 0.15s"
-                      >
-                        <Flex justify="space-between" align="flex-start">
-                          <Box flex="1" pr={3}>
-                            <Text fontWeight="600" color={colors.textPrimary} fontSize="sm">
-                              {tx.description || 'No description'}
-                            </Text>
-                            <Text fontSize="xs" color={colors.textMuted} mt={0.5}>
-                              {new Date(tx.date + 'T00:00:00').toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </Text>
-                          </Box>
-                          <Text fontWeight="700" color="red.500" fontSize="sm">
-                            {formatCurrency(tx.amount)}
-                          </Text>
-                        </Flex>
-                      </Box>
-                    ))}
-                  </VStack>
-                )}
-              </Dialog.Body>
-
-              <Dialog.Footer
-                p={4}
-                bg={colors.rowStripedBg}
-                borderTopWidth="1px"
-                borderColor={colors.borderSubtle}
-              >
-                <Flex justify="space-between" align="center" w="100%">
-                  <Text fontSize="sm" color={colors.textSecondary}>
-                    {categoryTransactions.length} transaction{categoryTransactions.length !== 1 ? 's' : ''}
-                  </Text>
-                  <HStack gap={2}>
-                    <Text fontSize="sm" color={colors.textSecondary}>Total:</Text>
-                    <Text fontSize="lg" fontWeight="700" color="red.500">
-                      {formatCurrency(categoryTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0))}
-                    </Text>
-                  </HStack>
-                </Flex>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-    </PageContainer>
+      <CategoryTransactionsDialog
+        category={selectedCategory}
+        item={budgetData.find(({ id }) => id === selectedCategory?.id)}
+        transactions={categoryTransactions}
+        loading={loadingTransactions}
+        monthName={monthName}
+        onClose={closeTransactionsModal}
+        formatCurrency={formatCurrency}
+      />
+    </Box>
   );
 }

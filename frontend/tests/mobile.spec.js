@@ -24,7 +24,7 @@ test.describe('Mobile Responsiveness', () => {
       await expect(page.locator('text=Smart Budget Tracking')).toBeVisible();
 
       // CTA buttons should be full width or prominent
-      await expect(page.locator('button:has-text("Get Started Free"), a:has-text("Get Started Free")')).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Get Started Free' }).first()).toBeVisible();
     });
 
     test('should display login page correctly on mobile', async ({ page }) => {
@@ -120,15 +120,20 @@ test.describe('Mobile Responsiveness', () => {
     test('should display transactions page correctly on mobile', async ({ page }) => {
       await page.goto('/transactions');
 
-      await expect(page.locator('text=Transactions')).toBeVisible();
-      await expect(page.locator('input[placeholder*="Search"]')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Transactions', level: 1 })).toBeVisible();
+      await expect(page.getByLabel('Search transactions')).toBeVisible();
+      await expect(page.locator('.tx-ledger')).toBeVisible();
     });
 
     test('should display budget page correctly on mobile', async ({ page }) => {
       await page.goto('/budget');
 
-      await expect(page.locator('text=Monthly Budget')).toBeVisible();
-      await expect(page.locator('text=Budget Tracking')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Monthly Budget' })).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Budget Tracking' })).toBeVisible();
+      // Nothing on the page may be wider than the screen.
+      await expect(page.locator('.bw-ledger')).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
     });
 
     test('should display categories page correctly on mobile', async ({ page }) => {
@@ -140,20 +145,28 @@ test.describe('Mobile Responsiveness', () => {
     test('should display recurring page correctly on mobile', async ({ page }) => {
       await page.goto('/recurring');
 
-      await expect(page.locator('text=Recurring Payments')).toBeVisible();
-      await expect(page.locator('button:has-text("Add Recurring")')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Recurring Payments' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Add recurring' })).toBeVisible();
+      // Nothing on the page may be wider than the screen.
+      await expect(page.locator('.recurring-strip')).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
     });
 
     test('should display reports page correctly on mobile', async ({ page }) => {
       await page.goto('/reports');
 
-      await expect(page.locator('text=Financial Report')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Financial Report' })).toBeVisible();
+      // Nothing on the page may be wider than the screen.
+      await expect(page.locator('.reports-year')).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
     });
 
     test('should display settings page correctly on mobile', async ({ page }) => {
       await page.goto('/settings');
 
-      await expect(page.locator('text=Settings')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
     });
 
     test('should display import page correctly on mobile', async ({ page }) => {
@@ -165,9 +178,12 @@ test.describe('Mobile Responsiveness', () => {
     test('should display add transaction page correctly on mobile', async ({ page }) => {
       await page.goto('/add-transaction');
 
-      await expect(page.locator('text=Add Transaction')).toBeVisible();
-      await expect(page.locator('button:has-text("Expense")')).toBeVisible();
-      await expect(page.locator('button:has-text("Income")')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Add transaction', level: 1 })).toBeVisible();
+      const type = page.getByRole('group', { name: 'Type' });
+      await expect(type.getByRole('button', { name: 'Expense' })).toBeVisible();
+      await expect(type.getByRole('button', { name: 'Income' })).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
     });
   });
 
@@ -245,14 +261,10 @@ test.describe('Mobile Responsiveness', () => {
     test('should open dropdowns on mobile', async ({ page }) => {
       await page.goto('/add-transaction');
 
-      // Tap on category dropdown
-      await page.tap('text=Select a category');
-      await page.waitForTimeout(500);
-
-      // Dropdown options should be visible
-      const options = page.locator('[role="option"], [role="listbox"] div');
-      const count = await options.count();
-      expect(count).toBeGreaterThan(0);
+      // The category is a native select: the phone shows its own picker for it.
+      const category = page.getByLabel('Category');
+      await expect(category).toBeVisible();
+      expect(await category.locator('option').count()).toBeGreaterThan(1);
     });
   });
 
@@ -284,9 +296,9 @@ test.describe('Mobile Responsiveness', () => {
     test('should display charts correctly on mobile', async ({ page }) => {
       await page.goto('/reports');
 
-      // Charts should be visible and contained
-      await expect(page.locator('text=Income vs Expenses')).toBeVisible();
-      await expect(page.locator('text=Top Categories')).toBeVisible();
+      // The year chart keeps all twelve months on a narrow screen, and the rankings follow it.
+      await expect(page.locator('.reports-month')).toHaveCount(12);
+      await expect(page.getByRole('region', { name: 'Where the money goes' })).toBeVisible();
     });
   });
 });

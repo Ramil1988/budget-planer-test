@@ -1,0 +1,620 @@
+/* The Budget page's own parts, on top of ledger.css: the pace ruler (money on a track that is
+   also the month, with a mark for today), the category meters and the setup tab. */
+.budget-pace {
+  padding: 18px clamp(16px, 2.3vw, 28px) 20px;
+  border-top: 1px solid var(--bw-border);
+}
+
+.budget-pace__headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.budget-pace__headline[data-tone='bad'] {
+  color: var(--bw-negative);
+}
+
+.budget-pace__headline[data-tone='warn'] {
+  color: var(--bw-caution);
+}
+
+.budget-pace__detail {
+  max-width: 78ch;
+  margin: 4px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.875rem;
+}
+
+.budget-ruler {
+  margin-top: 30px;
+}
+
+.budget-ruler__track {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--bw-track);
+}
+
+.budget-ruler__bar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  border-radius: inherit;
+  transform-origin: left center;
+  animation: budget-grow 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.budget-part {
+  flex: none;
+  height: 100%;
+  background: var(--bw-fill);
+}
+
+/* Money that is not spent yet but already has a claim on it. */
+.budget-part[data-part='scheduled'] {
+  background: repeating-linear-gradient(135deg, var(--bw-fill) 0 2px, transparent 2px 6px);
+}
+
+.budget-part[data-part='expected'] {
+  background: var(--bw-fill);
+  opacity: 0.28;
+}
+
+.budget-part[data-part='over'] {
+  background: var(--bw-negative);
+}
+
+.budget-ruler__mark {
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--bw-ink);
+}
+
+.budget-ruler__mark span {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--bw-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.budget-ruler__mark[data-edge='start'] span {
+  left: 0;
+  transform: none;
+}
+
+.budget-ruler__mark[data-edge='end'] span {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.budget-ruler__mark[data-kind='limit'] {
+  background: var(--bw-negative);
+}
+
+.budget-ruler__mark[data-kind='limit'] span {
+  top: calc(100% + 3px);
+  bottom: auto;
+  color: var(--bw-negative);
+}
+
+.budget-ruler__scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+.budget-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.budget-legend i {
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+@keyframes budget-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.budget-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(120px, 1.5fr) minmax(170px, auto) minmax(112px, auto);
+  grid-template-areas: 'name bar amounts left';
+  align-items: center;
+  gap: 4px 20px;
+  min-height: 50px;
+  padding: 7px clamp(14px, 2vw, 22px);
+}
+
+.budget-row:hover {
+  background: var(--bw-hover);
+}
+
+.budget-row__name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The whole row opens the category; the button only carries the name. */
+.budget-row__open {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bw-ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.budget-row__open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.budget-row__open:focus-visible {
+  outline: 0;
+}
+
+.budget-row__open:focus-visible::after {
+  outline: 2px solid var(--bw-accent);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+/* Every meter is the same width and ends short of its column: the space after it is where a
+   category that went over shows by how much. */
+.budget-row__bar {
+  grid-area: bar;
+  padding-inline-end: 20%;
+}
+
+.budget-meter {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bw-track);
+}
+
+.budget-meter__bar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.budget-row[data-status='close'] .budget-part[data-part='spent'] {
+  background: var(--bw-caution);
+}
+
+.budget-row[data-status='over'] .budget-part {
+  background: var(--bw-negative);
+}
+
+.budget-row[data-status='over'] .budget-meter,
+.budget-row[data-status='over'] .budget-meter__bar {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.budget-meter__over {
+  /* Above the row's click target, so its tooltip can be reached. */
+  z-index: 1;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(100% + 2px);
+  min-width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: repeating-linear-gradient(135deg, var(--bw-negative) 0 2px, transparent 2px 5px);
+}
+
+/* Today, on every meter at the same place, so the marks read as one line down the list. */
+.budget-meter__today {
+  position: absolute;
+  top: -21px;
+  bottom: -21px;
+  width: 0;
+  border-left: 1px dashed var(--bw-muted);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.budget-row__amounts {
+  grid-area: amounts;
+  color: var(--bw-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.budget-row__amounts b {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.budget-row__left {
+  grid-area: left;
+  color: var(--bw-positive);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.budget-row[data-status='over'] .budget-row__left {
+  color: var(--bw-negative);
+}
+
+.budget-row[data-status='close'] .budget-row__left {
+  color: var(--bw-caution);
+}
+
+.budget-row[data-status='none'] .budget-row__left {
+  color: var(--bw-muted);
+  font-weight: 400;
+}
+
+.budget-row__due {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+/* Recurring payments behind a category. */
+.budget-recurring {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--bw-border);
+  border-radius: 11px;
+  background: var(--bw-soft);
+  color: var(--bw-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  cursor: default;
+}
+
+.budget-recurring-panel {
+  position: fixed;
+  z-index: 1400;
+  width: 240px;
+  padding: 12px;
+  border: 1px solid var(--bw-border);
+  border-radius: 12px;
+  background: var(--bw-paper);
+  box-shadow: 0 12px 30px rgb(20 30 22 / 22%);
+  font-size: 0.8125rem;
+}
+
+.budget-recurring-panel h4 {
+  margin: 0 0 8px;
+  color: var(--bw-muted);
+  font-family: var(--font-body) !important;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.budget-recurring-panel ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.budget-recurring-panel li,
+.budget-recurring-panel p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-recurring-panel li small {
+  display: block;
+  color: var(--bw-muted);
+  font-size: 0.6875rem;
+  text-transform: capitalize;
+}
+
+.budget-recurring-panel p {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bw-border);
+  font-weight: 600;
+}
+
+/* ---- Setup -------------------------------------------------------------------------- */
+.budget-split {
+  padding: 18px clamp(16px, 2.3vw, 28px) 20px;
+  border-top: 1px solid var(--bw-border);
+}
+
+.budget-split h2 {
+  margin: 0 0 12px;
+  color: var(--bw-muted);
+  font-family: var(--font-body) !important;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.budget-split__bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 7px;
+}
+
+.budget-split__bar span,
+.budget-split__key i {
+  background: var(--bw-fill);
+}
+
+/* Largest first, each part lighter than the one before. */
+.budget-split [data-rank='1'] { opacity: 0.82; }
+
+.budget-split [data-rank='2'] { opacity: 0.66; }
+
+.budget-split [data-rank='3'] { opacity: 0.52; }
+
+.budget-split [data-rank='4'] { opacity: 0.4; }
+
+.budget-split [data-rank='5'] { opacity: 0.28; }
+
+.budget-split__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-split__key li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.budget-split__key i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.budget-split__key b {
+  font-weight: 600;
+}
+
+.budget-split__key li > span {
+  color: var(--bw-muted);
+}
+
+.budget-limits {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  columns: 2;
+  column-gap: 0;
+  column-rule: 1px solid var(--bw-border);
+}
+
+.budget-limit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 2px 14px;
+  padding: 9px clamp(14px, 2vw, 22px);
+  break-inside: avoid;
+}
+
+.budget-limit__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.budget-limit__was {
+  grid-column: 1;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-limit__was b {
+  font-weight: 600;
+}
+
+.budget-limit__was b[data-change='up'] {
+  color: var(--bw-caution);
+}
+
+.budget-limit__was b[data-change='down'] {
+  color: var(--bw-positive);
+}
+
+.budget-limit__field {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--bw-border);
+  border-radius: 9px;
+  background: var(--bw-soft);
+}
+
+.budget-limit__field:focus-within {
+  border-color: var(--bw-accent);
+  background: var(--bw-paper);
+}
+
+.budget-limit__field span {
+  color: var(--bw-muted);
+}
+
+.budget-limit__field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--bw-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: end;
+  appearance: textfield;
+}
+
+.budget-limit__field input:focus {
+  outline: 0;
+}
+
+.budget-limit__field input::-webkit-outer-spin-button,
+.budget-limit__field input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.budget-save {
+  position: sticky;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+  padding: 10px 12px 10px clamp(14px, 2vw, 22px);
+  border: 1px solid var(--bw-border);
+  border-radius: 13px;
+  background: var(--bw-paper);
+  box-shadow: 0 8px 24px rgb(20 30 22 / 12%);
+  font-size: 0.875rem;
+}
+
+.budget-save p {
+  margin: 0;
+  color: var(--bw-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-save p b {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.bw-dialog__head .budget-meter {
+  width: min(100%, 260px);
+}
+
+@media (max-width: 900px) {
+  .budget-limits {
+    columns: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .budget-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name left'
+      'bar bar'
+      'amounts amounts';
+    gap: 7px 12px;
+    padding-block: 12px;
+  }
+
+  .budget-row__amounts {
+    text-align: start;
+    font-size: 0.8125rem;
+  }
+
+  .budget-row__due {
+    grid-column: 1 / -1;
+  }
+
+  .budget-meter__today {
+    top: -6px;
+    bottom: -6px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Three figures share a narrow row: the label has to carry them without the note. */
+
+  .budget-save .bw-button {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .budget-ruler__bar {
+    animation: none;
+  }
+}

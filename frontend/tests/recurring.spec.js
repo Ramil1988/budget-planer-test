@@ -2,191 +2,150 @@ import { test, expect } from '@playwright/test';
 import { loginUser } from './test-utils.js';
 
 /**
- * Recurring Payments Tests
- * Tests for recurring payment management
+ * Recurring page: the month's totals and strip, payments in the order they come due,
+ * the agenda for the next thirty days and the form.
+ * The tests read the signed-in account's own data. They never pause, delete or save a payment.
  */
 
-test.describe('Recurring Payments', () => {
-  // Login before each test
+const monthValue = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+const shifted = (step) => {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth() + step, 1);
+};
+
+test.describe('Recurring payments', () => {
   test.beforeEach(async ({ page }) => {
     await loginUser(page);
     await page.goto('/recurring');
+    await expect(page.getByRole('heading', { name: 'Recurring Payments' })).toBeVisible();
   });
 
-  test.describe('Page Layout', () => {
-    test('should display recurring payments header', async ({ page }) => {
-      await expect(page.locator('text=Recurring Payments')).toBeVisible();
+  test.describe('The month', () => {
+    test('shows the net, the income and the expenses of the month', async ({ page }) => {
+      const labels = page.locator('.bw-ledger dt');
+      await expect(labels.filter({ hasText: /^Net in / })).toBeVisible();
+      await expect(labels.filter({ hasText: /^Income$/ })).toBeVisible();
+      await expect(labels.filter({ hasText: /^Expenses$/ })).toBeVisible();
+      await expect(page.locator('.bw-ledger dd').filter({ hasText: /^[+-]?\$[\d,]+\.\d{2}$/ })).toHaveCount(3);
+      await expect(page.locator('.bw-ledger').getByText(/^\d+ payments?$/)).toHaveCount(2);
     });
 
-    test('should display page description', async ({ page }) => {
-      await expect(page.locator('text=Manage your recurring bills and income')).toBeVisible();
+    test('lays the month out day by day and marks today', async ({ page }) => {
+      const today = new Date();
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      await expect(page.locator('.recurring-day')).toHaveCount(daysInMonth);
+      await expect(page.locator('.recurring-day[data-today="true"] .recurring-day__number')).toHaveText(String(today.getDate()));
     });
 
-    test('should display add recurring button', async ({ page }) => {
-      await expect(page.locator('button:has-text("Add Recurring")')).toBeVisible();
-    });
-  });
-
-  test.describe('Summary Cards', () => {
-    test('should display monthly income card', async ({ page }) => {
-      await expect(page.locator('text=Monthly Income')).toBeVisible();
-    });
-
-    test('should display monthly expenses card', async ({ page }) => {
-      await expect(page.locator('text=Monthly Expenses')).toBeVisible();
+    test('shows what is due on a day that is picked', async ({ page }) => {
+      const busy = page.locator('.recurring-day__bars:not([disabled])');
+      test.skip(await busy.count() === 0, 'Nothing is scheduled this month.');
+      await busy.first().click();
+      await expect(busy.first()).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('.recurring-strip__detail li')).not.toHaveCount(1);
+      await expect(page.locator('.recurring-strip__detail')).toContainText(/\$[\d,]+\.\d{2}/);
     });
 
-    test('should display net cash flow card', async ({ page }) => {
-      await expect(page.locator('text=Net Cash Flow')).toBeVisible();
-    });
-
-    test('should display payment counts', async ({ page }) => {
-      // Check for payment count text
-      await expect(page.locator('text=/\\d+ payments?/')).toBeVisible();
-    });
-
-    test('should display monetary values in summary', async ({ page }) => {
-      const amounts = page.locator('text=/\\$[\\d,]+\\.\\d{2}/');
-      const count = await amounts.count();
-      expect(count).toBeGreaterThan(0);
+    test('steps to another month and resets the strip', async ({ page }) => {
+      await page.getByRole('button', { name: 'Go to next month' }).click();
+      await expect(page.getByLabel('Month shown')).toHaveValue(monthValue(shifted(1)));
+      const next = shifted(1);
+      await expect(page.locator('.recurring-day')).toHaveCount(new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate());
+      await expect(page.locator('.recurring-day[data-today="true"]')).toHaveCount(0);
     });
   });
 
-  test.describe('Filter Tabs', () => {
-    test('should display expenses filter tab', async ({ page }) => {
-      await expect(page.locator('text=/Expenses \\(\\d+\\)/')).toBeVisible();
+  test.describe('The list', () => {
+    test('has a tab for expenses and a tab for income, with counts', async ({ page }) => {
+      await expect(page.getByRole('tab', { name: /^Expenses \(\d+\)$/ })).toHaveAttribute('aria-selected', 'true');
+      const income = page.getByRole('tab', { name: /^Income \(\d+\)$/ });
+      await income.click();
+      await expect(income).toHaveAttribute('aria-selected', 'true');
     });
 
-    test('should display income filter tab', async ({ page }) => {
-      await expect(page.locator('text=/Income \\(\\d+\\)/')).toBeVisible();
+    test('lists payments by how soon they are due', async ({ page }) => {
+      const rows = page.locator('.recurring-row');
+      test.skip(await rows.count() === 0, 'No recurring expenses.');
+      await expect(page.getByRole('heading', { name: /^(Due within a week|Later|Paused|Ended)$/ }).first()).toBeVisible();
+      await expect(rows.first().locator('.recurring-row__amount b')).toHaveText(/^-\$[\d,]+\.\d{2}$/);
+      await expect(rows.first().locator('.recurring-row__amount small')).toHaveText(/^(Due today|Due tomorrow|In \d+ days|Paused|Ended)$/);
+      // Within the dated groups the days until the payment never go down.
+      const dues = await page.locator('.recurring-row[data-paused="false"] .recurring-row__amount small').allTextContents();
+      const days = dues.filter((text) => text !== 'Ended').map((text) => (text === 'Due today' ? 0 : text === 'Due tomorrow' ? 1 : Number(text.match(/\d+/)[0])));
+      expect(days).toEqual([...days].sort((a, b) => a - b));
     });
 
-    test('should display show inactive option', async ({ page }) => {
-      await expect(page.locator('text=Show Inactive')).toBeVisible();
+    test('each payment can be paused, edited or deleted', async ({ page }) => {
+      const row = page.locator('.recurring-row').first();
+      test.skip(await row.count() === 0, 'No recurring expenses.');
+      const name = await row.locator('.recurring-row__name').textContent();
+      await expect(row.getByRole('button', { name: `Pause ${name}` })).toBeVisible();
+      await expect(row.getByRole('button', { name: `Edit ${name}` })).toBeVisible();
+      await expect(row.getByRole('button', { name: `Delete ${name}` })).toBeVisible();
     });
 
-    test('should switch to income tab', async ({ page }) => {
-      await page.click('text=/Income \\(\\d+\\)/');
-      await page.waitForTimeout(500);
+    test('filters by category', async ({ page }) => {
+      const filter = page.getByRole('combobox', { name: 'Category' });
+      test.skip(await filter.count() === 0, 'No categories to filter by.');
+      const category = await filter.locator('option').nth(1).textContent();
+      await filter.selectOption({ label: category });
+      await expect(page.locator('.bw-note')).toContainText(`${category}: `);
+      const metas = await page.locator('.recurring-row__meta').allTextContents();
+      expect(metas.length).toBeGreaterThan(0);
+      expect(metas.every((meta) => meta.startsWith(`${category},`))).toBe(true);
     });
 
-    test('should toggle show inactive', async ({ page }) => {
-      await page.click('text=Show Inactive');
-      await page.waitForTimeout(500);
-    });
-  });
-
-  test.describe('Recurring Payment Cards', () => {
-    test('should display recurring payment items', async ({ page }) => {
-      await page.waitForTimeout(1000);
-
-      // Check for common recurring payment names
-      const payments = page.locator('text=/Mortgage|Insurance|Subscriptions|Netflix|Afterschool/');
-      const count = await payments.count();
-      expect(count).toBeGreaterThan(0);
-    });
-
-    test('should display category tags on payments', async ({ page }) => {
-      await page.waitForTimeout(1000);
-
-      // Check for category badges
-      const categories = page.locator('text=/Mortgage|Insurance|Subscriptions|Afterschool/');
-      await expect(categories.first()).toBeVisible();
-    });
-
-    test('should display frequency on payments', async ({ page }) => {
-      // Check for frequency indicators
-      await expect(page.locator('text=/Monthly|Weekly|Biweekly|Yearly/')).toBeVisible();
-    });
-
-    test('should display end date on payments', async ({ page }) => {
-      // Check for "until" date
-      await expect(page.locator('text=/until \\w+ \\d+, \\d+/')).toBeVisible();
-    });
-
-    test('should display amount on payments', async ({ page }) => {
-      // Check for negative amounts (expenses)
-      await expect(page.locator('text=/-\\$[\\d,]+\\.\\d{2}/')).toBeVisible();
-    });
-
-    test('should display days until next payment', async ({ page }) => {
-      // Check for "in X days" text
-      await expect(page.locator('text=/in \\d+ days?/')).toBeVisible();
-    });
-
-    test('should display action buttons on payments', async ({ page }) => {
-      // Check for Pause, Edit, Delete buttons
-      await expect(page.locator('text=Pause')).toBeVisible();
-      await expect(page.locator('text=Edit')).toBeVisible();
-      await expect(page.locator('text=Delete')).toBeVisible();
+    test('can show paused payments', async ({ page }) => {
+      const toggle = page.getByRole('button', { name: 'Show paused' });
+      await toggle.click();
+      await expect(page.getByRole('button', { name: 'Hide paused' })).toHaveAttribute('aria-pressed', 'true');
     });
   });
 
-  test.describe('Next 30 Days Section', () => {
-    test('should display next 30 days section', async ({ page }) => {
-      await expect(page.locator('text=Next 30 Days')).toBeVisible();
-    });
-
-    test('should display upcoming payment dates', async ({ page }) => {
-      // Check for date format
-      const dates = page.locator('text=/Jan \\d+|Feb \\d+|Mar \\d+|Apr \\d+|May \\d+|Jun \\d+|Jul \\d+|Aug \\d+|Sep \\d+|Oct \\d+|Nov \\d+|Dec \\d+/');
-      const count = await dates.count();
-      expect(count).toBeGreaterThan(0);
-    });
-
-    test('should display payment names in upcoming', async ({ page }) => {
-      // Check for payment names with their upcoming dates
-      const upcomingPayments = page.locator('text=/Dance chaos|Autocredit|Property tax|Mortgage|Afterschool/');
-      // Should have some upcoming payments
+  test.describe('Next 30 days', () => {
+    test('lists what is coming, day by day', async ({ page }) => {
+      const agenda = page.getByRole('complementary', { name: 'Next 30 days' });
+      await expect(agenda.getByRole('heading', { name: 'Next 30 days' })).toBeVisible();
+      await expect(agenda.locator('.recurring-agenda__head p')).toHaveText(/^(Nothing is due\.|\d+ payments?, [+-]?\$[\d,]+\.\d{2} net)$/);
     });
   });
 
-  test.describe('Payment Actions', () => {
-    test('should have clickable pause button', async ({ page }) => {
-      const pauseButton = page.locator('text=Pause').first();
-      await expect(pauseButton).toBeVisible();
-      // Don't actually click to avoid changing data
+  test.describe('The form', () => {
+    test('opens for a new payment and closes without saving', async ({ page }) => {
+      await page.getByRole('button', { name: 'Add recurring' }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('heading', { name: 'Add recurring expense' })).toBeVisible();
+      await expect(dialog.getByLabel('Name')).toBeVisible();
+      await expect(dialog.getByLabel('Amount')).toBeVisible();
+      await dialog.getByRole('button', { name: 'Income', exact: true }).click();
+      await expect(dialog.getByRole('heading', { name: 'Add recurring income' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
     });
 
-    test('should have clickable edit button', async ({ page }) => {
-      const editButton = page.locator('text=Edit').first();
-      await expect(editButton).toBeVisible();
+    test('offers a custom schedule and says when it falls next', async ({ page }) => {
+      await page.getByRole('button', { name: 'Add recurring' }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByLabel('Frequency').selectOption('custom');
+      await dialog.getByLabel('Repeat every').fill('2');
+      await dialog.getByLabel('Repeat period').selectOption('monthly');
+      await expect(dialog.getByText(/^Every 2 months, next on /)).toBeVisible();
+      // The option for the last business day only makes sense for schedules counted in months.
+      await expect(dialog.getByText('Last business day of month')).toBeVisible();
+      await dialog.getByLabel('Repeat period').selectOption('weekly');
+      await expect(dialog.getByText('Last business day of month')).toBeHidden();
     });
 
-    test('should have clickable delete button', async ({ page }) => {
-      const deleteButton = page.locator('text=Delete').first();
-      await expect(deleteButton).toBeVisible();
-    });
-  });
-
-  test.describe('Add Recurring Modal', () => {
-    test('should open add recurring modal', async ({ page }) => {
-      await page.click('button:has-text("Add Recurring")');
-      await page.waitForTimeout(500);
-
-      // Check for modal content
-      await expect(page.locator('text=/Add Recurring|New Recurring/')).toBeVisible();
-    });
-  });
-
-  test.describe('Data Accuracy', () => {
-    test('should show correct payment count in tab', async ({ page }) => {
-      // Get expense count from tab
-      const expenseTab = await page.locator('text=/Expenses \\(\\d+\\)/').textContent();
-      const expenseCount = expenseTab?.match(/\((\d+)\)/)?.[1];
-
-      // Verify count matches visible items
-      if (expenseCount) {
-        const count = parseInt(expenseCount);
-        expect(count).toBeGreaterThanOrEqual(0);
-      }
-    });
-
-    test('should calculate net cash flow correctly', async ({ page }) => {
-      // Net cash flow should be income - expenses
-      // This is a visual verification that the calculation appears reasonable
-      const netCashFlow = page.locator('text=Net Cash Flow').locator('..').locator('text=/[+-]?\\$[\\d,]+\\.\\d{2}/');
-      await expect(netCashFlow).toBeVisible();
+    test('opens with the values of the payment being edited', async ({ page }) => {
+      const row = page.locator('.recurring-row').first();
+      test.skip(await row.count() === 0, 'No recurring expenses.');
+      const name = await row.locator('.recurring-row__name').textContent();
+      await row.getByRole('button', { name: `Edit ${name}` }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('heading', { name: 'Edit recurring expense' })).toBeVisible();
+      await expect(dialog.getByLabel('Name')).toHaveValue(name);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
     });
   });
 });

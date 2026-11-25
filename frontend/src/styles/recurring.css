@@ -1,0 +1,445 @@
+/* The Recurring page's own parts, on top of ledger.css: the month strip (every day of the
+   month, with what comes in above the line and what goes out below it), the payments in the
+   order they come due, and the agenda for the next thirty days. */
+
+.recurring-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- The month strip ----------------------------------------------------------------- */
+
+.recurring-strip {
+  padding: 18px clamp(16px, 2.3vw, 28px) 18px;
+  border-top: 1px solid var(--bw-border);
+}
+
+.recurring-strip__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 12px;
+}
+
+.recurring-strip__head h2 {
+  margin: 0;
+  color: var(--bw-muted);
+  font-family: var(--font-body) !important;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.recurring-strip__head p {
+  margin: 0;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+.recurring-strip__days {
+  display: grid;
+  grid-template-columns: repeat(var(--days), minmax(0, 1fr));
+  gap: clamp(1px, 0.35vw, 4px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recurring-day {
+  display: grid;
+  grid-template-rows: auto 16px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.recurring-day__bars {
+  position: relative;
+  display: grid;
+  grid-template-rows: 34px 54px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+
+.recurring-day__bars:disabled {
+  cursor: default;
+}
+
+/* The line between money in and money out. */
+.recurring-day__bars::before {
+  content: '';
+  position: absolute;
+  inset: 34px 0 auto;
+  height: 1px;
+  background: var(--bw-border);
+}
+
+.recurring-day[data-weekend='true'] .recurring-day__bars {
+  background: var(--bw-soft);
+}
+
+.recurring-day__bars:not(:disabled):hover,
+.recurring-day[data-selected='true'] .recurring-day__bars {
+  background: var(--bw-hover);
+}
+
+.recurring-day[data-selected='true'] .recurring-day__bars {
+  box-shadow: inset 0 0 0 1px var(--bw-accent);
+}
+
+.recurring-day__in,
+.recurring-day__out {
+  justify-self: center;
+  width: min(72%, 14px);
+  min-width: 3px;
+}
+
+.recurring-day__in {
+  align-self: end;
+  border-radius: 3px 3px 0 0;
+  background: var(--bw-positive);
+}
+
+.recurring-day__out {
+  grid-row: 2;
+  align-self: start;
+  border-radius: 0 0 3px 3px;
+  background: var(--bw-negative);
+}
+
+.recurring-day__number {
+  color: var(--bw-muted);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.recurring-day[data-today='true'] .recurring-day__number {
+  color: var(--bw-ink);
+  font-weight: 700;
+}
+
+.recurring-day[data-today='true'] .recurring-day__bars::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 0;
+  border-left: 1px dashed var(--bw-muted);
+  opacity: 0.7;
+}
+
+.recurring-strip__detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  min-height: 24px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurring-strip__detail strong {
+  color: var(--bw-ink);
+  font-weight: 600;
+}
+
+.recurring-strip__detail li b {
+  font-weight: 600;
+}
+
+.recurring-strip__detail li[data-type='income'] b {
+  color: var(--bw-positive);
+}
+
+.recurring-strip__detail li[data-type='expense'] b {
+  color: var(--bw-negative);
+}
+
+/* ---- The list and the agenda side by side -------------------------------------------- */
+
+.recurring-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(250px, 1fr);
+  align-items: start;
+  gap: clamp(16px, 2vw, 24px);
+}
+
+.recurring-columns > * {
+  min-width: 0;
+}
+
+.recurring-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  grid-template-areas: 'date body amount actions';
+  align-items: center;
+  gap: 4px 14px;
+  padding: 9px clamp(14px, 2vw, 22px);
+}
+
+.recurring-row:hover {
+  background: var(--bw-hover);
+}
+
+.recurring-row[data-paused='true'] .recurring-row__body,
+.recurring-row[data-paused='true'] .recurring-row__amount {
+  opacity: 0.62;
+}
+
+.recurring-date {
+  grid-area: date;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
+  background: var(--bw-soft);
+  color: var(--bw-ink);
+  line-height: 1.15;
+}
+
+.recurring-row:hover .recurring-date {
+  background: var(--bw-paper);
+}
+
+.recurring-date strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.recurring-date span {
+  color: var(--bw-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.recurring-row__body {
+  grid-area: body;
+  min-width: 0;
+}
+
+.recurring-row__name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.recurring-row__meta {
+  margin: 1px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+.recurring-row__amount {
+  grid-area: amount;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.recurring-row__amount b {
+  display: block;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.recurring-row[data-type='income'] .recurring-row__amount b {
+  color: var(--bw-positive);
+}
+
+.recurring-row__amount small {
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+}
+
+.recurring-row__amount small[data-soon='true'] {
+  color: var(--bw-caution);
+  font-weight: 600;
+}
+
+.recurring-row__actions {
+  grid-area: actions;
+  display: flex;
+  gap: 2px;
+}
+
+.recurring-row__actions button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.recurring-row__actions button:hover {
+  background: var(--bw-paper);
+  color: var(--bw-ink);
+}
+
+.recurring-row__actions button[data-action='delete']:hover {
+  color: var(--bw-negative);
+}
+
+/* ---- Agenda -------------------------------------------------------------------------- */
+
+.recurring-agenda {
+  position: sticky;
+  top: 84px;
+}
+
+.recurring-agenda__head {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--bw-border);
+}
+
+.recurring-agenda__head h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.recurring-agenda__head p {
+  margin: 2px 0 0;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurring-agenda__days {
+  max-height: min(70vh, 640px);
+  margin: 0;
+  padding: 4px 0 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.recurring-agenda__day {
+  padding: 10px 18px 2px;
+}
+
+.recurring-agenda__day h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-body) !important;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.recurring-agenda__day[data-soon='true'] h3 {
+  color: var(--bw-caution);
+}
+
+.recurring-agenda__day ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recurring-agenda__day li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 0.875rem;
+}
+
+.recurring-agenda__day li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recurring-agenda__day li b {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.recurring-agenda__day li[data-type='income'] b {
+  color: var(--bw-positive);
+}
+
+/* ---- The form ------------------------------------------------------------------------ */
+
+.recurring-custom {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bw-soft);
+}
+
+.recurring-custom__row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.recurring-custom p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+/* ---- Narrow screens ------------------------------------------------------------------ */
+
+@media (max-width: 1000px) {
+  .recurring-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recurring-agenda {
+    position: static;
+  }
+
+  .recurring-agenda__days {
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .recurring-row {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'date body amount'
+      'actions actions actions';
+    padding-block: 11px 6px;
+  }
+
+  .recurring-row__actions {
+    justify-content: flex-end;
+    margin-top: -4px;
+  }
+
+  .recurring-row__actions button {
+    min-height: 28px;
+  }
+
+  .recurring-actions {
+    width: 100%;
+  }
+
+  .recurring-actions .bw-button {
+    flex: 1 1 100%;
+  }
+
+  .recurring-day__number[data-minor='true'] {
+    visibility: hidden;
+  }
+}

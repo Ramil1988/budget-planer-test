@@ -138,6 +138,13 @@
 - [x] Dashboard and navigation refresh (2026-11-20)
   - [x] Monthly summary (net balance, income, expenses, budget progress), Upcoming Payments calendar above Spending Breakdown
   - [x] Shared responsive header menu with active-page indicators
+- [x] Budget, Recurring, Reports, Assets & Liabilities, Transactions and Add transaction redesigned in the Dashboard's language (2026-11-24)
+  - [x] Shared stylesheet `ledger.css` (`bw-*` classes and tokens), one stylesheet and one component folder per page, a shared `DialogFrame`
+  - [x] View logic in pure helpers with unit tests: `budgetMath`, `recurringView`, `reportView`, `assetsView`, `transactionView`
+  - [x] One chart per page: pace ruler, month strip, year chart with treemap and heat map, balance sheet to scale, steps of spending
+  - [x] Playwright specs for these pages rewritten to read the signed-in account without writing; `assets.spec.js` added
+- [x] Financial health score reworked into three parts; emergency fund measured against six months (2026-11-24)
+- [x] Liability balances count interest: `011_liability_interest.sql` (2026-11-24) — **has to be applied in Supabase**
 - [x] Playwright test account moved out of the repo into `BUDGETWISE_TEST_EMAIL` / `BUDGETWISE_TEST_PASSWORD` (2026-11-20)
 
 ---

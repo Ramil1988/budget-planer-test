@@ -1,27 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import {
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Input,
-  VStack,
-  HStack,
-  Text,
-  Spinner,
-  Table,
-  Icon,
-  Collapsible,
-  Dialog,
-  Portal,
-  CloseButton,
-} from '@chakra-ui/react';
-import { LuFilter, LuX, LuTrash2 } from 'react-icons/lu';
+import { Box, Heading, Spinner } from '@chakra-ui/react';
+import { LuFilter } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import PageContainer from '../components/PageContainer';
-import { useDarkModeColors } from '../lib/useDarkModeColors';
+import { groupByDay, periodLabel, summary, timeline } from '../lib/transactionView';
+import SpendChart from '../components/transactions/SpendChart';
+import TransactionList from '../components/transactions/TransactionList';
+import TrashList from '../components/transactions/TrashList';
+import FilterPanel from '../components/transactions/FilterPanel';
+import ConfirmDialog from '../components/transactions/ConfirmDialog';
+import '../styles/ledger.css';
+import '../styles/transactions.css';
 
 function csvTextCell(value) {
   const text = String(value ?? '');
@@ -30,9 +20,29 @@ function csvTextCell(value) {
   return `"${safeText.replace(/"/g, '""')}"`;
 }
 
+const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const formatMoney = (amount) => money.format(amount);
+// An expense reads "−$18.07", income "+$1,918.07".
+const formatAmount = (amount, type) => `${type === 'expense' ? '−' : '+'}${money.format(Math.abs(amount))}`;
+
+const formatDate = (dateString) => {
+  // Parse YYYY-MM-DD without timezone conversion issues
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day); // month is 0-indexed
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+// The first and the last day of a month, `offset` months from this one.
+const monthRange = (offset) => {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return [iso(first), iso(last)];
+};
+
 export default function Transactions() {
   const { user } = useAuth();
-  const colors = useDarkModeColors();
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +67,9 @@ export default function Transactions() {
   const [filterBank, setFilterBank] = useState('');
   const [filterType, setFilterType] = useState(''); // '' | 'income' | 'expense'
   const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
+
+  // The day (or month) picked on the chart: the list shows only it.
+  const [pickedBucket, setPickedBucket] = useState(null);
 
   // Delete all dialog state
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
@@ -90,13 +103,6 @@ export default function Transactions() {
   const [editingAmountId, setEditingAmountId] = useState(null);
   const [editingAmountValue, setEditingAmountValue] = useState('');
 
-  // Custom dropdown state
-  const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
-  const [categoryEditDropdownOpen, setCategoryEditDropdownOpen] = useState(false);
-  const periodDropdownRef = useRef(null);
-  const categoryEditDropdownRef = useRef(null);
-  const categoryEditDropdownMobileRef = useRef(null);
-
   useEffect(() => {
     if (user) {
       loadTransactions();
@@ -104,26 +110,6 @@ export default function Transactions() {
       loadCategories();
     }
   }, [user]);
-
-  // Handle click outside to close dropdowns (mousedown + touchstart for mobile)
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target)) {
-        setPeriodDropdownOpen(false);
-      }
-      const insideDesktop = categoryEditDropdownRef.current?.contains(event.target);
-      const insideMobile = categoryEditDropdownMobileRef.current?.contains(event.target);
-      if ((categoryEditDropdownRef.current || categoryEditDropdownMobileRef.current) && !insideDesktop && !insideMobile) {
-        setCategoryEditDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, []);
 
   const loadCategories = async () => {
     try {
@@ -148,7 +134,6 @@ export default function Transactions() {
       newCategoryId,
       newCategoryName: newCategory?.name || 'Unknown',
     });
-    setCategoryEditDropdownOpen(false);
   };
 
   const updateTransactionCategory = async (alsoUpdateMapping) => {
@@ -433,23 +418,6 @@ export default function Transactions() {
     setFilteredTransactions(filteredWithBalance);
   };
 
-  const formatDate = (dateString) => {
-    // Parse YYYY-MM-DD without timezone conversion issues
-    const [year, month, day] = dateString.split('-').map(Number);
-    const date = new Date(year, month - 1, day); // month is 0-indexed
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const formatAmount = (amount, type) => {
-    const formatted = Math.abs(amount).toFixed(2);
-    return type === 'expense' ? `-$${formatted}` : `+$${formatted}`;
-  };
-
-  const formatBalance = (balance) => {
-    const formatted = Math.abs(balance).toFixed(2);
-    return balance < 0 ? `-$${formatted}` : `$${formatted}`;
-  };
-
   // Soft delete - moves to trash instead of permanent deletion
   const handleDeleteTransaction = async (transactionId) => {
     try {
@@ -698,1288 +666,307 @@ export default function Transactions() {
 
   if (loading) {
     return (
-      <PageContainer>
-        <Flex w="100%" minH="60vh" align="center" justify="center">
-          <VStack gap={4}>
-            <Spinner size="xl" />
-            <Text>Loading transactions...</Text>
-          </VStack>
-        </Flex>
-      </PageContainer>
+      <Box className="bw-surface bw-page">
+        <Box className="bw-layout">
+          <div className="bw-status" role="status">
+            <Spinner size="sm" color="currentColor" />
+            Loading transactions…
+          </div>
+        </Box>
+      </Box>
     );
   }
 
+  const active = viewMode === 'active';
+  // The dates the list is cut to: the range typed in, or the month the period names.
+  const [rangeStart, rangeEnd] = startDate || endDate
+    ? [startDate, endDate]
+    : selectedPeriod === 'current' ? monthRange(0) : selectedPeriod === 'last-month' ? monthRange(-1) : ['', ''];
+  const totals = summary(filteredTransactions);
+  const line = timeline(filteredTransactions, { start: rangeStart, end: rangeEnd });
+  const chosen = line?.buckets.find(({ key }) => key === pickedBucket) || null;
+  const listed = chosen
+    ? filteredTransactions.filter(({ date }) => date >= chosen.from && date <= chosen.to)
+    : filteredTransactions;
+  const groups = groupByDay(listed);
+  const banks = [...new Set(transactions.filter((t) => t.bank).map((t) => t.bank))].sort();
+
+  const period = periodLabel(rangeStart, rangeEnd);
+  const count = (number, word) => `${number.toLocaleString('en-US')} ${word}${number === 1 ? '' : 's'}`;
+  const scope = [
+    `${count(totals.count, filterType === 'income' ? 'income transaction' : filterType === 'expense' ? 'expense' : 'transaction')}`,
+    /^(all|since|until)/.test(period) ? `, ${period}` : ` in ${period}`,
+    searchQuery.trim() ? `, matching “${searchQuery.trim()}”` : '',
+  ].join('');
+
+  const tab = (mode, label, number) => (
+    <button type="button" role="tab" className="bw-tab" aria-selected={viewMode === mode} onClick={() => setViewMode(mode)}>
+      {label} ({number.toLocaleString('en-US')})
+    </button>
+  );
+
   return (
-    <PageContainer>
-      <VStack gap={4} align="stretch" w="100%">
-          {/* Header */}
-          <Flex justify="space-between" align="center" w="100%" flexWrap="wrap" gap={2}>
-            <HStack gap={4} flexWrap="wrap">
-              <Heading size={{ base: 'lg', md: 'xl' }} color={colors.textPrimary}>Transactions</Heading>
+    <Box className="bw-surface bw-page">
+      <Box className="bw-layout">
+        <header className="bw-masthead">
+          <div>
+            <Heading as="h1" className="bw-title">Transactions</Heading>
+            <p className="bw-subtitle">
+              {active ? scope : `${count(trashedTransactions.length, 'transaction')} in the trash`}
+            </p>
+          </div>
 
-              {/* Active/Trash Toggle */}
-              <HStack gap={1}>
-                <Button
-                  size={{ base: 'xs', md: 'sm' }}
-                  variant={viewMode === 'active' ? 'solid' : 'outline'}
-                  colorScheme="blue"
-                  onClick={() => setViewMode('active')}
-                >
-                  Active ({transactions.length})
-                </Button>
-                <Button
-                  size={{ base: 'xs', md: 'sm' }}
-                  variant={viewMode === 'trash' ? 'solid' : 'outline'}
-                  colorScheme={viewMode === 'trash' ? 'red' : 'gray'}
-                  onClick={() => setViewMode('trash')}
-                >
-                  Trash ({trashedTransactions.length})
-                </Button>
-              </HStack>
-            </HStack>
-
-            {/* Action buttons - change based on view mode */}
-            <Flex gap={2} flexWrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
-              {viewMode === 'active' ? (
-                <>
-                  <Button
-                    onClick={() => setShowDeleteAllDialog(true)}
-                    variant="outline"
-                    colorScheme="red"
-                    size={{ base: 'xs', md: 'md' }}
-                    disabled={transactions.length === 0}
-                  >
-                    Remove All
-                  </Button>
-                  <Button
-                    onClick={downloadCSV}
-                    variant="outline"
-                    size={{ base: 'xs', md: 'md' }}
-                    disabled={filteredTransactions.length === 0}
-                    _hover={{ bg: colors.rowStripedBg }}
-                  >
-                    Download CSV
-                  </Button>
-                  <Button
-                    as={RouterLink}
-                    to="/add-transaction"
-                    colorScheme="green"
-                    size={{ base: 'xs', md: 'md' }}
-                  >
-                    + Add Transaction
-                  </Button>
-                </>
-              ) : (
-                <HStack gap={2}>
-                  <Button
-                    onClick={() => setShowRestoreAllDialog(true)}
-                    colorScheme="green"
-                    variant="outline"
-                    size={{ base: 'xs', md: 'md' }}
-                    disabled={trashedTransactions.length === 0}
-                  >
-                    Restore All
-                  </Button>
-                  <Button
-                    onClick={() => setShowEmptyTrashDialog(true)}
-                    colorScheme="red"
-                    size={{ base: 'xs', md: 'md' }}
-                    disabled={trashedTransactions.length === 0}
-                  >
-                    Empty Trash
-                  </Button>
-                </HStack>
-              )}
-            </Flex>
-          </Flex>
-
-          {/* Error Message */}
-          {error && (
-            <Box p={3} bg={colors.dangerBg} borderRadius="md" borderColor={colors.dangerBorder} borderWidth="1px" w="100%">
-              <Text color={colors.danger} fontSize="sm">{error}</Text>
-            </Box>
-          )}
-
-          {/* Active View - Filters and Transaction List */}
-          {viewMode === 'active' && (
-            <>
-              {/* Filters Row */}
-              <Flex gap={{ base: 2, md: 4 }} align="center" flexWrap="wrap" w="100%">
-                <Input
-                  placeholder="Search transactions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  size={{ base: 'sm', md: 'md' }}
-                  bg={colors.cardBg}
-                  borderColor={colors.borderColor}
-                  color={colors.textPrimary}
-                  maxW={{ base: '100%', md: '400px' }}
-                  flex="1"
-                  minW={{ base: '100%', sm: '200px' }}
-                />
-                  <Box ref={periodDropdownRef} position="relative" minW="130px">
-                    {/* Dropdown Trigger */}
-                    <Box
-                      onClick={() => setPeriodDropdownOpen(!periodDropdownOpen)}
-                      cursor="pointer"
-                      px={3}
-                      py={2}
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      borderRadius="6px"
-                      borderWidth="1px"
-                      borderColor={periodDropdownOpen ? 'blue.500' : colors.borderColor}
-                      bg={colors.cardBg}
-                      _hover={{ borderColor: 'blue.400' }}
-                      transition="all 0.2s"
-                    >
-                      <Text
-                        color={colors.textPrimary}
-                        fontSize="sm"
-                        noOfLines={1}
-                      >
-                        {selectedPeriod === 'current' ? 'This month' :
-                         selectedPeriod === 'last-month' ? 'Last month' : 'All time'}
-                      </Text>
-                      <Box
-                        as="span"
-                        transform={periodDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                        transition="transform 0.2s"
-                        color={colors.textSecondary}
-                        fontSize="xs"
-                        ml={2}
-                      >
-                        ▼
-                      </Box>
-                    </Box>
-
-                    {/* Dropdown List */}
-                    {periodDropdownOpen && (
-                      <Box
-                        position="absolute"
-                        top="100%"
-                        left={0}
-                        right={0}
-                        zIndex={1000}
-                        mt={1}
-                        bg={colors.cardBg}
-                        borderWidth="1px"
-                        borderColor={colors.borderColor}
-                        borderRadius="12px"
-                        boxShadow="lg"
-                        overflowY="auto"
-                      >
-                        <VStack gap={0} align="stretch" p={1}>
-                          {[
-                            { value: 'current', label: 'This month' },
-                            { value: 'last-month', label: 'Last month' },
-                            { value: 'all', label: 'All time' },
-                          ].map((option) => {
-                            const isSelected = option.value === selectedPeriod;
-                            return (
-                              <HStack
-                                key={option.value}
-                                px={3}
-                                py={2.5}
-                                cursor="pointer"
-                                bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                                _hover={{ bg: colors.rowStripedBg }}
-                                borderRadius="8px"
-                                onClick={() => {
-                                  setSelectedPeriod(option.value);
-                                  updateDateRangeForPeriod(option.value);
-                                  setPeriodDropdownOpen(false);
-                                }}
-                                justify="space-between"
-                                transition="background 0.1s"
-                              >
-                                <Text
-                                  color={colors.textPrimary}
-                                  fontSize="sm"
-                                  fontWeight={isSelected ? '600' : '400'}
-                                >
-                                  {option.label}
-                                </Text>
-                                {isSelected && (
-                                  <Text color="blue.500" fontSize="sm">✓</Text>
-                                )}
-                              </HStack>
-                            );
-                          })}
-                        </VStack>
-                      </Box>
-                    )}
-                  </Box>
-                <Box
-                  as="select"
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  bg={colors.cardBg}
-                  borderWidth="1px"
-                  borderColor={filterType ? 'blue.500' : colors.borderColor}
-                  color={colors.textPrimary}
-                  borderRadius="6px"
-                  px={3}
-                  py={2}
-                  minW="130px"
-                  fontSize="sm"
-                  outline="none"
-                  cursor="pointer"
-                  _hover={{ borderColor: 'blue.400' }}
-                  _focus={{ borderColor: 'blue.500', boxShadow: '0 0 0 1px var(--chakra-colors-blue-500)' }}
-                >
-                  <option value="" style={{ background: 'var(--chakra-colors-gray-800)' }}>All types</option>
-                  <option value="income" style={{ background: 'var(--chakra-colors-gray-800)' }}>Income</option>
-                  <option value="expense" style={{ background: 'var(--chakra-colors-gray-800)' }}>Expense</option>
-                </Box>
-                <Button
-                  variant={showCustomFilters || customFiltersApplied ? 'solid' : 'outline'}
-                  colorScheme={customFiltersApplied ? 'blue' : 'gray'}
-                  size={{ base: 'sm', md: 'md' }}
-                  onClick={toggleCustomFilters}
-                >
-                  <Icon as={LuFilter} mr={2} />
-                  {customFiltersApplied ? 'Custom filters' : 'Filters'}
-                </Button>
-                {customFiltersApplied && (
-                  <Button
-                    variant="ghost"
-                    size={{ base: 'sm', md: 'md' }}
-                    onClick={clearCustomFilters}
-                    color="red.500"
-                  >
-                    <Icon as={LuX} mr={1} />
-                    Reset
-                  </Button>
-                )}
-                <Text fontSize="sm" color={colors.textMuted}>
-                  {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
-                </Text>
-              </Flex>
-
-          {/* Custom Filters Panel */}
-          <Collapsible.Root open={showCustomFilters}>
-            <Collapsible.Content>
-              <Box
-                bg={colors.cardBg}
-                borderRadius="xl"
-                borderWidth="1px"
-                borderColor={colors.borderColor}
-                p={{ base: 4, md: 6 }}
-                w="100%"
-              >
-                <VStack gap={5} align="stretch">
-                  {/* Date Range */}
-                  <Box>
-                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Date range</Text>
-                    <Flex gap={4} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
-                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>Start date</Text>
-                        <Input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                          size="md"
-                        />
-                      </Box>
-                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>End date</Text>
-                        <Input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                          size="md"
-                        />
-                      </Box>
-                    </Flex>
-                  </Box>
-
-                  {/* Description */}
-                  <Box>
-                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Description</Text>
-                    <Input
-                      type="text"
-                      placeholder="Filter by description..."
-                      value={filterDescription}
-                      onChange={(e) => setFilterDescription(e.target.value)}
-                      bg={colors.cardBg}
-                      borderColor={colors.borderColor}
-                      color={colors.textPrimary}
-                      size="md"
-                    />
-                  </Box>
-
-                  {/* Bank Filter */}
-                  {(() => {
-                    const bankOptions = [...new Set(transactions.filter(t => t.bank).map(t => t.bank))].sort();
-                    if (bankOptions.length === 0) return null;
-                    return (
-                      <Box>
-                        <Text fontWeight="600" color={colors.textPrimary} mb={3}>Bank</Text>
-                        <Box
-                          as="select"
-                          value={filterBank}
-                          onChange={(e) => setFilterBank(e.target.value)}
-                          bg={colors.cardBg}
-                          borderWidth="1px"
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                          borderRadius="6px"
-                          px={3}
-                          py={2}
-                          w="100%"
-                          fontSize="sm"
-                          outline="none"
-                          _hover={{ borderColor: 'blue.400' }}
-                          _focus={{ borderColor: 'blue.500', boxShadow: '0 0 0 1px var(--chakra-colors-blue-500)' }}
-                        >
-                          <option value="" style={{ background: 'var(--chakra-colors-gray-800)' }}>All banks</option>
-                          {bankOptions.map(bank => (
-                            <option key={bank} value={bank} style={{ background: 'var(--chakra-colors-gray-800)' }}>{bank}</option>
-                          ))}
-                        </Box>
-                      </Box>
-                    );
-                  })()}
-
-                  {/* Amount Range */}
-                  <Box>
-                    <Text fontWeight="600" color={colors.textPrimary} mb={3}>Amount range</Text>
-                    <Flex gap={4} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
-                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>Minimum amount</Text>
-                        <Input
-                          type="number"
-                          placeholder="$0.00"
-                          value={minAmount}
-                          onChange={(e) => setMinAmount(e.target.value)}
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                          size="md"
-                          min="0"
-                          step="0.01"
-                        />
-                      </Box>
-                      <Box flex="1" minW={{ base: '100%', md: '200px' }}>
-                        <Text fontSize="sm" color={colors.textSecondary} mb={1}>Maximum amount</Text>
-                        <Input
-                          type="number"
-                          placeholder="$999,999.00"
-                          value={maxAmount}
-                          onChange={(e) => setMaxAmount(e.target.value)}
-                          bg={colors.cardBg}
-                          borderColor={colors.borderColor}
-                          color={colors.textPrimary}
-                          size="md"
-                          min="0"
-                          step="0.01"
-                        />
-                      </Box>
-                    </Flex>
-                  </Box>
-
-                  {/* Action Buttons */}
-                  <Flex gap={3} justify="flex-end" pt={2}>
-                    <Button
-                      variant="outline"
-                      onClick={clearCustomFilters}
-                    >
-                      Clear filters
-                    </Button>
-                    <Button
-                      colorScheme="red"
-                      onClick={applyCustomFilters}
-                    >
-                      Apply filters
-                    </Button>
-                  </Flex>
-                </VStack>
-              </Box>
-            </Collapsible.Content>
-          </Collapsible.Root>
-
-          {/* Mobile Card View */}
-          <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch" w="100%">
-            {filteredTransactions.length === 0 ? (
-              <Box p={6} bg={colors.cardBg} borderRadius="lg" borderWidth="1px" borderColor={colors.borderColor} textAlign="center">
-                <Text color={colors.textMuted}>No transactions found</Text>
-              </Box>
+          <div className="tx-actions">
+            {active ? (
+              <>
+                <button type="button" className="bw-button bw-button--quiet" onClick={downloadCSV} disabled={filteredTransactions.length === 0}>
+                  Download CSV
+                </button>
+                <RouterLink className="bw-button tx-actions__add" to="/add-transaction">Add transaction</RouterLink>
+              </>
             ) : (
-              filteredTransactions.map((transaction) => (
-                <Box
-                  key={transaction.id}
-                  p={4}
-                  bg={colors.cardBg}
-                  borderRadius="lg"
-                  borderWidth="1px"
-                  borderColor={colors.borderColor}
-                  position="relative"
-                  zIndex={editingTransactionId === transaction.id ? 10 : 'auto'}
+              <>
+                <button type="button" className="bw-button bw-button--quiet" onClick={() => setShowRestoreAllDialog(true)} disabled={trashedTransactions.length === 0}>
+                  Restore all
+                </button>
+                <button
+                  type="button"
+                  className="bw-button bw-button--quiet"
+                  data-tone="bad"
+                  onClick={() => setShowEmptyTrashDialog(true)}
+                  disabled={trashedTransactions.length === 0}
                 >
-                  <Flex justify="space-between" align="flex-start" mb={2}>
-                    <Box flex="1">
-                      {editingTransactionId === transaction.id ? (
-                        <HStack gap={2} mb={1}>
-                          <Box ref={categoryEditDropdownMobileRef} position="relative" flex={1} maxW="160px">
-                            {/* Dropdown Trigger */}
-                            <Box
-                              onClick={() => !updatingCategory && setCategoryEditDropdownOpen(!categoryEditDropdownOpen)}
-                              cursor={updatingCategory ? 'wait' : 'pointer'}
-                              px={2}
-                              py={1}
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="space-between"
-                              borderRadius="6px"
-                              borderWidth="1px"
-                              borderColor={categoryEditDropdownOpen ? 'blue.500' : colors.borderColor}
-                              bg={colors.inputBg}
-                              opacity={updatingCategory ? 0.6 : 1}
-                              _hover={!updatingCategory ? { borderColor: 'blue.400' } : {}}
-                              transition="all 0.2s"
-                            >
-                              <Text
-                                color={colors.textPrimary}
-                                fontSize="xs"
-                                noOfLines={1}
-                              >
-                                {categories.find(c => c.id === transaction.category_id)?.name || 'Select'}
-                              </Text>
-                              <Box
-                                as="span"
-                                transform={categoryEditDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                                transition="transform 0.2s"
-                                color={colors.textSecondary}
-                                fontSize="xs"
-                                ml={1}
-                              >
-                                ▼
-                              </Box>
-                            </Box>
-
-                            {/* Dropdown List */}
-                            {categoryEditDropdownOpen && !updatingCategory && (
-                              <Box
-                                position="absolute"
-                                top="100%"
-                                left={0}
-                                zIndex={1000}
-                                mt={1}
-                                bg={colors.cardBg}
-                                borderWidth="1px"
-                                borderColor={colors.borderColor}
-                                borderRadius="12px"
-                                boxShadow="lg"
-                                maxH="200px"
-                                minW="140px"
-                                overflowY="auto"
-                              >
-                                <VStack gap={0} align="stretch" p={1}>
-                                  {categories.filter(c => c.type === transaction.type).map((cat) => {
-                                    const isSelected = cat.id === transaction.category_id;
-                                    return (
-                                      <HStack
-                                        key={cat.id}
-                                        px={2}
-                                        py={2}
-                                        cursor="pointer"
-                                        bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                                        _hover={{ bg: colors.rowStripedBg }}
-                                        borderRadius="6px"
-                                        onClick={() => {
-                                          handleCategorySelect(transaction, cat.id);
-                                          setCategoryEditDropdownOpen(false);
-                                        }}
-                                        justify="space-between"
-                                        transition="background 0.1s"
-                                      >
-                                        <Text
-                                          color={colors.textPrimary}
-                                          fontSize="xs"
-                                          fontWeight={isSelected ? '600' : '400'}
-                                        >
-                                          {cat.name}
-                                        </Text>
-                                        {isSelected && (
-                                          <Text color="blue.500" fontSize="xs">✓</Text>
-                                        )}
-                                      </HStack>
-                                    );
-                                  })}
-                                </VStack>
-                              </Box>
-                            )}
-                          </Box>
-                          <Button size="xs" variant="ghost" onClick={() => { setEditingTransactionId(null); setCategoryEditDropdownOpen(false); }}>✕</Button>
-                        </HStack>
-                      ) : (
-                        <Text
-                          fontWeight="semibold"
-                          fontSize="sm"
-                          color="blue.500"
-                          cursor="pointer"
-                          onClick={() => setEditingTransactionId(transaction.id)}
-                        >
-                          {transaction.category}
-                        </Text>
-                      )}
-                      <Text fontSize="xs" color={colors.textSecondary} noOfLines={2}>
-                        {transaction.description}
-                      </Text>
-                    </Box>
-                    {editingAmountId === transaction.id ? (
-                      <Input
-                        size="sm"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={editingAmountValue}
-                        onChange={(e) => setEditingAmountValue(e.target.value)}
-                        onBlur={() => updateTransactionAmount(transaction.id, editingAmountValue)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') updateTransactionAmount(transaction.id, editingAmountValue);
-                          if (e.key === 'Escape') setEditingAmountId(null);
-                        }}
-                        autoFocus
-                        w="100px"
-                        ml={2}
-                        textAlign="right"
-                        fontWeight="bold"
-                        bg={colors.inputBg}
-                        borderColor={colors.borderColor}
-                        color={colors.textPrimary}
-                      />
-                    ) : (
-                      <Text
-                        fontWeight="bold"
-                        fontSize="md"
-                        color={transaction.type === 'income' ? 'green.600' : 'red.600'}
-                        ml={2}
-                        cursor="pointer"
-                        _hover={{ textDecoration: 'underline' }}
-                        onClick={() => { setEditingAmountId(transaction.id); setEditingAmountValue(transaction.amount.toString()); }}
-                      >
-                        {formatAmount(transaction.amount, transaction.type)}
-                      </Text>
-                    )}
-                  </Flex>
-                  <Flex justify="space-between" align="center">
-                    <Text fontSize="xs" color={colors.textMuted}>{formatDate(transaction.date)}</Text>
-                    <HStack gap={2}>
-                      <Text fontSize="xs" color={transaction.balance < 0 ? 'red.500' : colors.textMuted}>
-                        Bal: {formatBalance(transaction.balance)}
-                      </Text>
-                      <Flex
-                        as="button"
-                        type="button"
-                        aria-label="Move to trash"
-                        onClick={() => handleDeleteTransaction(transaction.id)}
-                        align="center"
-                        justify="center"
-                        boxSize="32px"
-                        borderRadius="8px"
-                        color={colors.textMuted}
-                        bg="transparent"
-                        transition="all 0.15s ease"
-                        _active={{ bg: 'red.50', color: 'red.600' }}
-                        _dark={{ _active: { bg: 'rgba(239,68,68,0.16)', color: 'red.300' } }}
-                      >
-                        <LuTrash2 size={15} />
-                      </Flex>
-                    </HStack>
-                  </Flex>
-                </Box>
-              ))
+                  Empty trash
+                </button>
+              </>
             )}
-          </VStack>
+          </div>
+        </header>
 
-          {/* Desktop Table View */}
-          <Box
-            display={{ base: 'none', md: 'block' }}
-            borderWidth="1px"
-            borderColor={colors.borderColor}
-            borderRadius="lg"
-            overflow="visible"
-            bg={colors.cardBg}
-            w="100%"
-          >
-            <Table.Root size="md" w="100%" style={{ tableLayout: 'fixed' }}>
-              <Table.Header>
-                <Table.Row bg={colors.rowStripedBg}>
-                  <Table.ColumnHeader py={4} px={6} w="12%" color={colors.textSecondary}>Date</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={6} w="auto" color={colors.textSecondary}>Description</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Amount</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Balance</Table.ColumnHeader>
-                  <Table.ColumnHeader py={4} px={3} w="5%"></Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {filteredTransactions.length === 0 ? (
-                  <Table.Row>
-                    <Table.Cell colSpan={5} textAlign="center" py={12}>
-                      <Text color={colors.textMuted}>No transactions found</Text>
-                    </Table.Cell>
-                  </Table.Row>
-                ) : (
-                  filteredTransactions.map((transaction) => (
-                    <Table.Row key={transaction.id} role="group" className="group" bg={colors.cardBg} _hover={{ bg: colors.rowHoverBg }}>
-                      <Table.Cell py={4} px={6}>
-                        <Text color={colors.textSecondary}>{formatDate(transaction.date)}</Text>
-                      </Table.Cell>
-                      <Table.Cell py={4} px={6}>
-                        {editingTransactionId === transaction.id ? (
-                          <HStack gap={2}>
-                            <Box ref={categoryEditDropdownRef} position="relative" minW="140px">
-                              {/* Dropdown Trigger */}
-                              <Box
-                                onClick={() => !updatingCategory && setCategoryEditDropdownOpen(!categoryEditDropdownOpen)}
-                                cursor={updatingCategory ? 'wait' : 'pointer'}
-                                px={2}
-                                py={1}
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                borderRadius="6px"
-                                borderWidth="1px"
-                                borderColor={categoryEditDropdownOpen ? 'blue.500' : colors.borderColor}
-                                bg={colors.inputBg}
-                                opacity={updatingCategory ? 0.6 : 1}
-                                _hover={!updatingCategory ? { borderColor: 'blue.400' } : {}}
-                                transition="all 0.2s"
-                              >
-                                <Text
-                                  color={colors.textPrimary}
-                                  fontSize="sm"
-                                  noOfLines={1}
-                                >
-                                  {categories.find(c => c.id === transaction.category_id)?.name || 'Select'}
-                                </Text>
-                                <Box
-                                  as="span"
-                                  transform={categoryEditDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                                  transition="transform 0.2s"
-                                  color={colors.textSecondary}
-                                  fontSize="xs"
-                                  ml={2}
-                                >
-                                  ▼
-                                </Box>
-                              </Box>
-
-                              {/* Dropdown List */}
-                              {categoryEditDropdownOpen && !updatingCategory && (
-                                <Box
-                                  position="absolute"
-                                  top="100%"
-                                  left={0}
-                                  zIndex={1000}
-                                  mt={1}
-                                  bg={colors.cardBg}
-                                  borderWidth="1px"
-                                  borderColor={colors.borderColor}
-                                  borderRadius="12px"
-                                  boxShadow="lg"
-                                  maxH="240px"
-                                  minW="160px"
-                                  overflowY="auto"
-                                >
-                                  <VStack gap={0} align="stretch" p={1}>
-                                    {categories.filter(c => c.type === transaction.type).map((cat) => {
-                                      const isSelected = cat.id === transaction.category_id;
-                                      return (
-                                        <HStack
-                                          key={cat.id}
-                                          px={3}
-                                          py={2}
-                                          cursor="pointer"
-                                          bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                                          _hover={{ bg: colors.rowStripedBg }}
-                                          borderRadius="6px"
-                                          onClick={() => {
-                                            handleCategorySelect(transaction, cat.id);
-                                            setCategoryEditDropdownOpen(false);
-                                          }}
-                                          justify="space-between"
-                                          transition="background 0.1s"
-                                        >
-                                          <Text
-                                            color={colors.textPrimary}
-                                            fontSize="sm"
-                                            fontWeight={isSelected ? '600' : '400'}
-                                          >
-                                            {cat.name}
-                                          </Text>
-                                          {isSelected && (
-                                            <Text color="blue.500" fontSize="sm">✓</Text>
-                                          )}
-                                        </HStack>
-                                      );
-                                    })}
-                                  </VStack>
-                                </Box>
-                              )}
-                            </Box>
-                            <Button size="xs" variant="ghost" onClick={() => { setEditingTransactionId(null); setCategoryEditDropdownOpen(false); }}>✕</Button>
-                          </HStack>
-                        ) : (
-                          <Text
-                            fontWeight="medium"
-                            color="blue.500"
-                            cursor="pointer"
-                            _hover={{ textDecoration: 'underline' }}
-                            onClick={() => setEditingTransactionId(transaction.id)}
-                            title="Click to change category"
-                          >
-                            {transaction.category}
-                          </Text>
-                        )}
-                        <Text fontSize="sm" color={colors.textSecondary} noOfLines={1}>
-                          {transaction.description}
-                          {transaction.bank && transaction.bank !== transaction.description && (
-                            <Text as="span" color="blue.500" ml={2}>• {transaction.bank}</Text>
-                          )}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell textAlign="right" py={4} px={6}>
-                        {editingAmountId === transaction.id ? (
-                          <Input
-                            size="sm"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={editingAmountValue}
-                            onChange={(e) => setEditingAmountValue(e.target.value)}
-                            onBlur={() => updateTransactionAmount(transaction.id, editingAmountValue)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') updateTransactionAmount(transaction.id, editingAmountValue);
-                              if (e.key === 'Escape') setEditingAmountId(null);
-                            }}
-                            autoFocus
-                            w="100px"
-                            ml="auto"
-                            textAlign="right"
-                            fontWeight="bold"
-                            bg={colors.inputBg}
-                            borderColor={colors.borderColor}
-                            color={colors.textPrimary}
-                          />
-                        ) : (
-                          <Text
-                            fontWeight="bold"
-                            color={transaction.type === 'income' ? 'green.600' : 'red.600'}
-                            cursor="pointer"
-                            _hover={{ textDecoration: 'underline' }}
-                            onClick={() => { setEditingAmountId(transaction.id); setEditingAmountValue(transaction.amount.toString()); }}
-                          >
-                            {formatAmount(transaction.amount, transaction.type)}
-                          </Text>
-                        )}
-                      </Table.Cell>
-                      <Table.Cell textAlign="right" py={4} px={6}>
-                        <Text color={transaction.balance < 0 ? 'red.600' : colors.textSecondary}>
-                          {formatBalance(transaction.balance)}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell py={4} px={3}>
-                        <Flex
-                          as="button"
-                          type="button"
-                          aria-label="Move to trash"
-                          title="Move to trash"
-                          onClick={() => handleDeleteTransaction(transaction.id)}
-                          align="center"
-                          justify="center"
-                          boxSize="32px"
-                          mx="auto"
-                          borderRadius="8px"
-                          color={colors.textMuted}
-                          bg="transparent"
-                          transition="all 0.15s ease"
-                          // Muted until the row is hovered, then turns red on
-                          // direct hover so the destructive action is obvious.
-                          opacity={0.35}
-                          _groupHover={{ opacity: 1 }}
-                          _hover={{ bg: 'red.50', color: 'red.600', opacity: 1 }}
-                          _focusVisible={{ opacity: 1, outline: '2px solid', outlineColor: 'red.500', outlineOffset: '1px' }}
-                          _dark={{ _hover: { bg: 'rgba(239,68,68,0.16)', color: 'red.300' } }}
-                        >
-                          <LuTrash2 size={16} />
-                        </Flex>
-                      </Table.Cell>
-                    </Table.Row>
-                  ))
-                )}
-              </Table.Body>
-            </Table.Root>
-          </Box>
-
-              {/* Summary Footer - totals whatever is currently in view */}
-              {filteredTransactions.length > 0 && (() => {
-                const sumOf = (type) => filteredTransactions
-                  .filter(t => t.type === type)
-                  .reduce((sum, t) => sum + t.amount, 0);
-                const income = sumOf('income');
-                const expenses = sumOf('expense');
-                // Net of what is actually on screen — the type dropdown is only
-                // one of several filters, so it can't decide which side to total.
-                const periodTotal = income - expenses;
-                return (
-                  <Flex justify="flex-end" px={4} w="100%">
-                    <HStack gap={2}>
-                      <Text color={colors.textSecondary}>Period total:</Text>
-                      <Text
-                        fontWeight="bold"
-                        fontSize="lg"
-                        color={periodTotal === 0 ? colors.textSecondary : (periodTotal > 0 ? 'green.600' : 'red.600')}
-                      >
-                        {periodTotal === 0 ? '' : (periodTotal > 0 ? '+' : '-')}${Math.abs(periodTotal).toFixed(2)}
-                      </Text>
-                    </HStack>
-                  </Flex>
-                );
-              })()}
-            </>
+        <div className="bw-switches">
+          <div className="bw-tabs" role="tablist" aria-label="Active or trashed">
+            {tab('active', 'Active', transactions.length)}
+            {tab('trash', 'Trash', trashedTransactions.length)}
+          </div>
+          {active && (
+            <div className="bw-segment" role="group" aria-label="Type">
+              {[['', 'All'], ['income', 'Income'], ['expense', 'Expenses']].map(([value, label]) => (
+                <button type="button" aria-pressed={filterType === value} onClick={() => setFilterType(value)} key={label}>{label}</button>
+              ))}
+            </div>
           )}
+        </div>
 
-          {/* Trash View */}
-          {viewMode === 'trash' && (
-            <>
-              {loadingTrash ? (
-                <Flex w="100%" minH="200px" align="center" justify="center">
-                  <VStack gap={4}>
-                    <Spinner size="xl" />
-                    <Text color={colors.textSecondary}>Loading trash...</Text>
-                  </VStack>
-                </Flex>
-              ) : (
-                <>
-                  {/* Trash info banner */}
-                  <Box p={4} bg={colors.warningBg} borderRadius="md" borderWidth="1px" borderColor={colors.warningBorder}>
-                    <Text color={colors.warning} fontSize="sm">
-                      Items in trash can be restored or permanently deleted. Restore items you want to keep.
-                    </Text>
-                  </Box>
+        {error && <p className="bw-note" data-tone="bad" role="alert">{error}</p>}
 
-                  {/* Mobile Trash Cards */}
-                  <VStack display={{ base: 'flex', md: 'none' }} gap={3} align="stretch" w="100%">
-                    {trashedTransactions.length === 0 ? (
-                      <Box p={6} bg={colors.cardBg} borderRadius="lg" borderWidth="1px" borderColor={colors.borderColor} textAlign="center">
-                        <Text color={colors.textMuted}>Trash is empty</Text>
-                      </Box>
-                    ) : (
-                      trashedTransactions.map((transaction) => (
-                        <Box
-                          key={transaction.id}
-                          p={4}
-                          bg={colors.cardBg}
-                          borderRadius="lg"
-                          borderWidth="1px"
-                          borderColor={colors.borderColor}
-                          opacity={0.85}
-                        >
-                          <Flex justify="space-between" align="flex-start" mb={2}>
-                            <Box flex="1">
-                              <Text fontWeight="semibold" fontSize="sm" color={colors.textPrimary}>{transaction.category}</Text>
-                              <Text fontSize="xs" color={colors.textSecondary} noOfLines={2}>
-                                {transaction.description}
-                              </Text>
-                            </Box>
-                            <Text
-                              fontWeight="bold"
-                              fontSize="md"
-                              color={transaction.type === 'income' ? 'green.600' : 'red.600'}
-                              ml={2}
-                            >
-                              {formatAmount(transaction.amount, transaction.type)}
-                            </Text>
-                          </Flex>
-                          <Flex justify="space-between" align="center">
-                            <Text fontSize="xs" color={colors.textMuted}>{formatDate(transaction.date)}</Text>
-                            <HStack gap={1}>
-                              <Button
-                                size="xs"
-                                variant="ghost"
-                                colorScheme="green"
-                                onClick={() => handleRestoreTransaction(transaction.id)}
-                                loading={restoringId === transaction.id}
-                              >
-                                Restore
-                              </Button>
-                              <Button
-                                size="xs"
-                                variant="ghost"
-                                colorScheme="red"
-                                onClick={() => handlePermanentDelete(transaction.id)}
-                              >
-                                Delete
-                              </Button>
-                            </HStack>
-                          </Flex>
-                        </Box>
-                      ))
-                    )}
-                  </VStack>
-
-                  {/* Desktop Trash Table */}
-                  <Box
-                    display={{ base: 'none', md: 'block' }}
-                    borderWidth="1px"
-                    borderColor={colors.borderColor}
-                    borderRadius="lg"
-                    overflow="hidden"
-                    bg={colors.cardBg}
-                    w="100%"
-                  >
-                    <Table.Root size="md" w="100%" style={{ tableLayout: 'fixed' }}>
-                      <Table.Header>
-                        <Table.Row bg={colors.rowStripedBg}>
-                          <Table.ColumnHeader py={4} px={6} w="12%" color={colors.textSecondary}>Date</Table.ColumnHeader>
-                          <Table.ColumnHeader py={4} px={6} w="auto" color={colors.textSecondary}>Description</Table.ColumnHeader>
-                          <Table.ColumnHeader py={4} px={6} textAlign="right" w="12%" color={colors.textSecondary}>Amount</Table.ColumnHeader>
-                          <Table.ColumnHeader py={4} px={6} w="18%" textAlign="center" color={colors.textSecondary}>Actions</Table.ColumnHeader>
-                        </Table.Row>
-                      </Table.Header>
-                      <Table.Body>
-                        {trashedTransactions.length === 0 ? (
-                          <Table.Row>
-                            <Table.Cell colSpan={4} textAlign="center" py={12}>
-                              <Text color={colors.textMuted}>Trash is empty</Text>
-                            </Table.Cell>
-                          </Table.Row>
-                        ) : (
-                          trashedTransactions.map((transaction) => (
-                            <Table.Row key={transaction.id} bg={colors.cardBg} _hover={{ bg: colors.rowHoverBg }} opacity={0.85}>
-                              <Table.Cell py={4} px={6}>
-                                <Text color={colors.textSecondary}>{formatDate(transaction.date)}</Text>
-                              </Table.Cell>
-                              <Table.Cell py={4} px={6}>
-                                <Text fontWeight="medium" color={colors.textPrimary}>{transaction.category}</Text>
-                                <Text fontSize="sm" color={colors.textSecondary} noOfLines={1}>
-                                  {transaction.description}
-                                  {transaction.bank && transaction.bank !== transaction.description && (
-                                    <Text as="span" color="blue.500" ml={2}>• {transaction.bank}</Text>
-                                  )}
-                                </Text>
-                              </Table.Cell>
-                              <Table.Cell textAlign="right" py={4} px={6}>
-                                <Text
-                                  fontWeight="bold"
-                                  color={transaction.type === 'income' ? 'green.600' : 'red.600'}
-                                >
-                                  {formatAmount(transaction.amount, transaction.type)}
-                                </Text>
-                              </Table.Cell>
-                              <Table.Cell py={4} px={6}>
-                                <HStack gap={2} justify="center">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    colorScheme="green"
-                                    onClick={() => handleRestoreTransaction(transaction.id)}
-                                    loading={restoringId === transaction.id}
-                                  >
-                                    Restore
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    colorScheme="red"
-                                    onClick={() => handlePermanentDelete(transaction.id)}
-                                  >
-                                    Delete
-                                  </Button>
-                                </HStack>
-                              </Table.Cell>
-                            </Table.Row>
-                          ))
-                        )}
-                      </Table.Body>
-                    </Table.Root>
-                  </Box>
-                </>
+        {active && (
+          <>
+            <div className="tx-toolbar">
+              <input
+                className="bw-input tx-toolbar__search"
+                type="search"
+                aria-label="Search transactions"
+                placeholder="Search transactions"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+              <select
+                className="bw-select"
+                aria-label="Period"
+                value={selectedPeriod}
+                onChange={(event) => {
+                  setSelectedPeriod(event.target.value);
+                  updateDateRangeForPeriod(event.target.value);
+                }}
+              >
+                <option value="current">This month</option>
+                <option value="last-month">Last month</option>
+                <option value="all">All time</option>
+                {selectedPeriod === 'custom' && <option value="custom">Custom range</option>}
+              </select>
+              <button
+                type="button"
+                className="bw-button bw-button--quiet tx-toolbar__filters"
+                aria-expanded={showCustomFilters}
+                aria-controls="tx-filter-panel"
+                aria-pressed={customFiltersApplied}
+                onClick={toggleCustomFilters}
+              >
+                <LuFilter size={15} aria-hidden="true" />
+                {customFiltersApplied ? 'Custom filters' : 'Filters'}
+              </button>
+              {customFiltersApplied && (
+                <button type="button" className="bw-link tx-toolbar__reset" onClick={clearCustomFilters}>Reset</button>
               )}
+            </div>
+
+            {showCustomFilters && (
+              <FilterPanel
+                values={{ startDate, endDate, description: filterDescription, bank: filterBank, minAmount, maxAmount }}
+                set={{
+                  startDate: setStartDate,
+                  endDate: setEndDate,
+                  description: setFilterDescription,
+                  bank: setFilterBank,
+                  minAmount: setMinAmount,
+                  maxAmount: setMaxAmount,
+                }}
+                banks={banks}
+                onApply={applyCustomFilters}
+                onClear={clearCustomFilters}
+              />
+            )}
+
+            <section className="bw-ledger tx-ledger" aria-label="What is in view">
+              <dl className="bw-figures">
+                <div className="bw-figure bw-figure--lead">
+                  <dt>Net</dt>
+                  <dd data-tone={totals.net < 0 ? 'bad' : 'good'}>
+                    {totals.net > 0 ? '+' : totals.net < 0 ? '−' : ''}{formatMoney(Math.abs(totals.net))}
+                  </dd>
+                </div>
+                <div className="bw-figure">
+                  <dt>Income</dt>
+                  <dd>{formatMoney(totals.income)}</dd>
+                </div>
+                <div className="bw-figure">
+                  <dt>Expenses</dt>
+                  <dd>{formatMoney(totals.expenses)}</dd>
+                </div>
+                <div className="bw-figure">
+                  <dt>Largest expense</dt>
+                  <dd>{totals.largest ? formatMoney(totals.largest.amount) : '—'}</dd>
+                  {totals.largest && <small>{totals.largest.description || totals.largest.category}, {formatDate(totals.largest.date)}</small>}
+                </div>
+              </dl>
+              {line && <SpendChart line={line} picked={chosen?.key ?? null} onPick={setPickedBucket} formatMoney={formatMoney} />}
+            </section>
+
+            {chosen && (
+              <p className="bw-note tx-picked">
+                Only {chosen.label}: {count(listed.length, 'transaction')}.{' '}
+                <button type="button" className="bw-link" onClick={() => setPickedBucket(null)}>Show everything in view</button>
+              </p>
+            )}
+
+            {groups.length === 0 ? (
+              <div className="bw-panel">
+                <p className="bw-nothing">
+                  {transactions.length === 0 ? 'No transactions yet. Add one, or import a bank statement.' : 'Nothing matches. Try another period or fewer filters.'}
+                </p>
+              </div>
+            ) : (
+              <TransactionList
+                groups={groups}
+                category={{
+                  editingId: editingTransactionId,
+                  busy: updatingCategory,
+                  options: categories,
+                  onStart: setEditingTransactionId,
+                  onCancel: () => setEditingTransactionId(null),
+                  onSelect: handleCategorySelect,
+                }}
+                amount={{
+                  editingId: editingAmountId,
+                  value: editingAmountValue,
+                  onStart: (transaction) => { setEditingAmountId(transaction.id); setEditingAmountValue(transaction.amount.toString()); },
+                  onChange: setEditingAmountValue,
+                  // Leaving the field without changing the amount saves nothing.
+                  onCommit: (id, value) => {
+                    const current = transactions.find((t) => t.id === id);
+                    if (current && parseFloat(value) === current.amount) setEditingAmountId(null);
+                    else updateTransactionAmount(id, value);
+                  },
+                  onCancel: () => setEditingAmountId(null),
+                }}
+                onTrash={handleDeleteTransaction}
+                formatAmount={formatAmount}
+                formatMoney={formatMoney}
+              />
+            )}
+
+            {transactions.length > 0 && (
+              <p className="tx-foot">
+                <button type="button" onClick={() => setShowDeleteAllDialog(true)}>
+                  Move all {count(transactions.length, 'transaction')} to the trash
+                </button>
+              </p>
+            )}
+          </>
+        )}
+
+        {!active && (
+          loadingTrash ? (
+            <div className="bw-status" role="status">
+              <Spinner size="sm" color="currentColor" />
+              Loading the trash…
+            </div>
+          ) : trashedTransactions.length === 0 ? (
+            <div className="bw-panel"><p className="bw-nothing">The trash is empty.</p></div>
+          ) : (
+            <>
+              <p className="bw-note">A trashed transaction counts nowhere. Restore it to bring it back, or delete it for good.</p>
+              <TrashList
+                transactions={trashedTransactions}
+                restoringId={restoringId}
+                onRestore={handleRestoreTransaction}
+                onDelete={handlePermanentDelete}
+                formatAmount={formatAmount}
+                formatDate={formatDate}
+              />
             </>
-          )}
-      </VStack>
+          )
+        )}
+      </Box>
 
-      {/* Delete All Confirmation Dialog */}
-      <Dialog.Root open={showDeleteAllDialog} onOpenChange={(e) => !e.open && setShowDeleteAllDialog(false)}>
-        <Portal>
-          <Dialog.Backdrop bg="blackAlpha.600" />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="400px"
-              w="90%"
-              borderRadius="16px"
-              overflow="hidden"
-              bg={colors.cardBg}
-            >
-              <Dialog.Header
-                bg="linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)"
-                color="white"
-                p={5}
-              >
-                <Flex justify="space-between" align="center">
-                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
-                    Remove All Transactions
-                  </Dialog.Title>
-                  <Dialog.CloseTrigger asChild>
-                    <CloseButton
-                      color="white"
-                      _hover={{ bg: 'whiteAlpha.200' }}
-                      borderRadius="full"
-                    />
-                  </Dialog.CloseTrigger>
-                </Flex>
-              </Dialog.Header>
+      <ConfirmDialog
+        open={showDeleteAllDialog}
+        onClose={() => setShowDeleteAllDialog(false)}
+        title="Move everything to the trash?"
+        busy={deletingAll}
+        actions={[{ label: 'Move to trash', busyLabel: 'Moving…', tone: 'bad', onClick: handleDeleteAllTransactions }]}
+      >
+        <p>
+          All <b>{count(transactions.length, 'transaction')}</b> go to the trash, not only the ones in view. They can be restored from
+          there, or deleted for good.
+        </p>
+      </ConfirmDialog>
 
-              <Dialog.Body p={6}>
-                <VStack gap={4} align="stretch">
-                  <Text color={colors.textPrimary} fontSize="md">
-                    Are you sure you want to move <strong>all {transactions.length} transactions</strong> to trash?
-                  </Text>
-                  <Text color={colors.textSecondary} fontSize="sm">
-                    Transactions will be moved to trash where you can restore them or delete them permanently.
-                  </Text>
-                </VStack>
-              </Dialog.Body>
+      <ConfirmDialog
+        open={showEmptyTrashDialog}
+        onClose={() => setShowEmptyTrashDialog(false)}
+        title="Empty the trash?"
+        busy={emptyingTrash}
+        actions={[{ label: 'Delete for good', busyLabel: 'Deleting…', tone: 'bad', onClick: handleEmptyTrash }]}
+      >
+        <p><b>{count(trashedTransactions.length, 'transaction')}</b> will be deleted for good. This cannot be undone.</p>
+      </ConfirmDialog>
 
-              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
-                <HStack gap={3} justify="flex-end" w="100%">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowDeleteAllDialog(false)}
-                    disabled={deletingAll}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    colorScheme="red"
-                    onClick={handleDeleteAllTransactions}
-                    loading={deletingAll}
-                    loadingText="Moving..."
-                  >
-                    Move to Trash
-                  </Button>
-                </HStack>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
+      <ConfirmDialog
+        open={showRestoreAllDialog}
+        onClose={() => setShowRestoreAllDialog(false)}
+        title="Restore everything?"
+        busy={restoringAll}
+        actions={[{ label: 'Restore all', busyLabel: 'Restoring…', onClick: handleRestoreAll }]}
+      >
+        <p><b>{count(trashedTransactions.length, 'transaction')}</b> go back to the active list and count again.</p>
+      </ConfirmDialog>
 
-      {/* Empty Trash Confirmation Dialog */}
-      <Dialog.Root open={showEmptyTrashDialog} onOpenChange={(e) => !e.open && setShowEmptyTrashDialog(false)}>
-        <Portal>
-          <Dialog.Backdrop bg="blackAlpha.600" />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="400px"
-              w="90%"
-              borderRadius="16px"
-              overflow="hidden"
-              bg={colors.cardBg}
-            >
-              <Dialog.Header
-                bg="linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)"
-                color="white"
-                p={5}
-              >
-                <Flex justify="space-between" align="center">
-                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
-                    Empty Trash
-                  </Dialog.Title>
-                  <Dialog.CloseTrigger asChild>
-                    <CloseButton
-                      color="white"
-                      _hover={{ bg: 'whiteAlpha.200' }}
-                      borderRadius="full"
-                    />
-                  </Dialog.CloseTrigger>
-                </Flex>
-              </Dialog.Header>
-
-              <Dialog.Body p={6}>
-                <VStack gap={4} align="stretch">
-                  <Text color={colors.textPrimary} fontSize="md">
-                    Are you sure you want to permanently delete <strong>all {trashedTransactions.length} items</strong> in trash?
-                  </Text>
-                  <Text color={colors.textSecondary} fontSize="sm">
-                    This action cannot be undone. All items will be permanently removed.
-                  </Text>
-                </VStack>
-              </Dialog.Body>
-
-              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
-                <HStack gap={3} justify="flex-end" w="100%">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowEmptyTrashDialog(false)}
-                    disabled={emptyingTrash}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    colorScheme="red"
-                    onClick={handleEmptyTrash}
-                    loading={emptyingTrash}
-                    loadingText="Deleting..."
-                  >
-                    Empty Trash
-                  </Button>
-                </HStack>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-
-      {/* Restore All Confirmation Dialog */}
-      <Dialog.Root open={showRestoreAllDialog} onOpenChange={(e) => !e.open && setShowRestoreAllDialog(false)}>
-        <Portal>
-          <Dialog.Backdrop bg="blackAlpha.600" />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="400px"
-              w="90%"
-              borderRadius="16px"
-              overflow="hidden"
-              bg={colors.cardBg}
-            >
-              <Dialog.Header
-                bg="linear-gradient(135deg, #16A34A 0%, #15803D 100%)"
-                color="white"
-                p={5}
-              >
-                <Flex justify="space-between" align="center">
-                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
-                    Restore All Transactions
-                  </Dialog.Title>
-                  <Dialog.CloseTrigger asChild>
-                    <CloseButton
-                      color="white"
-                      _hover={{ bg: 'whiteAlpha.200' }}
-                      borderRadius="full"
-                    />
-                  </Dialog.CloseTrigger>
-                </Flex>
-              </Dialog.Header>
-
-              <Dialog.Body p={6}>
-                <VStack gap={4} align="stretch">
-                  <Text color={colors.textPrimary} fontSize="md">
-                    Are you sure you want to restore <strong>all {trashedTransactions.length} transactions</strong> from trash?
-                  </Text>
-                  <Text color={colors.textSecondary} fontSize="sm">
-                    All transactions will be moved back to your active transactions list.
-                  </Text>
-                </VStack>
-              </Dialog.Body>
-
-              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
-                <HStack gap={3} justify="flex-end" w="100%">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRestoreAllDialog(false)}
-                    disabled={restoringAll}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    colorScheme="green"
-                    onClick={handleRestoreAll}
-                    loading={restoringAll}
-                    loadingText="Restoring..."
-                  >
-                    Restore All
-                  </Button>
-                </HStack>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-
-      {/* Category Change Confirmation Dialog */}
-      <Dialog.Root open={!!pendingCategoryChange} onOpenChange={(e) => !e.open && setPendingCategoryChange(null)}>
-        <Portal>
-          <Dialog.Backdrop bg="blackAlpha.600" />
-          <Dialog.Positioner>
-            <Dialog.Content
-              maxW="420px"
-              w="90%"
-              borderRadius="16px"
-              overflow="hidden"
-              bg={colors.cardBg}
-            >
-              <Dialog.Header
-                bg="linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)"
-                color="white"
-                p={5}
-              >
-                <Flex justify="space-between" align="center">
-                  <Dialog.Title fontSize="lg" fontWeight="700" color="white">
-                    Change Category
-                  </Dialog.Title>
-                  <Dialog.CloseTrigger asChild>
-                    <CloseButton
-                      color="white"
-                      _hover={{ bg: 'whiteAlpha.200' }}
-                      borderRadius="full"
-                    />
-                  </Dialog.CloseTrigger>
-                </Flex>
-              </Dialog.Header>
-
-              <Dialog.Body p={6}>
-                <VStack gap={4} align="stretch">
-                  <Text color={colors.textPrimary} fontSize="md">
-                    Change category to <strong>{pendingCategoryChange?.newCategoryName}</strong>
-                  </Text>
-                  <Text color={colors.textSecondary} fontSize="sm">
-                    Apply this change only to this transaction, or also update the mapping so future imports with this description are automatically categorized?
-                  </Text>
-                </VStack>
-              </Dialog.Body>
-
-              <Dialog.Footer p={4} borderTopWidth="1px" borderColor={colors.borderColor}>
-                <VStack gap={2} w="100%">
-                  <Button
-                    w="100%"
-                    variant="outline"
-                    borderColor="blue.500"
-                    color="blue.500"
-                    _hover={{ bg: 'blue.500', color: 'white' }}
-                    onClick={() => updateTransactionCategory(false)}
-                    disabled={updatingCategory}
-                  >
-                    Only this transaction
-                  </Button>
-                  <Button
-                    w="100%"
-                    bg="blue.500"
-                    color="white"
-                    _hover={{ bg: 'blue.600' }}
-                    onClick={() => updateTransactionCategory(true)}
-                    loading={updatingCategory}
-                    loadingText="Updating..."
-                  >
-                    Always (update mapping)
-                  </Button>
-                </VStack>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
-    </PageContainer>
+      <ConfirmDialog
+        open={Boolean(pendingCategoryChange)}
+        onClose={() => setPendingCategoryChange(null)}
+        title={`Change the category to ${pendingCategoryChange?.newCategoryName || ''}?`}
+        busy={updatingCategory}
+        actions={[
+          { label: 'Only this one', quiet: true, onClick: () => updateTransactionCategory(false) },
+          { label: 'Always for this description', onClick: () => updateTransactionCategory(true) },
+        ]}
+      >
+        <p>
+          Change only this transaction, or also remember it, so that later imports of
+          {' '}<b>{pendingCategoryChange?.transactionDescription || 'this description'}</b> get this category too.
+        </p>
+      </ConfirmDialog>
+    </Box>
   );
 }

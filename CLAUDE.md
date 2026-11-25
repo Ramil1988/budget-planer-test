@@ -148,6 +148,14 @@ The application uses React's built-in state management:
 - No custom CSS files
 - **Dark mode support** via `next-themes` library (integrated with Chakra UI)
 
+**Redesigned pages (Budget, Recurring, Reports, Assets & Liabilities, Transactions, Add transaction — 2026-11-24):**
+- They follow the Dashboard's look and do **not** use `useDarkModeColors`. The shared stylesheet is `frontend/src/styles/ledger.css`: tokens `--bw-*` (paper, ink, muted, border, accent, positive, negative, caution, track, fill) and classes `bw-*` (`bw-masthead`, `bw-title`, `bw-tabs`, `bw-segment`, `bw-ledger`, `bw-figures`, `bw-panel`, `bw-form`, `bw-field`, `bw-button`, `bw-dialog`, `bw-note`, `bw-nothing`). Each page adds `styles/<page>.css`
+- A page's root is `<Box className="bw-surface bw-page">`. The tokens live on `.bw-surface` (and `.dark .bw-surface`), so **anything rendered in a portal needs `bw-surface` too**. Use `components/DialogFrame.jsx` for dialogs
+- Structure: `pages/<Page>.jsx` keeps loading and saving; `components/<page>/` holds the page's charts, lists and forms; `lib/<page>View.js` (`budgetMath.js` for Budget) holds pure functions with `node --test` tests, all listed in `test:unit`
+- Charts are hand-written HTML and SVG. A line is an SVG stretched to its plot (`preserveAspectRatio="none"`, `vector-effect: non-scaling-stroke`); points and figures are HTML laid over it. Proportions are exact: a part too small to label is named in text, never drawn larger
+- Dropdowns are native `<select>`; dates are local (`today()` in `lib/transactionView.js`), never `toISOString()`
+- **GOTCHA:** on Transactions the trash button writes at once. The Playwright tests for these pages only read: they never press it, cancel every dialog, and the Transactions and Add transaction tests fail if the page sends anything but a read to `/rest/v1/`
+
 **Dark Mode Implementation:**
 - Uses `ColorModeProvider` from `@/components/ui/color-mode`
 - Toggle via `ColorModeButton` in Header (sun/moon icons)
@@ -261,6 +269,16 @@ The backend is built with Netlify Functions, a serverless platform that runs eve
 - `recurring_payments.match_description` = how the payment reads on the bank statement. Used to recognise the same payment coming from Google Sheets: same type + exact amount + description contains it + within 4 days. Applied in both directions — auto-add skips an occurrence the bank already reported, and all three import paths call `filterOutRecurringDuplicates()`: `ImportTransactions.jsx`, `AutoSyncContext.jsx`, and `netlify/functions/google-sheets-webhook.js` (own copy of the matcher, keep the 4-day window in sync). Without `match_description` nothing is cross-matched
 - Migration: `backend/database/migrations/008_recurring_auto_add.sql`
 
+**Liability balances (interest first):**
+- A liability linked to a spending category (`liabilities.linked_category_id`) has its balance worked out by the database, not by the app. Migration: `backend/database/migrations/011_liability_interest.sql` (replaces the triggers of 005 and 007)
+- The balance is recalculated from an **anchor** — `balance_anchor`, `balance_anchor_date`, `balance_anchor_at`: a balance known to be true at a moment — every time a transaction in the category is inserted, updated or deleted (`recalculate_liabilities_on_transaction()` → `recalculate_liability_balance()`). Each payment after the anchor covers `balance x interest_rate x days / 365` of interest first; the rest reduces the debt. No rate means the whole payment comes off
+- Trashed transactions (`deleted_at`) do not count; restoring one counts it again. The page's payment history filters them out the same way
+- Creating a liability, or editing its balance, link, start date or rate, sets a new anchor (`anchor_liability_balance()`, which tells a direct edit from the trigger's own update by `pg_trigger_depth()`). To bring a balance in line with the lender, type the lender's figure into the form
+- Which liability a payment belongs to is unchanged from 007: the one linked to the category that had started by the transaction's date, the most recently started first (`liability_for_payment()`)
+- It is simple daily interest, so it is an estimate: a Canadian fixed mortgage compounds twice a year and differs by a few dollars a month
+- **Migration required.** Without it the old triggers stay: the whole payment comes off the balance and trashing a payment changes nothing. The app works either way
+- Verified on an embedded PostgreSQL (PGlite) with 18 scenarios; that harness is not in the repository
+
 **Auto-Seeding for New Users:**
 - Migration: `backend/database/migrations/002_auto_seed_new_users.sql`
 - Automatically creates for each new user:
@@ -333,8 +351,8 @@ export const handler = async (event, context) => {
 **Security:**
 - Always use Row Level Security (RLS) policies (already enabled in schema)
 - **Data API grants are a separate control from RLS.** Since **30 Oct 2026** Supabase grants `anon`/`authenticated`/`service_role` nothing on new `public` tables, so every new table needs an explicit `GRANT` or supabase-js fails with `42501 permission denied for table`. Put the grants in the same migration that creates the table; `backend/database/migrations/009_data_api_grants.sql` holds the full matrix. Scope them to what the code does — `anon` gets nothing, `service_role` only the tables `netlify/functions/*.js` touch — and never use `GRANT ALL`.
-- **GOTCHA:** the balance triggers (`update_balance`, `update_spent`, `update_liability_on_transaction`) are plain `plpgsql`, **not** `SECURITY DEFINER`, so they run as the role that wrote the row. Any role allowed to write `transactions` also needs `UPDATE` on `accounts`, `UPDATE` on `budget_categories` and `SELECT, UPDATE` on `liabilities`. The auto-seed functions *are* `SECURITY DEFINER` and need no grants.
-- **GOTCHA:** `transactions` uses soft delete (`deleted_at`). Every read that feeds a total, a chart or a list of live transactions needs `.is('deleted_at', null)`; without it trashed rows are counted. Until 2026-11-23 the Dashboard, Reports, the 12-month expense average on Assets & Liabilities and the budget notifications lacked it. The payment history of a liability (Assets & Liabilities) deliberately still includes trashed rows, because trashing does not reverse the liability trigger
+- **GOTCHA:** the balance triggers (`update_balance`, `update_spent`, and for liabilities `recalculate_liabilities_on_transaction` — `update_liability_on_transaction` before migration 011) are plain `plpgsql`, **not** `SECURITY DEFINER`, so they run as the role that wrote the row. Any role allowed to write `transactions` also needs `SELECT` on `transactions`, `UPDATE` on `accounts`, `UPDATE` on `budget_categories` and `SELECT, UPDATE` on `liabilities`. The auto-seed functions *are* `SECURITY DEFINER` and need no grants.
+- **GOTCHA:** `transactions` uses soft delete (`deleted_at`). Every read that feeds a total, a chart or a list of live transactions needs `.is('deleted_at', null)`; without it trashed rows are counted. Until 2026-11-23 the Dashboard, Reports, the 12-month expense average on Assets & Liabilities and the budget notifications lacked it. The payment history of a liability (Assets & Liabilities) filters them out too since 2026-11-24: with migration 011 a trashed payment no longer counts towards the balance
 - Validate Supabase JWT tokens in Netlify Functions
 - Never expose database credentials in frontend code
 - Supabase client handles SQL injection prevention automatically
@@ -370,6 +388,17 @@ export const handler = async (event, context) => {
 - Typography: Heading, Text
 - Interactive: Button, IconButton
 - See `docs/technical-reference.md` for detailed usage patterns
+
+## Assets & Liabilities
+
+**Key Files:** `frontend/src/pages/AssetsLiabilities.jsx`, `frontend/src/components/assets/*`, `frontend/src/lib/assetsView.js` (+ `assetsView.test.js`), `frontend/src/styles/assets.css`
+
+- **Categories are found by name.** The emergency fund is `Cash + Savings Account + TFSA + RRSP`, investments are `RRSP + TFSA + Investment`, home equity is `Real Estate` less liabilities of type `Mortgage` (`measures()`). Renaming one of the seeded categories takes it out of these sums. An RRSP is meant to be recorded at what would be left after tax
+- **Financial health** (`healthScore()`), 100 points in three parts: debt against assets `40 x (1 - liabilities / assets)`; emergency fund `5 x months covered`, 30 at six months; investments `150 x investments / assets`, 30 at 20%. Named Excellent / Good / Fair / Needs work at 80 / 60 / 40, and coloured at the same points. Paying a debt off never lowers it (there is a test for that)
+- **Monthly spending** for the emergency fund is this month's budget total when there is one, otherwise the average of the last 12 months of expenses; the panel says which
+- **Snapshots** (`net_worth_snapshots`) are saved on every change to an asset or a liability and with the Save snapshot button, one per local date. Choosing a saved date shows its totals, and its bars, score and fund from the lists stored with it; the two lists of assets and liabilities always show today. A past date cannot be saved over
+- **The balance sheet bars** are one scale for both: `balanceSheet()` returns each segment's part of `max(assets, liabilities)`
+- **Debts** show the payoff from `payoff()` (the linked recurring payment sets the schedule) and the balance from the database: see **Liability balances** above
 
 ## Budget Assistant
 
@@ -465,7 +494,8 @@ BudgetWise has a comprehensive end-to-end test suite built with Playwright. Test
 | `test-utils.js` | Shared utilities, login helper, common selectors |
 | `auth.spec.js` | Authentication: login, signup, logout, protected routes, session |
 | `dashboard.spec.js` | Dashboard: summary cards, charts, navigation, data loading |
-| `transactions.spec.js` | Transactions: list, add, filter, search, validation |
+| `transactions.spec.js` | Transactions: figures, chart, list by day, filters, editing in place, trash; Add transaction form (read-only, with a write guard) |
+| `assets.spec.js` | Assets & Liabilities: figures, balance sheet, trend, health score, emergency fund, lists and forms (read-only) |
 | `budget.spec.js` | Budget: tracking, setup, category budgets, progress |
 | `categories.spec.js` | Categories: expense/income tabs, merchant mappings |
 | `recurring.spec.js` | Recurring payments: list, actions, next 30 days |

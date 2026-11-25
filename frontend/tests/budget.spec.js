@@ -2,193 +2,151 @@ import { test, expect } from '@playwright/test';
 import { loginUser } from './test-utils.js';
 
 /**
- * Budget Tests
- * Tests for budget tracking, setup, and management
+ * Budget page: the month's pace, categories grouped by status, and the setup tab.
+ * The tests read the signed-in account's own data and never save anything.
  */
 
+const monthValue = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+const monthLabel = (date) => date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+const shifted = (step) => {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth() + step, 1);
+};
+
 test.describe('Budget', () => {
-  // Login before each test
   test.beforeEach(async ({ page }) => {
     await loginUser(page);
     await page.goto('/budget');
+    await expect(page.getByRole('heading', { name: 'Monthly Budget' })).toBeVisible();
+    // The ledger appears once the month has loaded.
+    await expect(page.locator('.bw-ledger')).toBeVisible();
   });
 
-  test.describe('Budget Page Layout', () => {
-    test('should display budget page header', async ({ page }) => {
-      await expect(page.locator('text=Monthly Budget')).toBeVisible();
+  test.describe('Layout', () => {
+    test('names the month and how much of it is left', async ({ page }) => {
+      await expect(page.locator('.bw-subtitle')).toContainText(monthLabel(new Date()));
+      await expect(page.locator('.bw-subtitle')).toContainText(/\d+ days? left/);
     });
 
-    test('should display month selector', async ({ page }) => {
-      const monthSelector = page.locator('text=/January|February|March|April|May|June|July|August|September|October|November|December/');
-      await expect(monthSelector.first()).toBeVisible();
-    });
-
-    test('should display budget tracking tab', async ({ page }) => {
-      await expect(page.locator('text=Budget Tracking')).toBeVisible();
-    });
-
-    test('should display budget setup tab', async ({ page }) => {
-      await expect(page.locator('text=Budget Setup')).toBeVisible();
-    });
-
-    test('should display current/projected toggle', async ({ page }) => {
-      await expect(page.locator('button:has-text("Current")')).toBeVisible();
-      await expect(page.locator('button:has-text("Projected")')).toBeVisible();
+    test('has a tab for tracking and a tab for setup', async ({ page }) => {
+      await expect(page.getByRole('tab', { name: 'Budget Tracking' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('tab', { name: 'Budget Setup' })).toHaveAttribute('aria-selected', 'false');
     });
   });
 
-  test.describe('Budget Summary', () => {
-    test('should display total spent', async ({ page }) => {
-      await expect(page.locator('text=TOTAL SPENT')).toBeVisible();
+  test.describe('Month so far', () => {
+    test('shows what is left, what is spent and the budget', async ({ page }) => {
+      const ledger = page.getByRole('region', { name: 'Month so far' });
+      // The figure labels; the same words also appear in the ruler's legend.
+      const labels = ledger.locator('dt');
+      await expect(labels.filter({ hasText: /^(Left to spend|Over budget)$/ })).toBeVisible();
+      await expect(labels.filter({ hasText: /^Spent$/ })).toBeVisible();
+      await expect(labels.filter({ hasText: /^Budget$/ })).toBeVisible();
+      expect(await ledger.locator('dd').filter({ hasText: /^\$[\d,]+\.\d{2}$/ }).count()).toBeGreaterThanOrEqual(3);
     });
 
-    test('should display budget progress circle', async ({ page }) => {
-      // Check for percentage in circular progress
-      await expect(page.locator('text=/\\d+%/')).toBeVisible();
+    test('says how spending compares with the calendar', async ({ page }) => {
+      await expect(page.locator('.budget-pace__headline')).not.toBeEmpty();
+      await expect(page.locator('.budget-pace__detail')).not.toBeEmpty();
     });
 
-    test('should display remaining budget', async ({ page }) => {
-      await expect(page.locator('text=REMAINING')).toBeVisible();
+    test('marks today on the ruler when a budget is set', async ({ page }) => {
+      const ruler = page.locator('.budget-ruler');
+      // The ruler follows the figures by a render; only its absence after that means no limits.
+      await ruler.waitFor({ timeout: 3000 }).catch(() => {});
+      test.skip(await ruler.count() === 0, 'No limits are set for this month.');
+      await expect(ruler.getByRole('img')).toHaveAttribute('aria-label', /spent of/);
+      await expect(ruler.getByText('Today')).toBeVisible();
     });
 
-    test('should display budget status', async ({ page }) => {
-      // Check for status like "Under budget" or "Over budget"
-      await expect(page.locator('text=/Under budget|Over budget|On track/')).toBeVisible();
-    });
-  });
-
-  test.describe('Category Budgets', () => {
-    test('should display BY CATEGORY section', async ({ page }) => {
-      await expect(page.locator('text=BY CATEGORY')).toBeVisible();
-    });
-
-    test('should display category budget cards', async ({ page }) => {
-      // Wait for data to load
-      await page.waitForTimeout(2000);
-
-      // Check for category names (common expense categories)
-      const categories = page.locator('text=/Mortgage|Subscriptions|Food|Insurance|Autocredit|Afterschool/');
-      const count = await categories.count();
-      expect(count).toBeGreaterThan(0);
-    });
-
-    test('should display budget status indicators', async ({ page }) => {
-      // Check for status badges
-      const statusBadges = page.locator('text=/OVER BUDGET|WARNING|ON TRACK/');
-      const count = await statusBadges.count();
-      expect(count).toBeGreaterThan(0);
-    });
-
-    test('should display progress bars for categories', async ({ page }) => {
-      // Check for progress indicators
-      const progressBars = page.locator('[role="progressbar"], .progress-bar, div[style*="width"]');
-      const count = await progressBars.count();
-      expect(count).toBeGreaterThan(0);
-    });
-
-    test('should display percentage used for categories', async ({ page }) => {
-      // Check for "XX% used" text
-      await expect(page.locator('text=/\\d+% used/')).toBeVisible();
-    });
-
-    test('should display remaining/over amounts', async ({ page }) => {
-      // Check for remaining or over amounts
-      const amounts = page.locator('text=/[+-]?\\$[\\d,]+\\.\\d{2}\\s*(left|over|remaining)/');
-      const count = await amounts.count();
-      // May or may not have explicit "left" text
+    test('switches to the projection and back', async ({ page }) => {
+      const projected = page.getByRole('button', { name: 'Projected', exact: true });
+      // The projection is worked out after the month has loaded.
+      await projected.waitFor({ timeout: 3000 }).catch(() => {});
+      test.skip(await projected.count() === 0, 'Nothing to project for this month.');
+      await projected.click();
+      await expect(page.getByText('Projected by month end')).toBeVisible();
+      await expect(projected).toHaveAttribute('aria-pressed', 'true');
+      await page.getByRole('button', { name: 'Current', exact: true }).click();
+      await expect(page.getByText(/^(Left to spend|Over budget)$/).first()).toBeVisible();
     });
   });
 
-  test.describe('Budget Tracking Tab', () => {
-    test('should show budget tracking view by default', async ({ page }) => {
-      // Budget Tracking should be active
-      const trackingTab = page.locator('button:has-text("Budget Tracking")');
-      await expect(trackingTab).toBeVisible();
+  test.describe('Categories', () => {
+    test('lists categories in groups by status', async ({ page }) => {
+      await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^(Over budget|Close to the limit|On track|No limit set)$/ }).first()).toBeVisible();
+      expect(await page.locator('.budget-row').count()).toBeGreaterThan(0);
     });
 
-    test('should toggle between current and projected', async ({ page }) => {
-      // Click Projected
-      await page.click('button:has-text("Projected")');
-      await page.waitForTimeout(500);
-
-      // Click back to Current
-      await page.click('button:has-text("Current")');
-      await page.waitForTimeout(500);
-    });
-  });
-
-  test.describe('Budget Setup Tab', () => {
-    test('should switch to budget setup tab', async ({ page }) => {
-      await page.click('text=Budget Setup');
-      await page.waitForTimeout(500);
-
-      // Check for setup-related content
-      await expect(page.locator('text=/Set Budget|Budget Setup|Monthly Budget/')).toBeVisible();
+    test('shows the amount left or over for a category with a limit', async ({ page }) => {
+      const withLimit = page.locator('.budget-row:not([data-status="none"])');
+      test.skip(await withLimit.count() === 0, 'No category has a limit this month.');
+      await expect(withLimit.first().locator('.budget-row__left')).toHaveText(/^\$[\d,]+\.\d{2} (left|over)$/);
+      await expect(withLimit.first().getByRole('img')).toHaveAttribute('aria-label', /\d+% used/);
     });
 
-    test('should display budget input fields in setup', async ({ page }) => {
-      await page.click('text=Budget Setup');
-      await page.waitForTimeout(500);
+    test('filters categories by name', async ({ page }) => {
+      await page.getByRole('searchbox', { name: 'Search categories' }).fill('zzzz-no-such-category');
+      await expect(page.getByText('No categories match')).toBeVisible();
+      await expect(page.locator('.budget-row')).toHaveCount(0);
+    });
 
-      // Check for input fields or budget amounts
-      const inputs = page.locator('input[type="number"], input[inputmode="decimal"]');
-      const count = await inputs.count();
-      // Setup tab should have input fields
+    test('opens the transactions of a category', async ({ page }) => {
+      const first = page.locator('.budget-row__open').first();
+      const name = await first.textContent();
+      await first.click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('heading', { name })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
     });
   });
 
-  test.describe('Month Navigation', () => {
-    test('should have month navigation controls', async ({ page }) => {
-      // Check for previous/next month buttons
-      const navButtons = page.locator('button[aria-label*="month"], button:has(svg)');
-      await expect(navButtons.first()).toBeVisible();
+  test.describe('Setup', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole('tab', { name: 'Budget Setup' }).click();
     });
 
-    test('should navigate to previous month', async ({ page }) => {
-      const currentMonth = await page.locator('text=/January|February|March|April|May|June|July|August|September|October|November|December/').first().textContent();
-
-      // Click previous month button
-      const prevButton = page.locator('button[aria-label*="previous"], button:has-text("<")').first();
-      if (await prevButton.isVisible()) {
-        await prevButton.click();
-        await page.waitForTimeout(1000);
-      }
+    test('shows the planned total and a limit for every category', async ({ page }) => {
+      await expect(page.getByText(/^Planned for /)).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Category limits' })).toBeVisible();
+      expect(await page.locator('.budget-limit input[type="number"]').count()).toBeGreaterThan(0);
+      await expect(page.getByRole('button', { name: 'Save budget' })).toBeVisible();
     });
 
-    test('should navigate to next month', async ({ page }) => {
-      const nextButton = page.locator('button[aria-label*="next"], button:has-text(">")').first();
-      if (await nextButton.isVisible()) {
-        await nextButton.click();
-        await page.waitForTimeout(1000);
-      }
+    test('says when a limit has been changed and not saved', async ({ page }) => {
+      const note = page.locator('.budget-save p');
+      await expect(note).not.toContainText('not saved');
+      const field = page.locator('.budget-limit input[type="number"]').first();
+      const before = await field.inputValue();
+      await field.fill(String(Number(before || 0) + 1));
+      await expect(note).toContainText('not saved yet');
+      // Put it back: this test must not leave the plan changed, and it never presses Save.
+      await field.fill(before);
+      await expect(note).not.toContainText('not saved');
+    });
+
+    test('sorts categories by name', async ({ page }) => {
+      await page.getByRole('combobox', { name: 'Sort categories' }).selectOption('name');
+      const names = await page.locator('.budget-limit__name').evaluateAll((labels) => labels.map((label) => label.firstChild.textContent.trim()));
+      expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
     });
   });
 
-  test.describe('Budget Data Display', () => {
-    test('should display monetary values correctly', async ({ page }) => {
-      // Check for properly formatted dollar amounts
-      const amounts = page.locator('text=/\\$[\\d,]+\\.\\d{2}/');
-      const count = await amounts.count();
-      expect(count).toBeGreaterThan(0);
+  test.describe('Month navigation', () => {
+    test('steps to the previous month', async ({ page }) => {
+      await page.getByRole('button', { name: 'Go to previous month' }).click();
+      await expect(page).toHaveURL(new RegExp(`month=${monthValue(shifted(-1))}`));
+      await expect(page.locator('.bw-subtitle')).toContainText(`${monthLabel(shifted(-1))}, closed`);
     });
 
-    test('should color-code over budget categories', async ({ page }) => {
-      // Over budget items should have red/danger styling
-      // This is a visual check - we verify the text exists
-      const overBudget = page.locator('text=OVER BUDGET');
-      // May or may not have over budget items
-    });
-
-    test('should color-code warning categories', async ({ page }) => {
-      // Warning items should have yellow/warning styling
-      const warning = page.locator('text=WARNING');
-      // May or may not have warning items
-    });
-
-    test('should color-code on track categories', async ({ page }) => {
-      // On track items should have green styling
-      const onTrack = page.locator('text=ON TRACK');
-      // Should have some on track items
+    test('two quick steps move two months', async ({ page }) => {
+      const next = page.getByRole('button', { name: 'Go to next month' });
+      await next.click();
+      await next.click();
+      await expect(page).toHaveURL(new RegExp(`month=${monthValue(shifted(2))}`));
+      await expect(page.locator('.bw-subtitle')).toContainText(`${monthLabel(shifted(2))}, not started`);
     });
   });
 });

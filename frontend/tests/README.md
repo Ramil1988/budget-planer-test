@@ -10,7 +10,8 @@ This directory contains comprehensive end-to-end tests for the BudgetWise applic
 |------|-------------|-------|
 | `auth.spec.js` | Authentication flows | Login, signup, logout, protected routes, session persistence |
 | `dashboard.spec.js` | Main dashboard | Summary cards, charts, navigation actions, data loading |
-| `transactions.spec.js` | Transaction management | List, add, filter, search, validation |
+| `transactions.spec.js` | Transaction management | Figures, chart, list by day, filters, editing in place, trash; Add transaction form. Read-only, with a guard that fails on any write |
+| `assets.spec.js` | Assets & Liabilities | Figures, balance sheet, trend, health score, emergency fund, lists and forms. Read-only |
 | `budget.spec.js` | Budget tracking | Budget setup, category budgets, progress tracking |
 | `categories.spec.js` | Category management | Expense/income categories, merchant mappings |
 | `recurring.spec.js` | Recurring payments | Payment list, add/edit/delete, next 30 days |

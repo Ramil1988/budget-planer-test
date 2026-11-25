@@ -1,716 +1,47 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Box,
-  Heading,
-  Text,
-  VStack,
-  HStack,
-  Spinner,
-  Table,
-  Flex,
-  SimpleGrid,
-} from '@chakra-ui/react';
+import { useState, useEffect } from 'react';
+import { Box, Heading, IconButton, Spinner } from '@chakra-ui/react';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import PageContainer from '../components/PageContainer';
-import { useDarkModeColors } from '../lib/useDarkModeColors';
+import { MONTH_NAMES as MONTHS, averageMonth, rankCategories, withRunningTotal, yearSummary } from '../lib/reportView';
+import YearChart from '../components/reports/YearChart';
+import RunningChart from '../components/reports/RunningChart';
+import ExpenseTreemap from '../components/reports/ExpenseTreemap';
+import CategoryHeatmap from '../components/reports/CategoryHeatmap';
+import CategoryRanking from '../components/reports/CategoryRanking';
+import MonthTable from '../components/reports/MonthTable';
+import '../styles/ledger.css';
+import '../styles/reports.css';
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-// Bar Chart Component for Income vs Expenses
-const MonthlyBarChart = ({ data, formatCurrency, colors, hoveredBarMonth, onHoverBarMonth, onClickBarMonth }) => {
-  const maxValue = Math.max(
-    ...data.map(d => Math.max(d.income, d.expenses)),
-    1
-  );
-
-  // Helper to get sorted categories for a month (top 5 + Others if needed)
-  const getSortedCategoriesWithOthers = (categoryObj) => {
-    const allCategories = Object.entries(categoryObj || {})
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((a, b) => b.amount - a.amount);
-
-    if (allCategories.length <= 5) {
-      return allCategories;
-    }
-
-    // Take top 5 and combine the rest into "Others"
-    const top5 = allCategories.slice(0, 5);
-    const othersAmount = allCategories.slice(5).reduce((sum, cat) => sum + cat.amount, 0);
-
-    if (othersAmount > 0) {
-      return [...top5, { name: 'Others', amount: othersAmount, isOthers: true }];
-    }
-    return top5;
-  };
-
-  const hoveredData = hoveredBarMonth !== null ? data[hoveredBarMonth] : null;
-  const incomeCategories = hoveredData ? getSortedCategoriesWithOthers(hoveredData.incomeCategories) : [];
-  const expenseCategories = hoveredData ? getSortedCategoriesWithOthers(hoveredData.expenseCategories) : [];
-
-  return (
-    <Flex gap={{ base: 3, md: 4 }} h="100%" direction={{ base: 'column', md: 'row' }}>
-      {/* Chart area */}
-      <Box flex="1" overflowX="auto" display="flex" flexDirection="column">
-        <Flex gap={1} flex="1" minW={{ base: '300px', md: '400px' }} align="flex-end" pb={1}>
-          {data.map((month, index) => {
-            const incomePercent = maxValue > 0 ? (month.income / maxValue) * 100 : 0;
-            const expensePercent = maxValue > 0 ? (month.expenses / maxValue) * 100 : 0;
-            const hasData = month.income > 0 || month.expenses > 0;
-            const isHovered = hoveredBarMonth === index;
-
-            return (
-              <Flex
-                key={index}
-                direction="column"
-                align="center"
-                flex="1"
-                h="100%"
-                onPointerEnter={(e) => e.pointerType === 'mouse' && onHoverBarMonth(index)}
-                onPointerLeave={(e) => e.pointerType === 'mouse' && onHoverBarMonth(null)}
-                onClick={() => onClickBarMonth(index)}
-                cursor="pointer"
-              >
-                {/* Bars container - takes remaining space */}
-                <Flex gap={{ base: 0.5, md: 1 }} align="flex-end" flex="1" w="100%" justify="center">
-                  {/* Income bar */}
-                  <Box
-                    w={{ base: isHovered ? "14px" : "10px", md: isHovered ? "20px" : "16px" }}
-                    h={`${Math.max(incomePercent, hasData && month.income > 0 ? 1 : 0)}%`}
-                    bg="linear-gradient(180deg, #34D399 0%, #059669 100%)"
-                    borderRadius="3px 3px 0 0"
-                    transition="all 0.2s ease"
-                    opacity={hoveredBarMonth !== null && !isHovered ? 0.4 : 1}
-                    boxShadow={isHovered ? "0 2px 8px rgba(16, 185, 129, 0.4)" : "none"}
-                  />
-                  {/* Expense bar */}
-                  <Box
-                    w={{ base: isHovered ? "14px" : "10px", md: isHovered ? "20px" : "16px" }}
-                    h={`${Math.max(expensePercent, hasData && month.expenses > 0 ? 1 : 0)}%`}
-                    bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)"
-                    borderRadius="3px 3px 0 0"
-                    transition="all 0.2s ease"
-                    opacity={hoveredBarMonth !== null && !isHovered ? 0.4 : 1}
-                    boxShadow={isHovered ? "0 2px 8px rgba(239, 68, 68, 0.4)" : "none"}
-                  />
-                </Flex>
-                {/* Month label */}
-                <Text
-                  fontSize={{ base: '10px', md: '12px' }}
-                  color={isHovered ? colors.textPrimary : colors.textSecondary}
-                  fontWeight={isHovered ? "700" : "600"}
-                  transition="all 0.2s ease"
-                  mt={1}
-                  flexShrink={0}
-                >
-                  {MONTH_ABBR[index]}
-                </Text>
-              </Flex>
-            );
-          })}
-        </Flex>
-      </Box>
-
-      {/* Details panel - below on mobile, right side on desktop */}
-      <Box
-        w={{ base: '100%', md: '180px' }}
-        flexShrink={0}
-        bg={colors.rowStripedBg}
-        p={3}
-        borderRadius="10px"
-        display="flex"
-        flexDirection="column"
-        minH={{ base: 'auto', md: 0 }}
-        overflowY={{ base: 'visible', md: 'auto' }}
-      >
-        {hoveredData ? (
-          <>
-            <Text fontSize="sm" fontWeight="700" color={colors.textPrimary} mb={2}>
-              {MONTHS[hoveredBarMonth]}
-            </Text>
-
-            {/* Mobile: horizontal layout for income/expense */}
-            <Flex direction={{ base: 'row', md: 'column' }} gap={{ base: 4, md: 0 }}>
-              {/* Income section */}
-              <Box mb={{ base: 0, md: 2 }} flex={{ base: 1, md: 'none' }}>
-                <Flex justify="space-between" align="center" mb={1}>
-                  <HStack gap={1}>
-                    <Box w="8px" h="8px" borderRadius="2px" bg="#10B981" />
-                    <Text fontSize="xs" fontWeight="600" color="green.500">Income</Text>
-                  </HStack>
-                  <Text fontSize="xs" fontWeight="700" color="green.500">
-                    {formatCurrency(hoveredData.income)}
-                  </Text>
-                </Flex>
-                {incomeCategories.length > 0 && (
-                  <VStack gap={0} align="stretch" pl={3} display={{ base: 'none', md: 'flex' }}>
-                    {incomeCategories.map((cat) => (
-                      <Flex key={cat.name} justify="space-between" fontSize="11px" color={colors.textSecondary} py={0.5}>
-                        <Text noOfLines={1} maxW={{ base: '70px', md: '90px' }} fontStyle={cat.isOthers ? 'italic' : 'normal'}>{cat.name}</Text>
-                        <Text fontWeight="500" fontStyle={cat.isOthers ? 'italic' : 'normal'}>{formatCurrency(cat.amount)}</Text>
-                      </Flex>
-                    ))}
-                  </VStack>
-                )}
-              </Box>
-
-              {/* Expense section */}
-              <Box mb={{ base: 0, md: 2 }} flex={{ base: 1, md: '1' }}>
-                <Flex justify="space-between" align="center" mb={1}>
-                  <HStack gap={1}>
-                    <Box w="8px" h="8px" borderRadius="2px" bg="#EF4444" />
-                    <Text fontSize="xs" fontWeight="600" color="red.500">Expenses</Text>
-                  </HStack>
-                  <Text fontSize="xs" fontWeight="700" color="red.500">
-                    {formatCurrency(hoveredData.expenses)}
-                  </Text>
-                </Flex>
-                {expenseCategories.length > 0 && (
-                  <VStack gap={0} align="stretch" pl={3} display={{ base: 'none', md: 'flex' }}>
-                    {expenseCategories.map((cat) => (
-                      <Flex key={cat.name} justify="space-between" fontSize="11px" color={colors.textSecondary} py={0.5}>
-                        <Text noOfLines={1} maxW={{ base: '70px', md: '90px' }} fontStyle={cat.isOthers ? 'italic' : 'normal'}>{cat.name}</Text>
-                        <Text fontWeight="500" fontStyle={cat.isOthers ? 'italic' : 'normal'}>{formatCurrency(cat.amount)}</Text>
-                      </Flex>
-                    ))}
-                  </VStack>
-                )}
-              </Box>
-            </Flex>
-
-            {/* Balance */}
-            <Box h="1px" bg={colors.borderColor} mb={2} mt={{ base: 2, md: 'auto' }} />
-            <Flex justify="space-between">
-              <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Balance:</Text>
-              <Text
-                fontSize="sm"
-                fontWeight="700"
-                color={hoveredData.balance >= 0 ? 'green.500' : 'red.500'}
-              >
-                {hoveredData.balance >= 0 ? '+' : ''}{formatCurrency(hoveredData.balance)}
-              </Text>
-            </Flex>
-          </>
-        ) : (
-          <Flex h={{ base: 'auto', md: '100%' }} py={{ base: 2, md: 0 }} align="center" justify="center" flex="1">
-            <Text fontSize="xs" color={colors.textMuted} textAlign="center">
-              <Box as="span" display={{ base: 'inline', md: 'none' }}>Tap a month to see details</Box>
-              <Box as="span" display={{ base: 'none', md: 'inline' }}>Hover over a month<br />to see details</Box>
-            </Text>
-          </Flex>
-        )}
-      </Box>
-    </Flex>
-  );
-};
-
-// Trend Line Chart Component with hover effects
-const TrendLineChart = ({ data, formatCurrency, hoveredMonth, onHoverMonth, colors }) => {
-  const values = data.map(d => d.balance);
-  const maxVal = Math.max(...values.map(Math.abs), 1);
-  const width = 800;
-  const height = 220;
-  const paddingTop = 30;
-  const paddingBottom = 45;
-  const paddingLeft = 60;
-  const paddingRight = 30;
-  const chartWidth = width - paddingLeft - paddingRight;
-  const chartHeight = height - paddingTop - paddingBottom;
-  const zeroY = paddingTop + chartHeight / 2;
-
-  // Find last month with data
-  const lastMonthWithData = data.reduce((last, d, i) => (d.income > 0 || d.expenses > 0) ? i : last, 0);
-
-  // Generate points for the line
-  const points = data.map((d, i) => {
-    const x = paddingLeft + (i / (data.length - 1)) * chartWidth;
-    const y = zeroY - (d.balance / maxVal) * (chartHeight / 2);
-    return { x, y, balance: d.balance, month: MONTH_ABBR[i], income: d.income, expenses: d.expenses, hasData: d.income > 0 || d.expenses > 0 };
-  });
-
-  // Only draw line up to last month with data
-  const pointsWithData = points.slice(0, lastMonthWithData + 1);
-
-  const pathD = pointsWithData
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
-    .join(' ');
-
-  // Area fill paths - only up to last month with data
-  const areaD = pointsWithData.length > 0
-    ? `${pathD} L ${pointsWithData[pointsWithData.length - 1].x} ${zeroY} L ${paddingLeft} ${zeroY} Z`
-    : '';
-
-  // Y-axis labels
-  const yLabels = [
-    { value: maxVal, y: paddingTop },
-    { value: maxVal / 2, y: paddingTop + chartHeight / 4 },
-    { value: 0, y: zeroY },
-    { value: -maxVal / 2, y: zeroY + chartHeight / 4 },
-    { value: -maxVal, y: paddingTop + chartHeight },
-  ];
-
-  const formatShort = (val) => {
-    if (Math.abs(val) >= 1000) {
-      return `$${(val / 1000).toFixed(0)}k`;
-    }
-    return `$${val.toFixed(0)}`;
-  };
-
-  const hoveredPoint = hoveredMonth !== null ? points[hoveredMonth] : null;
-
-  return (
-    <Box overflowX={{ base: 'auto', md: 'visible' }} position="relative">
-      <Box minW={{ base: '700px', md: 'auto' }}>
-        <svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}
-          style={{ width: '100%', height: 'auto', maxWidth: '100%' }}
-        >
-        {/* Grid lines */}
-        {yLabels.map((label, i) => (
-          <g key={i}>
-            <line
-              x1={paddingLeft}
-              y1={label.y}
-              x2={width - paddingRight}
-              y2={label.y}
-              stroke={label.value === 0 ? '#9CA3AF' : '#F3F4F6'}
-              strokeWidth={label.value === 0 ? 1.5 : 1}
-              strokeDasharray={label.value === 0 ? '0' : '4,4'}
-            />
-            <text
-              x={paddingLeft - 10}
-              y={label.y + 4}
-              textAnchor="end"
-              fontSize="12"
-              fontWeight="500"
-              fill="#6B7280"
-            >
-              {formatShort(label.value)}
-            </text>
-          </g>
-        ))}
-
-        {/* Area gradient fill */}
-        <path
-          d={areaD}
-          fill="url(#balanceTrendGradient)"
-          opacity="0.4"
-        />
-
-        {/* Line */}
-        <path
-          d={pathD}
-          fill="none"
-          stroke="url(#lineGradient)"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Hover vertical line */}
-        {hoveredPoint && (
-          <line
-            x1={hoveredPoint.x}
-            y1={paddingTop}
-            x2={hoveredPoint.x}
-            y2={height - paddingBottom}
-            stroke="#6B7280"
-            strokeWidth="1"
-            strokeDasharray="4,4"
-          />
-        )}
-
-        {/* Points and month labels */}
-        {points.map((p, i) => {
-          const isHovered = hoveredMonth === i;
-          const hasData = p.income > 0 || p.expenses > 0;
-          return (
-            <g key={i}>
-              {/* Clickable area */}
-              <rect
-                x={p.x - 25}
-                y={paddingTop}
-                width={50}
-                height={chartHeight}
-                fill="transparent"
-                style={{ cursor: 'pointer' }}
-                onMouseEnter={() => onHoverMonth(i)}
-                onMouseLeave={() => onHoverMonth(null)}
-              />
-              {/* Point - only show if has data */}
-              {hasData && (
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={isHovered ? 8 : 6}
-                  fill={p.balance >= 0 ? '#10B981' : '#EF4444'}
-                  stroke="white"
-                  strokeWidth={isHovered ? 3 : 2}
-                  style={{ transition: 'all 0.15s ease', cursor: 'pointer' }}
-                  onMouseEnter={() => onHoverMonth(i)}
-                  onMouseLeave={() => onHoverMonth(null)}
-                />
-              )}
-              {/* Month label - always show */}
-              <text
-                x={p.x}
-                y={height - paddingBottom + 20}
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight={isHovered ? '600' : '500'}
-                fill={isHovered ? '#1F2937' : '#6B7280'}
-              >
-                {p.month}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Gradient definitions */}
-        <defs>
-          <linearGradient id="balanceTrendGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.5" />
-            <stop offset="50%" stopColor="#3B82F6" stopOpacity="0.1" />
-            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#3B82F6" />
-            <stop offset="100%" stopColor="#8B5CF6" />
-          </linearGradient>
-        </defs>
-        </svg>
-      </Box>
-
-      {/* Hover tooltip */}
-      {hoveredPoint && (
-        <Box
-          position="absolute"
-          top={{ base: '5px', md: '10px' }}
-          right={{ base: '10px', md: '20px' }}
-          bg={colors.cardBg}
-          p={{ base: 3, md: 4 }}
-          borderRadius="12px"
-          boxShadow="0 4px 16px rgba(0,0,0,0.15)"
-          border="1px solid #E5E7EB"
-          minW={{ base: '150px', md: '180px' }}
-          zIndex={10}
-        >
-          <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color={colors.textPrimary} mb={2}>
-            {data[hoveredMonth]?.month}
-          </Text>
-          <Flex justify="space-between" mb={2} gap={4}>
-            <Text fontSize={{ base: 'sm', md: 'md' }} color={colors.textSecondary}>Income:</Text>
-            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="green.600">
-              {formatCurrency(hoveredPoint.income)}
-            </Text>
-          </Flex>
-          <Flex justify="space-between" mb={2} gap={4}>
-            <Text fontSize={{ base: 'sm', md: 'md' }} color={colors.textSecondary}>Expenses:</Text>
-            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="600" color="red.500">
-              {formatCurrency(hoveredPoint.expenses)}
-            </Text>
-          </Flex>
-          <Box h="1px" bg={colors.borderColor} my={2} />
-          <Flex justify="space-between" gap={4}>
-            <Text fontSize={{ base: 'sm', md: 'md' }} color={colors.textSecondary}>Balance:</Text>
-            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="700" color={hoveredPoint.balance >= 0 ? 'green.600' : 'red.500'}>
-              {hoveredPoint.balance >= 0 ? '+' : ''}{formatCurrency(hoveredPoint.balance)}
-            </Text>
-          </Flex>
-        </Box>
-      )}
-    </Box>
-  );
-};
-
-// Category Donut Chart with hover effects (matching Dashboard style)
-const CategoryDonutChart = ({ categories, total, formatCurrency, hoveredCategory, onHoverCategory, themeColors, othersExpanded, onToggleOthers, centerLabel = 'Total Spent' }) => {
-  const size = 180;
-  const strokeWidth = 35;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const center = size / 2;
-
-  const colors = [
-    '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#10B981',
-    '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'
-  ];
-
-  // Get color for a category
-  const getCategoryColor = (name, index) => {
-    if (name === 'Others') return '#9CA3AF';
-    return colors[index % colors.length];
-  };
-
-  // Find hovered category data
-  const hoveredCat = hoveredCategory
-    ? categories.find(c => c.name === hoveredCategory)
-    : null;
-
-  // Calculate segments
-  let currentAngle = 0;
-  const segments = categories.map((cat, index) => {
-    const percent = total > 0 ? (cat.amount / total) * 100 : 0;
-    const angle = (percent / 100) * 360;
-    const startAngle = currentAngle;
-    currentAngle += angle;
-    return { ...cat, percent, startAngle, angle, index };
-  });
-
-  return (
-    <Flex direction="column" align="center" gap={4}>
-      <Box position="relative">
-        <svg width={size} height={size} style={{ overflow: 'visible' }}>
-          {/* Background circle */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke="#F3F4F6"
-            strokeWidth={strokeWidth}
-          />
-          {/* Category segments */}
-          {segments.map((seg) => {
-            const dashLength = (seg.percent / 100) * circumference;
-            const dashOffset = -(seg.startAngle / 360) * circumference;
-            const isHovered = hoveredCategory === seg.name;
-            const isOtherHovered = hoveredCategory && !isHovered;
-
-            return (
-              <circle
-                key={seg.name}
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                stroke={getCategoryColor(seg.name, seg.index)}
-                strokeWidth={isHovered ? strokeWidth + 8 : strokeWidth}
-                strokeDasharray={`${dashLength} ${circumference}`}
-                strokeDashoffset={dashOffset}
-                transform={`rotate(-90 ${center} ${center})`}
-                style={{
-                  transition: 'all 0.2s ease',
-                  opacity: isOtherHovered ? 0.3 : 1,
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={() => onHoverCategory(seg.name)}
-                onMouseLeave={() => onHoverCategory(null)}
-              />
-            );
-          })}
-        </svg>
-        {/* Center text */}
-        <Box
-          position="absolute"
-          top="50%"
-          left="50%"
-          transform="translate(-50%, -50%)"
-          textAlign="center"
-          pointerEvents="none"
-        >
-          {hoveredCat ? (
-            <>
-              <Text fontSize="xs" color={themeColors.textSecondary} fontWeight="600" noOfLines={1} maxW="80px">
-                {hoveredCat.name}
-              </Text>
-              <Text fontSize="lg" fontWeight="800" color={themeColors.textPrimary}>
-                {formatCurrency(hoveredCat.amount)}
-              </Text>
-              <Text fontSize="sm" fontWeight="600" color={themeColors.textSecondary}>
-                {total > 0 ? ((hoveredCat.amount / total) * 100).toFixed(0) : 0}%
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text fontSize="xs" color={themeColors.textSecondary} fontWeight="500">{centerLabel}</Text>
-              <Text fontSize="xl" fontWeight="800" color={themeColors.textPrimary}>
-                {formatCurrency(total)}
-              </Text>
-            </>
-          )}
-        </Box>
-      </Box>
-      {/* Legend */}
-      <VStack gap={1} align="stretch" w="100%">
-        {categories.map((cat, index) => {
-          const isHovered = hoveredCategory === cat.name;
-          const isOtherHovered = hoveredCategory && !isHovered;
-          const isOthersCategory = cat.name === 'Others';
-          return (
-            <Box key={cat.name} position={isOthersCategory ? 'relative' : undefined}>
-              <Flex
-                justify="space-between"
-                align="center"
-                fontSize="sm"
-                py={1}
-                px={2}
-                borderRadius="6px"
-                bg={isHovered || (isOthersCategory && othersExpanded) ? themeColors.rowStripedBg : 'transparent'}
-                opacity={isOtherHovered ? 0.4 : 1}
-                transition="all 0.15s"
-                cursor="pointer"
-                onClick={isOthersCategory ? onToggleOthers : undefined}
-                onMouseEnter={() => onHoverCategory(cat.name)}
-                onMouseLeave={() => onHoverCategory(null)}
-              >
-                <HStack gap={2}>
-                  {isOthersCategory && (
-                    <Text fontSize="xs" color={themeColors.textMuted} ml={-1}>
-                      {othersExpanded ? '▼' : '▶'}
-                    </Text>
-                  )}
-                  <Box w="10px" h="10px" borderRadius="full" bg={getCategoryColor(cat.name, index)} flexShrink={0} />
-                  <Text color={themeColors.textSecondary} noOfLines={1} fontWeight={isHovered ? '600' : '500'}>{cat.name}</Text>
-                </HStack>
-                <HStack gap={2}>
-                  <Text fontWeight="600" color={themeColors.textPrimary}>{formatCurrency(cat.amount)}</Text>
-                  <Text fontSize="sm" fontWeight="500" color={themeColors.textSecondary}>
-                    {total > 0 ? ((cat.amount / total) * 100).toFixed(0) : 0}%
-                  </Text>
-                </HStack>
-              </Flex>
-              {/* Expanded Others breakdown */}
-              {isOthersCategory && othersExpanded && cat.otherCategories && cat.otherCategories.length > 0 && (
-                <VStack
-                  align="stretch"
-                  gap={0.5}
-                  pl={{ base: 4, md: 6 }}
-                  pr={{ base: 1, md: 2 }}
-                  py={2}
-                  position="absolute"
-                  top="100%"
-                  left={0}
-                  right={0}
-                  zIndex={10}
-                  bg={themeColors.cardBg}
-                  borderRadius="6px"
-                  maxH={{ base: '150px', md: '200px' }}
-                  overflowY="auto"
-                  boxShadow="lg"
-                  border="1px solid"
-                  borderColor={themeColors.borderColor}
-                >
-                  {cat.otherCategories.map((otherCat, otherIndex) => (
-                    <Flex
-                      key={otherCat.name}
-                      justify="space-between"
-                      align="center"
-                      px={{ base: 1, md: 2 }}
-                      py={0.5}
-                      fontSize={{ base: '11px', md: 'xs' }}
-                    >
-                      <HStack gap={1.5} flex="1" minW="0">
-                        <Box
-                          w="6px"
-                          h="6px"
-                          borderRadius="full"
-                          bg={getCategoryColor(otherCat.name, index + otherIndex + 1)}
-                          flexShrink={0}
-                        />
-                        <Text color={themeColors.textSecondary} noOfLines={1} minW="0">
-                          {otherCat.name}
-                        </Text>
-                        <Text color={themeColors.textMuted} flexShrink={0}>
-                          {total > 0 ? ((otherCat.amount / total) * 100).toFixed(1) : 0}%
-                        </Text>
-                      </HStack>
-                      <Text fontWeight="500" color={themeColors.textPrimary} flexShrink={0} ml={2}>
-                        {formatCurrency(otherCat.amount)}
-                      </Text>
-                    </Flex>
-                  ))}
-                </VStack>
-              )}
-            </Box>
-          );
-        })}
-      </VStack>
-    </Flex>
-  );
-};
-
-// Summary Card Component
-const SummaryCard = ({ title, value, subtitle, color, bgGradient, icon }) => (
-  <Box
-    p={5}
-    borderRadius="20px"
-    bg={bgGradient}
-    color="white"
-    position="relative"
-    overflow="hidden"
-    boxShadow="0 4px 20px rgba(0,0,0,0.1)"
-  >
-    <Box
-      position="absolute"
-      top="-20px"
-      right="-20px"
-      w="80px"
-      h="80px"
-      borderRadius="full"
-      bg="rgba(255,255,255,0.1)"
-    />
-    <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em" opacity={0.8}>
-      {title}
-    </Text>
-    <Text fontSize="2xl" fontWeight="800" mt={1}>
-      {value}
-    </Text>
-    {subtitle && (
-      <Text fontSize="sm" fontWeight="500" opacity={0.9} mt={1}>
-        {subtitle}
-      </Text>
-    )}
-  </Box>
-);
+// The earliest year the app has records for.
+const FIRST_YEAR = 2025;
 
 export default function Reports() {
   const { user } = useAuth();
-  const colors = useDarkModeColors();
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [monthlyData, setMonthlyData] = useState([]);
   const [categoryData, setCategoryData] = useState([]);
   const [totals, setTotals] = useState({ income: 0, expenses: 0, balance: 0 });
-  const [hoveredCategory, setHoveredCategory] = useState(null);
-  const [hoveredMonth, setHoveredMonth] = useState(null);
   const [pinnedBarMonth, setPinnedBarMonth] = useState(null);
   const [previewBarMonth, setPreviewBarMonth] = useState(null);
-  const [othersExpanded, setOthersExpanded] = useState(false);
   const [incomeCategoryData, setIncomeCategoryData] = useState([]);
-  const [hoveredIncomeCategory, setHoveredIncomeCategory] = useState(null);
-  const [incomeOthersExpanded, setIncomeOthersExpanded] = useState(false);
 
-  // Custom dropdown state
-  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
-  const yearDropdownRef = useRef(null);
-
-  // Generate year options
-  const yearOptions = [2026, 2025];
+  // From the first year with records to this one, newest first.
+  const thisYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: thisYear - FIRST_YEAR + 1 }, (_, index) => thisYear - index);
+  const changeYear = (year) => {
+    if (!yearOptions.includes(year)) return;
+    setSelectedYear(year);
+    setPinnedBarMonth(null);
+    setPreviewBarMonth(null);
+  };
 
   useEffect(() => {
     if (user) {
       loadYearlyData();
     }
   }, [user, selectedYear]);
-
-  // Handle click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target)) {
-        setYearDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const loadYearlyData = async () => {
     setLoading(true);
@@ -851,362 +182,141 @@ export default function Reports() {
 
   if (loading) {
     return (
-      <PageContainer>
-        <Flex w="100%" minH="60vh" align="center" justify="center">
-          <VStack gap={4}>
-            <Spinner size="xl" />
-            <Text>Loading report...</Text>
-          </VStack>
-        </Flex>
-      </PageContainer>
+      <Box className="bw-surface bw-page">
+        <Box className="bw-layout">
+          <div className="bw-status" role="status">
+            <Spinner size="sm" color="currentColor" />
+            Loading the report for {selectedYear}…
+          </div>
+        </Box>
+      </Box>
     );
   }
 
+  const months = withRunningTotal(monthlyData);
+  const summary = yearSummary(monthlyData, totals, formatCurrency);
+  const average = averageMonth(monthlyData);
+  const expenseRanking = rankCategories(categoryData);
+  const currentMonth = selectedYear === thisYear ? new Date().getMonth() : null;
+  // The chart opens on the latest month with records; hovering previews, a click keeps.
+  const latest = months.reduce((last, month, index) => (month.recorded ? index : last), null);
+  const selectedMonth = previewBarMonth ?? pinnedBarMonth ?? latest;
+  const stepButton = { variant: 'ghost', minW: '36px', h: '40px', color: 'var(--bw-muted)', _hover: { bg: 'var(--bw-hover)' } };
+
   return (
-    <PageContainer>
-      <VStack gap={6} align="stretch">
-        {/* Header */}
-        <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
-          <Box>
-            <Heading size="xl" color={colors.textPrimary}>Financial Report</Heading>
-            <Text color={colors.textSecondary} mt={1}>Your yearly financial overview</Text>
-          </Box>
-          <HStack gap={2}>
-            <Box ref={yearDropdownRef} position="relative">
-              {/* Dropdown Trigger */}
-              <Box
-                onClick={() => setYearDropdownOpen(!yearDropdownOpen)}
-                cursor="pointer"
-                px={5}
-                py={2.5}
-                display="flex"
-                alignItems="center"
-                gap={2}
-                borderRadius="12px"
-                borderWidth="2px"
-                borderColor={yearDropdownOpen ? 'blue.500' : colors.borderColor}
-                bg={colors.cardBg}
-                _hover={{ borderColor: 'blue.400' }}
-                transition="all 0.2s"
-              >
-                <Text
-                  color={colors.textPrimary}
-                  fontSize="md"
-                  fontWeight="600"
-                >
-                  {selectedYear}
-                </Text>
-                <Box
-                  as="span"
-                  transform={yearDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-                  transition="transform 0.2s"
-                  color={colors.textSecondary}
-                  fontSize="xs"
-                >
-                  ▼
-                </Box>
-              </Box>
+    <Box className="bw-surface bw-page">
+      <Box className="bw-layout">
+        <header className="bw-masthead">
+          <div>
+            <Heading as="h1" className="bw-title">Financial Report</Heading>
+            <p className="bw-subtitle">
+              {selectedYear}, {monthsWithData === 0 ? 'nothing recorded yet' : `${monthsWithData} ${monthsWithData === 1 ? 'month' : 'months'} recorded`}
+            </p>
+          </div>
 
-              {/* Dropdown List */}
-              {yearDropdownOpen && (
-                <Box
-                  position="absolute"
-                  top="100%"
-                  right={0}
-                  zIndex={1000}
-                  mt={1}
-                  bg={colors.cardBg}
-                  borderWidth="1px"
-                  borderColor={colors.borderColor}
-                  borderRadius="12px"
-                  boxShadow="lg"
-                  minW="100px"
-                  overflowY="auto"
-                >
-                  <VStack gap={0} align="stretch" p={1}>
-                    {yearOptions.map((year) => {
-                      const isSelected = year === selectedYear;
-                      return (
-                        <HStack
-                          key={year}
-                          px={3}
-                          py={2.5}
-                          cursor="pointer"
-                          bg={isSelected ? colors.rowStripedBg : 'transparent'}
-                          _hover={{ bg: colors.rowStripedBg }}
-                          borderRadius="8px"
-                          onClick={() => {
-                            setSelectedYear(year);
-                            setYearDropdownOpen(false);
-                          }}
-                          justify="space-between"
-                          transition="background 0.1s"
-                        >
-                          <Text
-                            color={colors.textPrimary}
-                            fontSize="sm"
-                            fontWeight={isSelected ? '600' : '400'}
-                          >
-                            {year}
-                          </Text>
-                          {isSelected && (
-                            <Text color="blue.500" fontSize="sm">✓</Text>
-                          )}
-                        </HStack>
-                      );
-                    })}
-                  </VStack>
-                </Box>
-              )}
-            </Box>
-          </HStack>
-        </Flex>
+          <div className="bw-month-control">
+            <IconButton {...stepButton} aria-label="Go to previous year" disabled={selectedYear <= FIRST_YEAR} onClick={() => changeYear(selectedYear - 1)}>
+              <FiChevronLeft />
+            </IconButton>
+            <select
+              className="bw-select"
+              style={{ border: 0, fontWeight: 600 }}
+              aria-label="Year"
+              value={selectedYear}
+              onChange={(event) => changeYear(Number(event.target.value))}
+            >
+              {yearOptions.map((year) => <option value={year} key={year}>{year}</option>)}
+            </select>
+            <IconButton {...stepButton} aria-label="Go to next year" disabled={selectedYear >= thisYear} onClick={() => changeYear(selectedYear + 1)}>
+              <FiChevronRight />
+            </IconButton>
+          </div>
+        </header>
 
-        {/* Summary Cards */}
-        <SimpleGrid columns={{ base: 2, md: 4 }} gap={4}>
-          <SummaryCard
-            title="Total Income"
-            value={formatCurrency(totals.income)}
-            subtitle={`~${formatCurrencyShort(avgMonthlyIncome)}/month`}
-            bgGradient="linear-gradient(135deg, #10B981 0%, #059669 100%)"
+        <section className="bw-ledger" aria-label={`The year ${selectedYear}`}>
+          <dl className="bw-figures">
+            <div className="bw-figure bw-figure--lead">
+              <dt>Net in {selectedYear}</dt>
+              <dd data-tone={totals.balance < 0 ? 'bad' : 'good'}>{totals.balance > 0 ? '+' : ''}{formatCurrency(totals.balance)}</dd>
+            </div>
+            <div className="bw-figure">
+              <dt>Income</dt>
+              <dd>{formatCurrency(totals.income)}</dd>
+              <small>about {formatCurrencyShort(avgMonthlyIncome)} a month</small>
+            </div>
+            <div className="bw-figure">
+              <dt>Expenses</dt>
+              <dd>{formatCurrency(totals.expenses)}</dd>
+              <small>about {formatCurrencyShort(avgMonthlyExpense)} a month</small>
+            </div>
+            <div className="bw-figure">
+              <dt>Savings rate</dt>
+              <dd>{savingsRate}%</dd>
+              <small>{totals.balance < 0 ? 'spent beyond income' : 'of income kept'}</small>
+            </div>
+          </dl>
+
+          <div className="reports-summary">
+            <p className="reports-summary__headline" data-tone={summary.tone}>{summary.headline}</p>
+            {summary.detail && <p className="reports-summary__detail">{summary.detail}</p>}
+          </div>
+
+          <YearChart
+            months={months}
+            selected={selectedMonth}
+            currentMonth={currentMonth}
+            onSelect={setPinnedBarMonth}
+            onPreview={setPreviewBarMonth}
+            formatCurrency={formatCurrency}
           />
-          <SummaryCard
-            title="Total Expenses"
-            value={formatCurrency(totals.expenses)}
-            subtitle={`~${formatCurrencyShort(avgMonthlyExpense)}/month`}
-            bgGradient="linear-gradient(135deg, #EF4444 0%, #DC2626 100%)"
+        </section>
+
+        <div className="reports-pair">
+          <RunningChart months={months} formatCurrency={formatCurrency} />
+          {average && (
+            <section className="bw-panel" aria-labelledby="reports-average-heading">
+              <header className="reports-rank__head">
+                <h2 id="reports-average-heading">An average month</h2>
+                <span>over {average.months} {average.months === 1 ? 'month' : 'months'}</span>
+              </header>
+              <dl className="reports-average">
+                <div><dt>Income</dt><dd>{formatCurrency(average.income)}</dd></div>
+                <div><dt>Expenses</dt><dd>{formatCurrency(average.expenses)}</dd></div>
+                <div>
+                  <dt>Net</dt>
+                  <dd data-tone={average.net < 0 ? 'bad' : 'good'}>{average.net > 0 ? '+' : ''}{formatCurrency(average.net)}</dd>
+                </div>
+                <div><dt>Most spent</dt><dd>{formatCurrency(average.most.expenses)}<small>{average.most.name}</small></dd></div>
+                <div><dt>Least spent</dt><dd>{formatCurrency(average.least.expenses)}<small>{average.least.name}</small></dd></div>
+              </dl>
+            </section>
+          )}
+        </div>
+
+        <div className="reports-pair">
+          <ExpenseTreemap categories={expenseRanking} formatCurrency={formatCurrency} />
+          <CategoryRanking
+            kind="expenses"
+            title="Where the money goes"
+            categories={expenseRanking}
+            total={totals.expenses}
+            formatCurrency={formatCurrency}
           />
-          <SummaryCard
-            title="Net Balance"
-            value={formatCurrency(totals.balance)}
-            subtitle={totals.balance >= 0 ? 'Surplus' : 'Deficit'}
-            bgGradient={totals.balance >= 0
-              ? "linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)"
-              : "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)"
-            }
+        </div>
+
+        <div className="reports-pair">
+          <CategoryHeatmap months={months} selected={selectedMonth} currentMonth={currentMonth} formatCurrency={formatCurrency} />
+          <CategoryRanking
+            kind="income"
+            title="Where it comes from"
+            categories={rankCategories(incomeCategoryData)}
+            total={totals.income}
+            formatCurrency={formatCurrency}
           />
-          <SummaryCard
-            title="Savings Rate"
-            value={`${savingsRate}%`}
-            subtitle={`${monthsWithData} months tracked`}
-            bgGradient="linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)"
-          />
-        </SimpleGrid>
+        </div>
 
-        {/* Monthly Bar Chart */}
-        <Box
-          p={4}
-          bg={colors.cardBg}
-          borderRadius="20px"
-          boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-          border="1px solid" borderColor={colors.borderSubtle}
-          display="flex"
-          flexDirection="column"
-          minH="280px"
-          overflow="hidden"
-        >
-          <Flex justify="space-between" align="center" mb={2} flexShrink={0}>
-            <Box>
-              <Heading size="md" color={colors.textPrimary}>Income vs Expenses</Heading>
-              <Text fontSize="sm" color={colors.textSecondary}>Monthly comparison</Text>
-            </Box>
-            <HStack gap={4}>
-              <HStack gap={1}>
-                <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #34D399 0%, #059669 100%)" />
-                <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Income</Text>
-              </HStack>
-              <HStack gap={1}>
-                <Box w="12px" h="12px" borderRadius="3px" bg="linear-gradient(180deg, #F87171 0%, #DC2626 100%)" />
-                <Text fontSize="sm" fontWeight="500" color={colors.textSecondary}>Expenses</Text>
-              </HStack>
-            </HStack>
-          </Flex>
-          <Box flex="1" position="relative" minH={{ base: '200px', md: '0' }}>
-            <Box position="absolute" top={0} left={0} right={0} bottom={0}>
-              <MonthlyBarChart
-                data={monthlyData}
-                formatCurrency={formatCurrency}
-                colors={colors}
-                hoveredBarMonth={previewBarMonth ?? pinnedBarMonth}
-                onHoverBarMonth={setPreviewBarMonth}
-                onClickBarMonth={(index) => setPinnedBarMonth(pinnedBarMonth === index ? null : index)}
-              />
-            </Box>
-          </Box>
-        </Box>
-
-        {/* Category Breakdowns */}
-        <SimpleGrid columns={{ base: 1, md: 2 }} gap={6}>
-          {/* Expense Breakdown */}
-          <Box
-            p={6}
-            bg={colors.cardBg}
-            borderRadius="20px"
-            boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid" borderColor={colors.borderSubtle}
-          >
-            <Heading size="md" color={colors.textPrimary} mb={1}>Expense Breakdown</Heading>
-            <Text fontSize="sm" color={colors.textSecondary} mb={4}>Where your money goes</Text>
-            {categoryData.length > 0 ? (
-              <CategoryDonutChart
-                categories={categoryData}
-                total={totals.expenses}
-                formatCurrency={formatCurrency}
-                hoveredCategory={hoveredCategory}
-                onHoverCategory={setHoveredCategory}
-                themeColors={colors}
-                othersExpanded={othersExpanded}
-                onToggleOthers={() => setOthersExpanded(!othersExpanded)}
-                centerLabel="Total Spent"
-              />
-            ) : (
-              <Flex justify="center" align="center" h="200px">
-                <Text color={colors.textMuted}>No expense data</Text>
-              </Flex>
-            )}
-          </Box>
-
-          {/* Income Breakdown */}
-          <Box
-            p={6}
-            bg={colors.cardBg}
-            borderRadius="20px"
-            boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-            border="1px solid" borderColor={colors.borderSubtle}
-          >
-            <Heading size="md" color={colors.textPrimary} mb={1}>Income Breakdown</Heading>
-            <Text fontSize="sm" color={colors.textSecondary} mb={4}>Where your money comes from</Text>
-            {incomeCategoryData.length > 0 ? (
-              <CategoryDonutChart
-                categories={incomeCategoryData}
-                total={totals.income}
-                formatCurrency={formatCurrency}
-                hoveredCategory={hoveredIncomeCategory}
-                onHoverCategory={setHoveredIncomeCategory}
-                themeColors={colors}
-                othersExpanded={incomeOthersExpanded}
-                onToggleOthers={() => setIncomeOthersExpanded(!incomeOthersExpanded)}
-                centerLabel="Total Earned"
-              />
-            ) : (
-              <Flex justify="center" align="center" h="200px">
-                <Text color={colors.textMuted}>No income data</Text>
-              </Flex>
-            )}
-          </Box>
-        </SimpleGrid>
-
-        {/* Balance Trend */}
-        <Box
-          p={6}
-          bg={colors.cardBg}
-          borderRadius="20px"
-          boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-          border="1px solid" borderColor={colors.borderSubtle}
-        >
-          <Heading size="md" color={colors.textPrimary} mb={1}>Balance Trend</Heading>
-          <Text fontSize="sm" color={colors.textSecondary} mb={4}>Monthly net balance throughout the year</Text>
-          <TrendLineChart
-              data={monthlyData}
-              formatCurrency={formatCurrency}
-              hoveredMonth={hoveredMonth}
-              onHoverMonth={setHoveredMonth}
-              colors={colors}
-            />
-        </Box>
-
-        {/* Detailed Table */}
-        <Box
-          borderRadius={{ base: '12px', md: '20px' }}
-          overflow="hidden"
-          bg={colors.cardBg}
-          boxShadow="0 1px 3px rgba(0,0,0,0.05)"
-          border="1px solid" borderColor={colors.borderSubtle}
-        >
-          <Box p={{ base: 3, md: 5 }} borderBottomWidth="1px" borderColor={colors.borderSubtle}>
-            <Heading size={{ base: 'sm', md: 'md' }} color={colors.textPrimary}>Monthly Breakdown</Heading>
-            <Text fontSize={{ base: 'xs', md: 'sm' }} color={colors.textSecondary}>Detailed view of each month</Text>
-          </Box>
-          <Box>
-            <Table.Root size="sm" w="100%">
-              <Table.Header>
-                <Table.Row bg={colors.rowStripedBg}>
-                  <Table.ColumnHeader py={2} px={{ base: 2, md: 5 }} fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }} w={{ base: '70px', md: 'auto' }}>Month</Table.ColumnHeader>
-                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>Income</Table.ColumnHeader>
-                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>Expenses</Table.ColumnHeader>
-                  <Table.ColumnHeader py={2} px={{ base: 1, md: 5 }} textAlign="right" fontWeight="600" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>Balance</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {monthlyData.map((row, index) => (
-                  <Table.Row key={row.month} _hover={{ bg: colors.rowStripedBg }}>
-                    <Table.Cell py={2} px={{ base: 2, md: 5 }}>
-                      <Text fontWeight="500" color={colors.textSecondary} fontSize={{ base: '11px', md: 'sm' }}>
-                        <Box as="span" display={{ base: 'none', md: 'inline' }}>{row.month}</Box>
-                        <Box as="span" display={{ base: 'inline', md: 'none' }}>{MONTH_ABBR[index]}</Box>
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
-                      <Text color={row.income > 0 ? 'green.600' : colors.textMuted} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
-                        {row.income > 0 ? formatCurrency(row.income) : '-'}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
-                      <Text color={row.expenses > 0 ? 'red.500' : colors.textMuted} fontWeight="500" fontSize={{ base: '11px', md: 'sm' }}>
-                        {row.expenses > 0 ? formatCurrency(row.expenses) : '-'}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell py={2} px={{ base: 1, md: 5 }} textAlign="right">
-                      <Box
-                        display="inline-block"
-                        px={{ base: 1.5, md: 3 }}
-                        py={0.5}
-                        borderRadius="full"
-                        bg={row.balance >= 0 ? 'green.50' : 'red.50'}
-                        color={row.balance >= 0 ? 'green.600' : 'red.600'}
-                        fontWeight="600"
-                        fontSize={{ base: '10px', md: 'sm' }}
-                      >
-                        {row.balance !== 0 ? (row.balance < 0 ? '-' : '+') + formatCurrency(Math.abs(row.balance)) : '-'}
-                      </Box>
-                    </Table.Cell>
-                  </Table.Row>
-                ))}
-                {/* Total Row */}
-                <Table.Row bg="linear-gradient(135deg, #1E293B 0%, #334155 100%)">
-                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 2, md: 5 }}>
-                    <Text fontWeight="700" color="white" fontSize={{ base: '11px', md: 'sm' }}>TOTAL</Text>
-                  </Table.Cell>
-                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 1, md: 5 }} textAlign="right">
-                    <Text fontWeight="700" color="green.300" fontSize={{ base: '11px', md: 'sm' }}>
-                      {formatCurrency(totals.income)}
-                    </Text>
-                  </Table.Cell>
-                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 1, md: 5 }} textAlign="right">
-                    <Text fontWeight="700" color="red.300" fontSize={{ base: '11px', md: 'sm' }}>
-                      {formatCurrency(totals.expenses)}
-                    </Text>
-                  </Table.Cell>
-                  <Table.Cell py={{ base: 2, md: 4 }} px={{ base: 1, md: 5 }} textAlign="right">
-                    <Box
-                      display="inline-block"
-                      px={{ base: 1.5, md: 4 }}
-                      py={0.5}
-                      borderRadius="full"
-                      bg={totals.balance >= 0 ? 'green.500' : 'red.500'}
-                      color="white"
-                      fontWeight="700"
-                      fontSize={{ base: '10px', md: 'sm' }}
-                    >
-                      {totals.balance < 0 ? '-' : '+'}{formatCurrency(Math.abs(totals.balance))}
-                    </Box>
-                  </Table.Cell>
-              </Table.Row>
-            </Table.Body>
-          </Table.Root>
-        </Box>
+        <MonthTable months={months} totals={totals} selected={pinnedBarMonth} formatCurrency={formatCurrency} />
       </Box>
-      </VStack>
-    </PageContainer>
+    </Box>
   );
 }
