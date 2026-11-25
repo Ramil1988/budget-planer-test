@@ -239,7 +239,12 @@
   background: color-mix(in srgb, var(--bw-ink) 12%, transparent);
 }
 
-/* ---- Toolbar ------------------------------------------------------------------------------ */
+/* ---- Filters ------------------------------------------------------------------------------ */
+
+.tx-filters {
+  display: grid;
+  gap: 10px;
+}
 
 .tx-toolbar {
   display: flex;
@@ -256,39 +261,127 @@
 }
 
 .tx-toolbar__search {
-  flex: 1 1 240px;
+  flex: 1 1 260px;
   width: auto;
-  max-width: 420px;
+  min-width: 0;
 }
 
-.tx-toolbar__filters {
+/* The two ends of a custom range sit together and wrap together. */
+.tx-toolbar__range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--bw-muted);
+  font-size: 0.8125rem;
+}
+
+.tx-toolbar__range .bw-input {
+  width: 148px;
+}
+
+.tx-toolbar__type {
+  margin: 0;
+}
+
+.tx-toolbar__type button {
+  min-height: 34px;
+}
+
+.tx-toolbar__category {
+  max-width: 200px;
+}
+
+.tx-toolbar__more {
   display: inline-flex;
   align-items: center;
   gap: 7px;
 }
 
-.tx-toolbar__reset,
-.tx-picked .bw-link {
-  padding: 0 4px;
+/* How many of the filters behind the button are in use. */
+.tx-toolbar__more b {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bw-accent);
+  color: var(--bw-on-accent);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.tx-more {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px clamp(14px, 2vw, 22px) 18px;
+}
+
+/* Every filter in use, written out; each can be taken off on its own. */
+.tx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tx-chips li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 4px 0 11px;
+  border: 1px solid var(--bw-border);
+  border-radius: 15px;
+  background: var(--bw-paper);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-chips li span {
+  overflow-wrap: anywhere;
+}
+
+.tx-chips li button:not(.bw-link) {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 3px;
+  padding: 0;
   border: 0;
+  border-radius: 50%;
   background: none;
+  color: var(--bw-muted);
   cursor: pointer;
 }
 
-.tx-filter-panel {
-  display: grid;
-  gap: 14px;
-  padding: 18px clamp(14px, 2vw, 22px);
+.tx-chips li button:not(.bw-link):hover {
+  background: var(--bw-hover);
+  color: var(--bw-ink);
 }
 
-.tx-filter-panel__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+.tx-chips .tx-chips__clear {
+  padding: 0 0 0 6px;
+  border: 0;
+  background: none;
 }
 
-.tx-filter-panel__actions .bw-button {
-  min-height: 40px;
+.tx-chips__clear .bw-link,
+.tx-nothing__clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.tx-nothing__clear {
+  font-size: inherit;
 }
 
 /* ---- The list ----------------------------------------------------------------------------- */
@@ -611,11 +704,55 @@ button.tx-row__figure:hover {
 
   .tx-toolbar__search {
     flex-basis: 100%;
+  }
+
+  /* On a phone: the search, then period and category side by side, the two dates of a
+     custom range, the type, and the rest. */
+  .tx-toolbar > .bw-select {
+    flex: 1 1 40%;
+    min-width: 0;
     max-width: none;
   }
 
-  .tx-toolbar .bw-select {
+  .tx-toolbar__range {
+    flex: 1 1 100%;
+    order: 1;
+  }
+
+  .tx-toolbar__type {
+    order: 2;
+  }
+
+  .tx-toolbar__more {
+    order: 3;
+  }
+
+  .tx-toolbar__range .bw-input {
     flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .tx-toolbar__type {
+    display: flex;
+    flex: 1 1 100%;
+  }
+
+  .tx-toolbar__type button {
+    flex: 1;
+  }
+
+  .tx-toolbar__more {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .tx-more {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tx-more .bw-field:first-child {
+    grid-column: 1 / -1;
   }
 
   .tx-day__sofar {

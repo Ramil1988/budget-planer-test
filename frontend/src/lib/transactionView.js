@@ -13,6 +13,68 @@ const amountOf = (transaction) => Number(transaction.amount) || 0;
 
 export const today = (now = new Date()) => iso(now);
 
+// ---- Filters -------------------------------------------------------------------------------
+// One object holds every filter, and one function applies them all. Nothing is "applied"
+// by a button: what the object says is what the list shows.
+
+export const PERIODS = [
+  ['this-month', 'This month'],
+  ['last-month', 'Last month'],
+  ['last-3-months', 'Last 3 months'],
+  ['this-year', 'This year'],
+  ['all', 'All time'],
+  ['custom', 'Custom range'],
+];
+
+// `category` and `bank` hold an id or a name, or 'none' for transactions that have neither.
+export const NO_FILTERS = { query: '', period: 'this-month', from: '', to: '', type: '', category: '', bank: '', min: '', max: '' };
+
+// The first and the last day a period covers; an empty string is an open end.
+export function periodRange({ period, from, to }, now = new Date()) {
+  const month = (offset) => new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const endOf = (first) => iso(new Date(first.getFullYear(), first.getMonth() + 1, 0));
+  switch (period) {
+    case 'this-month': return [iso(month(0)), endOf(month(0))];
+    case 'last-month': return [iso(month(-1)), endOf(month(-1))];
+    case 'last-3-months': return [iso(month(-2)), endOf(month(0))];
+    case 'this-year': return [`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`];
+    case 'custom': return from && to && from > to ? [to, from] : [from || '', to || ''];
+    default: return ['', ''];
+  }
+}
+
+// What is typed into the search box is looked for in the description, the category and the
+// bank; a number is also looked for in the amount ("34", "34.00", "$1,918").
+function matches(transaction, query) {
+  const text = [transaction.description, transaction.category, transaction.bank].filter(Boolean).join('\n').toLowerCase();
+  if (text.includes(query)) return true;
+  const digits = query.replace(/[$,\s]/g, '');
+  return /^\d+\.?\d*$/.test(digits) && amountOf(transaction).toFixed(2).includes(digits);
+}
+
+export function applyFilters(transactions, filters, now = new Date()) {
+  const [start, end] = periodRange(filters, now);
+  const query = filters.query.trim().toLowerCase();
+  const min = filters.min === '' ? NaN : parseFloat(filters.min);
+  const max = filters.max === '' ? NaN : parseFloat(filters.max);
+  return transactions.filter((transaction) => {
+    const amount = amountOf(transaction);
+    if (start && transaction.date < start) return false;
+    if (end && transaction.date > end) return false;
+    if (filters.type && transaction.type !== filters.type) return false;
+    if (filters.category && (filters.category === 'none' ? transaction.category_id : transaction.category_id !== filters.category)) return false;
+    if (filters.bank && (filters.bank === 'none' ? transaction.bank : transaction.bank !== filters.bank)) return false;
+    if (!Number.isNaN(min) && amount < min) return false;
+    if (!Number.isNaN(max) && amount > max) return false;
+    return !query || matches(transaction, query);
+  });
+}
+
+// How many filters narrow the list beyond the period.
+export function narrowedBy(filters) {
+  return [filters.query.trim(), filters.type, filters.category, filters.bank, filters.min !== '' || filters.max !== ''].filter(Boolean).length;
+}
+
 // Income, expenses and what is left of the transactions in view, and the largest expense.
 export function summary(transactions) {
   let income = 0;

@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, Heading, Spinner } from '@chakra-ui/react';
-import { LuFilter } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { groupByDay, periodLabel, summary, timeline } from '../lib/transactionView';
+import { NO_FILTERS, applyFilters, groupByDay, periodLabel, periodRange, summary, timeline } from '../lib/transactionView';
 import SpendChart from '../components/transactions/SpendChart';
 import TransactionList from '../components/transactions/TransactionList';
 import TrashList from '../components/transactions/TrashList';
-import FilterPanel from '../components/transactions/FilterPanel';
+import Filters from '../components/transactions/Filters';
 import ConfirmDialog from '../components/transactions/ConfirmDialog';
 import '../styles/ledger.css';
 import '../styles/transactions.css';
@@ -32,41 +31,13 @@ const formatDate = (dateString) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-// The first and the last day of a month, `offset` months from this one.
-const monthRange = (offset) => {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-  const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return [iso(first), iso(last)];
-};
-
 export default function Transactions() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState([]);
-  const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('current');
-
-  // Custom filter states
-  const [showCustomFilters, setShowCustomFilters] = useState(false);
-  const [startDate, setStartDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  });
-  const [endDate, setEndDate] = useState(() => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  });
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
-  const [filterDescription, setFilterDescription] = useState('');
-  const [filterBank, setFilterBank] = useState('');
-  const [filterType, setFilterType] = useState(''); // '' | 'income' | 'expense'
-  const [customFiltersApplied, setCustomFiltersApplied] = useState(false);
+  // Every filter of the list: see NO_FILTERS and applyFilters in lib/transactionView.
+  const [filters, setFilters] = useState(NO_FILTERS);
 
   // The day (or month) picked on the chart: the list shows only it.
   const [pickedBucket, setPickedBucket] = useState(null);
@@ -202,10 +173,6 @@ export default function Transactions() {
     }
   };
 
-  useEffect(() => {
-    filterTransactions();
-  }, [transactions, searchQuery, selectedPeriod, customFiltersApplied, startDate, endDate, minAmount, maxAmount, filterDescription, filterBank, filterType]);
-
   // Refresh trash when switching to trash view (in case items were restored/deleted elsewhere)
   useEffect(() => {
     if (viewMode === 'trash' && user) {
@@ -318,104 +285,6 @@ export default function Transactions() {
     } finally {
       setLoadingTrash(false);
     }
-  };
-
-  const filterTransactions = () => {
-    let filtered = [...transactions];
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(t =>
-        t.description.toLowerCase().includes(query) ||
-        t.category.toLowerCase().includes(query)
-      );
-    }
-
-    // Check if any custom filter field has a value
-    // Income/expense lives on the main toolbar, not in the custom-filter panel,
-    // so it applies on top of whatever period is selected instead of switching
-    // the view into custom-filter mode.
-    if (filterType) {
-      filtered = filtered.filter(t => t.type === filterType);
-    }
-
-    const hasCustomFilterValues = filterDescription.trim() || startDate || endDate || minAmount !== '' || maxAmount !== '' || filterBank !== '';
-
-    // Apply custom filters if explicitly applied OR if any filter field has a value
-    if (customFiltersApplied || hasCustomFilterValues) {
-      // Description filter (searches description and category)
-      if (filterDescription.trim()) {
-        const descQuery = filterDescription.toLowerCase();
-        filtered = filtered.filter(t =>
-          t.description.toLowerCase().includes(descQuery) ||
-          t.category.toLowerCase().includes(descQuery)
-        );
-      }
-      // Date range filter
-      if (startDate) {
-        filtered = filtered.filter(t => t.date >= startDate);
-      }
-      if (endDate) {
-        filtered = filtered.filter(t => t.date <= endDate);
-      }
-      // Amount range filter
-      if (minAmount !== '') {
-        const min = parseFloat(minAmount);
-        if (!isNaN(min)) {
-          filtered = filtered.filter(t => t.amount >= min);
-        }
-      }
-      if (maxAmount !== '') {
-        const max = parseFloat(maxAmount);
-        if (!isNaN(max)) {
-          filtered = filtered.filter(t => t.amount <= max);
-        }
-      }
-      // Bank filter
-      if (filterBank) {
-        filtered = filtered.filter(t => t.bank === filterBank);
-      }
-    } else if (selectedPeriod === 'current') {
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1; // 1-indexed
-      const currentYear = now.getFullYear();
-      filtered = filtered.filter(t => {
-        // Parse YYYY-MM-DD directly to avoid timezone issues
-        const [year, month] = t.date.split('-').map(Number);
-        return month === currentMonth && year === currentYear;
-      });
-    } else if (selectedPeriod === 'last-month') {
-      const now = new Date();
-      let lastMonth = now.getMonth(); // Current month is 0-indexed, so this gives us last month 1-indexed
-      let lastYear = now.getFullYear();
-      if (lastMonth === 0) {
-        lastMonth = 12;
-        lastYear -= 1;
-      }
-      filtered = filtered.filter(t => {
-        // Parse YYYY-MM-DD directly to avoid timezone issues
-        const [year, month] = t.date.split('-').map(Number);
-        return month === lastMonth && year === lastYear;
-      });
-    }
-
-    // Calculate cumulative spending (expenses only, not affected by income)
-    const oldestFirst = [...filtered].reverse();
-    let runningSpend = 0;
-    const balanceMap = new Map();
-    oldestFirst.forEach((t) => {
-      if (t.type === 'expense') {
-        runningSpend += t.amount;
-      }
-      balanceMap.set(t.id, -runningSpend); // Show as negative for expenses
-    });
-
-    const filteredWithBalance = filtered.map(t => ({
-      ...t,
-      balance: balanceMap.get(t.id),
-    }));
-
-    setFilteredTransactions(filteredWithBalance);
   };
 
   // Soft delete - moves to trash instead of permanent deletion
@@ -555,56 +424,6 @@ export default function Transactions() {
     }
   };
 
-  const applyCustomFilters = () => {
-    setCustomFiltersApplied(true);
-    setSelectedPeriod('custom');
-    setShowCustomFilters(false);
-  };
-
-  const clearCustomFilters = () => {
-    setStartDate('');
-    setEndDate('');
-    setMinAmount('');
-    setMaxAmount('');
-    setFilterDescription('');
-    setFilterBank('');
-    setCustomFiltersApplied(false);
-    setSelectedPeriod('current');
-    setShowCustomFilters(false);
-  };
-
-  const toggleCustomFilters = () => {
-    setShowCustomFilters(!showCustomFilters);
-  };
-
-  // Auto-fill date range based on selected period
-  const updateDateRangeForPeriod = (period) => {
-    if (period === 'current') {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth(); // 0-indexed
-      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      setStartDate(firstDay);
-      setEndDate(endDay);
-    } else if (period === 'last-month') {
-      const now = new Date();
-      let month = now.getMonth() - 1; // 0-indexed
-      let year = now.getFullYear();
-      if (month < 0) { month = 11; year -= 1; }
-      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      setStartDate(firstDay);
-      setEndDate(endDay);
-    } else {
-      // All time - clear dates
-      setStartDate('');
-      setEndDate('');
-    }
-  };
-
   const downloadCSV = () => {
     if (filteredTransactions.length === 0) return;
 
@@ -627,23 +446,12 @@ export default function Transactions() {
       ...rows.map(row => row.join(','))
     ].join('\r\n');
 
-    // Generate filename with period info
-    let periodLabel = 'all-time';
-    if (selectedPeriod === 'current') {
-      const now = new Date();
-      periodLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    } else if (selectedPeriod === 'last-month') {
-      const now = new Date();
-      let month = now.getMonth();
-      let year = now.getFullYear();
-      if (month === 0) {
-        month = 12;
-        year -= 1;
-      }
-      periodLabel = `${year}-${String(month).padStart(2, '0')}`;
-    }
-
-    const filename = `transactions-${periodLabel}.csv`;
+    // Named after the dates in view: a whole month as 2026-11, another range by its ends.
+    const [first, last] = periodRange(filters);
+    const wholeMonth = first && last && first.slice(0, 7) === last.slice(0, 7) && first.endsWith('-01')
+      && Number(last.slice(8)) === new Date(Number(last.slice(0, 4)), Number(last.slice(5, 7)), 0).getDate();
+    const span = wholeMonth ? first.slice(0, 7) : first || last ? `${first || 'start'}-to-${last || 'today'}` : 'all-time';
+    const filename = `transactions-${span}.csv`;
 
     // Create blob with BOM for Excel compatibility
     const BOM = '\uFEFF';
@@ -664,6 +472,8 @@ export default function Transactions() {
     }, 100);
   };
 
+  const filteredTransactions = useMemo(() => applyFilters(transactions, filters), [transactions, filters]);
+
   if (loading) {
     return (
       <Box className="bw-surface bw-page">
@@ -678,10 +488,7 @@ export default function Transactions() {
   }
 
   const active = viewMode === 'active';
-  // The dates the list is cut to: the range typed in, or the month the period names.
-  const [rangeStart, rangeEnd] = startDate || endDate
-    ? [startDate, endDate]
-    : selectedPeriod === 'current' ? monthRange(0) : selectedPeriod === 'last-month' ? monthRange(-1) : ['', ''];
+  const [rangeStart, rangeEnd] = periodRange(filters);
   const totals = summary(filteredTransactions);
   const line = timeline(filteredTransactions, { start: rangeStart, end: rangeEnd });
   const chosen = line?.buckets.find(({ key }) => key === pickedBucket) || null;
@@ -690,13 +497,24 @@ export default function Transactions() {
     : filteredTransactions;
   const groups = groupByDay(listed);
   const banks = [...new Set(transactions.filter((t) => t.bank).map((t) => t.bank))].sort();
+  // Changing the type drops a category of the other type: nothing would match both.
+  const changeFilters = (values) => setFilters((current) => {
+    const next = { ...current, ...values };
+    const category = categories.find(({ id }) => id === next.category);
+    if (next.type && category && category.type !== next.type) next.category = '';
+    return next;
+  });
+  const clearFilters = () => {
+    setFilters(NO_FILTERS);
+    setPickedBucket(null);
+  };
 
   const period = periodLabel(rangeStart, rangeEnd);
   const count = (number, word) => `${number.toLocaleString('en-US')} ${word}${number === 1 ? '' : 's'}`;
   const scope = [
-    `${count(totals.count, filterType === 'income' ? 'income transaction' : filterType === 'expense' ? 'expense' : 'transaction')}`,
+    `${count(totals.count, filters.type === 'income' ? 'income transaction' : filters.type === 'expense' ? 'expense' : 'transaction')}`,
     /^(all|since|until)/.test(period) ? `, ${period}` : ` in ${period}`,
-    searchQuery.trim() ? `, matching “${searchQuery.trim()}”` : '',
+    filters.query.trim() ? `, matching “${filters.query.trim()}”` : '',
   ].join('');
 
   const tab = (mode, label, number) => (
@@ -748,74 +566,24 @@ export default function Transactions() {
             {tab('active', 'Active', transactions.length)}
             {tab('trash', 'Trash', trashedTransactions.length)}
           </div>
-          {active && (
-            <div className="bw-segment" role="group" aria-label="Type">
-              {[['', 'All'], ['income', 'Income'], ['expense', 'Expenses']].map(([value, label]) => (
-                <button type="button" aria-pressed={filterType === value} onClick={() => setFilterType(value)} key={label}>{label}</button>
-              ))}
-            </div>
-          )}
         </div>
 
         {error && <p className="bw-note" data-tone="bad" role="alert">{error}</p>}
 
         {active && (
           <>
-            <div className="tx-toolbar">
-              <input
-                className="bw-input tx-toolbar__search"
-                type="search"
-                aria-label="Search transactions"
-                placeholder="Search transactions"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-              <select
-                className="bw-select"
-                aria-label="Period"
-                value={selectedPeriod}
-                onChange={(event) => {
-                  setSelectedPeriod(event.target.value);
-                  updateDateRangeForPeriod(event.target.value);
-                }}
-              >
-                <option value="current">This month</option>
-                <option value="last-month">Last month</option>
-                <option value="all">All time</option>
-                {selectedPeriod === 'custom' && <option value="custom">Custom range</option>}
-              </select>
-              <button
-                type="button"
-                className="bw-button bw-button--quiet tx-toolbar__filters"
-                aria-expanded={showCustomFilters}
-                aria-controls="tx-filter-panel"
-                aria-pressed={customFiltersApplied}
-                onClick={toggleCustomFilters}
-              >
-                <LuFilter size={15} aria-hidden="true" />
-                {customFiltersApplied ? 'Custom filters' : 'Filters'}
-              </button>
-              {customFiltersApplied && (
-                <button type="button" className="bw-link tx-toolbar__reset" onClick={clearCustomFilters}>Reset</button>
-              )}
-            </div>
-
-            {showCustomFilters && (
-              <FilterPanel
-                values={{ startDate, endDate, description: filterDescription, bank: filterBank, minAmount, maxAmount }}
-                set={{
-                  startDate: setStartDate,
-                  endDate: setEndDate,
-                  description: setFilterDescription,
-                  bank: setFilterBank,
-                  minAmount: setMinAmount,
-                  maxAmount: setMaxAmount,
-                }}
-                banks={banks}
-                onApply={applyCustomFilters}
-                onClear={clearCustomFilters}
-              />
-            )}
+            <Filters
+              filters={filters}
+              onChange={changeFilters}
+              onClear={clearFilters}
+              categories={categories}
+              banks={banks}
+              hasNoCategory={transactions.some((t) => !t.category_id)}
+              hasNoBank={transactions.some((t) => !t.bank)}
+              picked={chosen}
+              onUnpick={() => setPickedBucket(null)}
+              formatMoney={formatMoney}
+            />
 
             <section className="bw-ledger tx-ledger" aria-label="What is in view">
               <dl className="bw-figures">
@@ -842,17 +610,13 @@ export default function Transactions() {
               {line && <SpendChart line={line} picked={chosen?.key ?? null} onPick={setPickedBucket} formatMoney={formatMoney} />}
             </section>
 
-            {chosen && (
-              <p className="bw-note tx-picked">
-                Only {chosen.label}: {count(listed.length, 'transaction')}.{' '}
-                <button type="button" className="bw-link" onClick={() => setPickedBucket(null)}>Show everything in view</button>
-              </p>
-            )}
-
             {groups.length === 0 ? (
               <div className="bw-panel">
                 <p className="bw-nothing">
-                  {transactions.length === 0 ? 'No transactions yet. Add one, or import a bank statement.' : 'Nothing matches. Try another period or fewer filters.'}
+                  {transactions.length === 0 ? 'No transactions yet. Add one, or import a bank statement.' : 'Nothing matches these filters.'}
+                  {transactions.length > 0 && (
+                    <> <button type="button" className="bw-link tx-nothing__clear" onClick={clearFilters}>Clear all filters</button></>
+                  )}
                 </p>
               </div>
             ) : (

@@ -41,7 +41,9 @@ test.describe('Transactions', () => {
     test('says how many transactions are in view, and of which month', async ({ page }) => {
       const month = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       await expect(page.locator('.bw-subtitle')).toHaveText(new RegExp(`^[\\d,]+ transactions? in ${month}$`));
-      await expect(page.getByLabel('Period')).toHaveValue('current');
+      await expect(page.getByLabel('Period')).toHaveValue('this-month');
+      // Nothing narrows the list to begin with, so no filter is written out.
+      await expect(page.getByRole('list', { name: 'Filters in use' })).toHaveCount(0);
     });
 
     test('adds the view up: net is income less expenses', async ({ page }) => {
@@ -71,17 +73,18 @@ test.describe('Transactions', () => {
       }
     });
 
-    test('a day picked on the chart shows only that day', async ({ page }) => {
+    test('a day picked on the chart shows only that day, and is written out as a filter', async ({ page }) => {
       const columns = page.locator('.tx-chart__column:not(:disabled)');
       test.skip(await columns.count() === 0, 'nothing recorded this month');
       const all = await page.locator('.tx-row').count();
       await columns.first().click();
       await expect(columns.first()).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.tx-day')).toHaveCount(1);
-      const note = await page.locator('.tx-picked').textContent();
-      expect(Number(note.match(/: ([\d,]+) transactions?\./)[1])).toBe(await page.locator('.tx-row').count());
-      await page.getByRole('button', { name: 'Show everything in view' }).click();
+      const chip = page.getByRole('list', { name: 'Filters in use' }).locator('li', { hasText: /^Only / });
+      await expect(chip).toHaveCount(1);
+      await chip.getByRole('button').click();
       await expect(page.locator('.tx-row')).toHaveCount(all);
+      await expect(page.getByRole('list', { name: 'Filters in use' })).toHaveCount(0);
     });
 
     test('lists the transactions under a heading for each day', async ({ page }) => {
@@ -108,7 +111,7 @@ test.describe('Transactions', () => {
       await expect(page.locator('.bw-subtitle')).toHaveText(/^[\d,]+ transactions? in /);
     });
 
-    test('searches the descriptions and the categories', async ({ page }) => {
+    test('searches the descriptions, categories, banks and amounts', async ({ page }) => {
       const first = page.locator('.tx-row').first();
       test.skip(await first.count() === 0, 'nothing recorded this month');
       const word = (await first.locator('.tx-row__category').textContent()).split(/[\s/]/)[0];
@@ -116,8 +119,12 @@ test.describe('Transactions', () => {
       await expect(page.locator('.bw-subtitle')).toContainText(`matching “${word}”`);
       for (const text of await page.locator('.tx-row__body').allTextContents()) expect(text.toLowerCase()).toContain(word.toLowerCase());
 
-      await page.getByLabel('Search transactions').fill('no transaction reads like this');
-      await expect(page.locator('.bw-nothing')).toHaveText(/^Nothing matches/);
+      // An amount can be typed too: every row found has it in its figure.
+      const figure = (await first.locator('.tx-row__figure').textContent()).replace(/[^0-9.]/g, '');
+      await page.getByLabel('Search transactions').fill(figure);
+      await expect(page.locator('.tx-row').first()).toBeVisible();
+      const found = (await page.locator('.tx-row').evaluateAll((rows) => rows.map((row) => row.innerText.replace(/,/g, ''))));
+      expect(found.every((row) => row.includes(figure))).toBe(true);
     });
 
     test('changes the period: last month, then all time by month', async ({ page }) => {
@@ -133,22 +140,74 @@ test.describe('Transactions', () => {
       await expect(page.locator('.tx-row')).toHaveCount(active);
     });
 
-    test('filters by amount, and resets', async ({ page }) => {
-      const filters = page.getByRole('button', { name: 'Filters', exact: true });
-      await expect(filters).toHaveAttribute('aria-expanded', 'false');
+    test('filters by amount, and takes the filter off by its chip', async ({ page }) => {
+      const more = page.getByRole('button', { name: /^Bank and amount/ });
+      await expect(more).toHaveAttribute('aria-expanded', 'false');
       const before = await page.locator('.bw-subtitle').textContent();
-      await filters.click();
-      const panel = page.getByRole('form', { name: 'More filters' });
-      await expect(panel.getByLabel('From', { exact: true })).toHaveValue(/^\d{4}-\d{2}-01$/);
-      await panel.getByLabel('Amount from').fill('100');
-      await panel.getByRole('button', { name: 'Apply filters' }).click();
-      await expect(panel).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Custom filters' })).toBeVisible();
+      await more.click();
+      await page.getByLabel('Amount from').fill('100');
+      // The filter takes effect as it is typed: there is no button to apply it.
+      await expect(page.getByRole('list', { name: 'Filters in use' })).toContainText('$100.00 or more');
+      await expect(more).toContainText('1');
       for (const text of await page.locator('.tx-row__figure').allTextContents()) expect(Math.abs(amount(text))).toBeGreaterThanOrEqual(100);
 
-      await page.getByRole('button', { name: 'Reset' }).click();
+      await page.getByLabel('Amount to').fill('500');
+      await expect(page.getByRole('list', { name: 'Filters in use' })).toContainText('$100.00 to $500.00');
+      for (const text of await page.locator('.tx-row__figure').allTextContents()) expect(Math.abs(amount(text))).toBeLessThanOrEqual(500);
+
+      await page.getByRole('button', { name: 'Remove the filter $100.00 to $500.00' }).click();
       await expect(page.locator('.bw-subtitle')).toHaveText(before);
-      await expect(page.getByRole('button', { name: 'Filters', exact: true })).toBeVisible();
+      await expect(page.getByLabel('Amount from')).toHaveValue('');
+    });
+
+    test('shows one category, and drops it when the type no longer fits', async ({ page }) => {
+      const first = page.locator('.tx-row[data-type="expense"]').first();
+      test.skip(await first.count() === 0, 'no expenses this month');
+      const name = await first.locator('.tx-row__category').textContent();
+      const category = page.getByLabel('Category', { exact: true });
+      await category.selectOption({ label: name });
+      await expect(page.getByRole('list', { name: 'Filters in use' })).toContainText(name);
+      for (const text of await page.locator('.tx-row__category').allTextContents()) expect(text).toBe(name);
+
+      // An expense category cannot be shown together with "income only".
+      await page.getByRole('group', { name: 'Type' }).getByRole('button', { name: 'Income' }).click();
+      await expect(category).toHaveValue('');
+      await expect(page.getByRole('list', { name: 'Filters in use' })).not.toContainText(name);
+      await expect(page.getByRole('list', { name: 'Filters in use' })).toContainText('Income only');
+    });
+
+    test('takes a custom range of dates', async ({ page }) => {
+      await expect(page.getByLabel('From', { exact: true })).toHaveCount(0);
+      await page.getByLabel('Period').selectOption('custom');
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      await page.getByLabel('From', { exact: true }).fill(`${month}-03`);
+      await page.getByLabel('To', { exact: true }).fill(`${month}-09`);
+      await expect(page.locator('.bw-subtitle')).toHaveText(/ in \w{3} 3 – \w{3} 9, \d{4}$/);
+      await expect(page.locator('.tx-chart__column')).toHaveCount(7);
+      for (const head of await page.locator('.tx-day__head h3').allTextContents()) expect(head).toMatch(/ [3-9]$|^Today$|^Yesterday$/);
+    });
+
+    test('writes every filter in use out, and clears them all at once', async ({ page }) => {
+      const before = await page.locator('.bw-subtitle').textContent();
+      await page.getByLabel('Period').selectOption('all');
+      await page.getByRole('group', { name: 'Type' }).getByRole('button', { name: 'Expenses' }).click();
+      await page.getByLabel('Search transactions').fill('a');
+      const chips = page.getByRole('list', { name: 'Filters in use' });
+      await expect(chips.locator('li span')).toHaveText(['“a”', 'All time', 'Expenses only']);
+      await chips.getByRole('button', { name: 'Clear all' }).click();
+      await expect(chips).toHaveCount(0);
+      await expect(page.locator('.bw-subtitle')).toHaveText(before);
+      await expect(page.getByLabel('Period')).toHaveValue('this-month');
+      await expect(page.getByLabel('Search transactions')).toHaveValue('');
+    });
+
+    test('offers to clear the filters when nothing matches', async ({ page }) => {
+      const before = await page.locator('.bw-subtitle').textContent();
+      await page.getByLabel('Search transactions').fill('no transaction reads like this');
+      await expect(page.locator('.bw-nothing')).toContainText('Nothing matches these filters.');
+      await page.getByRole('button', { name: 'Clear all filters' }).click();
+      await expect(page.locator('.bw-subtitle')).toHaveText(before);
     });
 
     test('offers the categories of the same type, and asks before changing one', async ({ page }) => {

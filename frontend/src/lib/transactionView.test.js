@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dayHeading, groupByDay, periodLabel, summary, timeline } from './transactionView.js';
+import { NO_FILTERS, applyFilters, dayHeading, groupByDay, narrowedBy, periodLabel, periodRange, summary, timeline } from './transactionView.js';
 
 const now = new Date(2026, 10, 24); // Tuesday, 24 November 2026
 const tx = (id, date, amount, type = 'expense') => ({ id, date, amount, type });
@@ -92,4 +92,76 @@ test('a day is headed by how far back it is', () => {
   assert.equal(dayHeading('2026-11-23', now), 'Yesterday');
   assert.equal(dayHeading('2026-11-21', now), 'Sat, Nov 21');
   assert.equal(dayHeading('2025-12-31', now), 'Wed, Dec 31, 2025');
+});
+
+const ledger = [
+  { id: 1, date: '2026-11-24', amount: 18.07, type: 'expense', description: 'AMAZON', category: 'Subscriptions', category_id: 'subs', bank: 'Rogers' },
+  { id: 2, date: '2026-11-21', amount: 359.99, type: 'expense', description: 'Costco Wholesale', category: 'Food/Costco', category_id: 'costco', bank: null },
+  { id: 3, date: '2026-11-20', amount: 1918.07, type: 'income', description: 'Payroll', category: 'Salary', category_id: 'salary', bank: 'Scotiabank' },
+  { id: 4, date: '2026-10-31', amount: 34, type: 'expense', description: 'COSTCO GAS W1362', category: 'Fuel', category_id: 'fuel', bank: 'Rogers' },
+  { id: 5, date: '2026-09-02', amount: 2720.26, type: 'expense', description: 'Mortgage Meridian', category: 'Mortgage', category_id: 'mortgage', bank: 'Scotiabank' },
+  { id: 6, date: '2025-12-30', amount: 12, type: 'expense', description: 'Coffee', category: 'Unknown', category_id: null, bank: null },
+];
+const ids = (filters) => applyFilters(ledger, { ...NO_FILTERS, ...filters }, now).map(({ id }) => id);
+
+test('a period names its first and last day', () => {
+  const range = (period, extra = {}) => periodRange({ period, from: '', to: '', ...extra }, now);
+  assert.deepEqual(range('this-month'), ['2026-11-01', '2026-11-30']);
+  assert.deepEqual(range('last-month'), ['2026-10-01', '2026-10-31']);
+  assert.deepEqual(range('last-3-months'), ['2026-09-01', '2026-11-30']);
+  assert.deepEqual(range('this-year'), ['2026-01-01', '2026-12-31']);
+  assert.deepEqual(range('all'), ['', '']);
+  assert.deepEqual(range('custom', { from: '2026-11-03', to: '2026-11-20' }), ['2026-11-03', '2026-11-20']);
+  // One end may be left open, and ends typed the wrong way round are swapped.
+  assert.deepEqual(range('custom', { from: '2026-11-03' }), ['2026-11-03', '']);
+  assert.deepEqual(range('custom', { from: '2026-11-20', to: '2026-11-03' }), ['2026-11-03', '2026-11-20']);
+  // January looks back into the year before.
+  assert.deepEqual(periodRange({ period: 'last-month' }, new Date(2026, 0, 15)), ['2025-12-01', '2025-12-31']);
+});
+
+test('with nothing set the list is this month', () => {
+  assert.deepEqual(ids({}), [1, 2, 3]);
+  assert.deepEqual(ids({ period: 'last-month' }), [4]);
+  assert.deepEqual(ids({ period: 'last-3-months' }), [1, 2, 3, 4, 5]);
+  assert.deepEqual(ids({ period: 'this-year' }), [1, 2, 3, 4, 5]);
+  assert.deepEqual(ids({ period: 'all' }), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(ids({ period: 'custom', from: '2026-10-01', to: '2026-11-20' }), [3, 4]);
+  assert.deepEqual(ids({ period: 'custom', to: '2026-01-01' }), [6]);
+});
+
+test('every filter narrows what the others leave', () => {
+  const all = { period: 'all' };
+  assert.deepEqual(ids({ ...all, type: 'income' }), [3]);
+  assert.deepEqual(ids({ ...all, category: 'fuel' }), [4]);
+  assert.deepEqual(ids({ ...all, category: 'none' }), [6]);
+  assert.deepEqual(ids({ ...all, bank: 'Rogers' }), [1, 4]);
+  assert.deepEqual(ids({ ...all, bank: 'none' }), [2, 6]);
+  assert.deepEqual(ids({ ...all, min: '300' }), [2, 3, 5]);
+  assert.deepEqual(ids({ ...all, min: '300', max: '2000' }), [2, 3]);
+  assert.deepEqual(ids({ ...all, max: '20' }), [1, 6]);
+  assert.deepEqual(ids({ ...all, type: 'expense', bank: 'Scotiabank', min: '100' }), [5]);
+  // A filter that nothing passes leaves nothing; it is not ignored.
+  assert.deepEqual(ids({ ...all, type: 'income', category: 'fuel' }), []);
+});
+
+test('the search looks in the description, the category, the bank and the amount', () => {
+  const all = { period: 'all' };
+  assert.deepEqual(ids({ ...all, query: 'costco' }), [2, 4]);
+  assert.deepEqual(ids({ ...all, query: '  COSTCO  ' }), [2, 4]);
+  assert.deepEqual(ids({ ...all, query: 'salary' }), [3]);
+  assert.deepEqual(ids({ ...all, query: 'rogers' }), [1, 4]);
+  assert.deepEqual(ids({ ...all, query: '2720' }), [5]);
+  assert.deepEqual(ids({ ...all, query: '$1,918' }), [3]);
+  assert.deepEqual(ids({ ...all, query: '34.00' }), [4]);
+  // "1362" is in a description; as a number it is in no amount, and that is still a match.
+  assert.deepEqual(ids({ ...all, query: '1362' }), [4]);
+  assert.deepEqual(ids({ ...all, query: 'nothing like this' }), []);
+});
+
+test('the filters that narrow the list are counted, the period is not', () => {
+  assert.equal(narrowedBy(NO_FILTERS), 0);
+  assert.equal(narrowedBy({ ...NO_FILTERS, period: 'all' }), 0);
+  assert.equal(narrowedBy({ ...NO_FILTERS, query: ' ' }), 0);
+  assert.equal(narrowedBy({ ...NO_FILTERS, query: 'x', type: 'expense', category: 'fuel', bank: 'none', min: '5' }), 5);
+  assert.equal(narrowedBy({ ...NO_FILTERS, min: '5', max: '9' }), 1);
 });
