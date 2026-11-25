@@ -276,7 +276,7 @@ The backend is built with Netlify Functions, a serverless platform that runs eve
 - Creating a liability, or editing its balance, link, start date or rate, sets a new anchor (`anchor_liability_balance()`, which tells a direct edit from the trigger's own update by `pg_trigger_depth()`). To bring a balance in line with the lender, type the lender's figure into the form
 - Which liability a payment belongs to is unchanged from 007: the one linked to the category that had started by the transaction's date, the most recently started first (`liability_for_payment()`)
 - It is simple daily interest, so it is an estimate: a Canadian fixed mortgage compounds twice a year and differs by a few dollars a month
-- **Migration required.** Without it the old triggers stay: the whole payment comes off the balance and trashing a payment changes nothing. The app works either way
+- **Migration required.** Without it the old triggers stay: the whole payment comes off the balance and trashing a payment changes nothing. The app works either way. Applied to the production database on 2026-11-24
 - Verified on an embedded PostgreSQL (PGlite) with 18 scenarios; that harness is not in the repository
 
 **Auto-Seeding for New Users:**

@@ -144,7 +144,7 @@
   - [x] One chart per page: pace ruler, month strip, year chart with treemap and heat map, balance sheet to scale, steps of spending
   - [x] Playwright specs for these pages rewritten to read the signed-in account without writing; `assets.spec.js` added
 - [x] Financial health score reworked into three parts; emergency fund measured against six months (2026-11-24)
-- [x] Liability balances count interest: `011_liability_interest.sql` (2026-11-24) — **has to be applied in Supabase**
+- [x] Liability balances count interest: `011_liability_interest.sql` (2026-11-24) — applied to production the same day; any other database needs it applied by hand
 - [x] Playwright test account moved out of the repo into `BUDGETWISE_TEST_EMAIL` / `BUDGETWISE_TEST_PASSWORD` (2026-11-20)
 
 ---
