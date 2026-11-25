@@ -1,6 +1,9 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { LuChevronDown, LuDownload } from 'react-icons/lu';
+import { Link } from 'react-router-dom';
 import '../styles/assistant-reply-visuals.css';
+import { projectionAtOpening } from '../lib/projectedBalance';
+import { transactionCategoryUrl } from '../lib/transactionView';
 
 const MAX_RANKED_ROWS = 8;
 const DAY_MS = 86_400_000;
@@ -14,7 +17,7 @@ const monthFormat = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeri
 
 const validText = (value) => typeof value === 'string' && value.trim().length > 0;
 const validAmount = (value) => Number.isFinite(value) && value >= 0;
-export const EMPTY_UPCOMING_PAYMENTS_MESSAGE = 'No scheduled payments in this period.';
+export const EMPTY_UPCOMING_PAYMENTS_MESSAGE = 'No remaining scheduled payments in this period.';
 
 function money(amount) {
   return `${amount < 0 ? '−' : ''}${amountFormat.format(Math.abs(amount))}\u00a0CAD`;
@@ -73,6 +76,10 @@ export function validAssistantReplyVisuals(visuals) {
       return visual.currency === 'CAD' && datePattern.test(visual.startDate) && datePattern.test(visual.endDate)
         && end >= start && end - start <= 366 * DAY_MS && Array.isArray(visual.payments)
         && validAmount(visual.income) && validAmount(visual.expenses);
+    }
+    if (visual?.kind === 'recurring-date-audit') {
+      return visual.currency === 'CAD' && validText(visual.category) && monthPattern.test(visual.month)
+        && datePattern.test(visual.startDate) && datePattern.test(visual.endDate) && Array.isArray(visual.rows);
     }
     return visual?.kind === 'budget-review' && monthPattern.test(visual.month) && validAmount(visual.spent);
   });
@@ -755,17 +762,10 @@ function PaymentProjection({ data, onRefreshUpcomingPayments }) {
     };
   }, [data, canRefresh, needsMovements, retry]);
 
-  if (!projection || !Number.isFinite(projection.startingBalance) || !Array.isArray(projection.days)) return null;
-  const recordedCents = Math.round(projection.startingBalance * 100);
   const startingCents = enteredBalance ?? 0;
-  const balanceChange = startingCents - recordedCents;
-  const days = projection.days.filter((day) => datePattern.test(day?.date) && Number.isFinite(day.balance))
-    .map((day) => ({ ...day, balance: (Math.round(day.balance * 100) + balanceChange) / 100 }));
-  if (!days.length) return null;
-  const firstNegative = days.find(({ balance }) => balance < 0);
-  const lowest = days.reduce((minimum, day) => day.balance < minimum.balance ? day : minimum);
-  const topUpCents = Math.max(0, -startingCents, -Math.round(lowest.balance * 100));
-  const topUpDate = startingCents < 0 ? days[0].date : firstNegative?.date;
+  const view = projectionAtOpening(projection, startingCents);
+  if (!view) return null;
+  const { days, firstNegative, lowest, topUpCents, topUpDate } = view;
   const forecastEnd = days.at(-1).date;
   const selectedIndex = days.findIndex(({ date }) => date === selectedDate);
   const selectDay = (date) => setSelectedDate((previous) => previous === date ? null : date);
@@ -967,7 +967,244 @@ function UpcomingPayments({ data, onRefreshUpcomingPayments }) {
   );
 }
 
-export default function AssistantReplyVisuals({ visuals, renderCategoryDetails, onComparePeriods, onRefreshUpcomingPayments }) {
+function RelatedRecurringCharges({ row, russian }) {
+  const charges = row.relatedCharges.filter((charge) => validText(charge?.description) && datePattern.test(charge.date) && validAmount(charge.amount));
+  if (!charges.length) return null;
+  return (
+    <div className="assistant-visuals__related-charges">
+      <h4>{russian ? 'Другие списания у этого продавца' : 'Other charges from this merchant'}</h4>
+      <ul role="list">
+        {charges.map((charge, index) => {
+          const days = (Date.parse(charge.date) - Date.parse(row.expectedDate)) / DAY_MS;
+          return (
+            <li key={index}>
+              <span>{charge.description}</span>
+              <div>
+                <time dateTime={charge.date}>{displayDate(charge.date)}</time>
+                {Number.isInteger(days) && days !== 0 && (
+                  <small>{russian
+                    ? `${Math.abs(days)} дн. ${days > 0 ? 'после' : 'до'} плановой даты`
+                    : `${Math.abs(days)}d ${days > 0 ? 'after' : 'before'} the scheduled date`}</small>
+                )}
+              </div>
+              <strong>{money(charge.amount)}</strong>
+            </li>
+          );
+        })}
+      </ul>
+      {Number.isSafeInteger(row.relatedChargeCount) && row.relatedChargeCount > charges.length && (
+        <small>{russian ? `Показано ${charges.length} из ${row.relatedChargeCount} дополнительных списаний.` : `Showing ${charges.length} of ${row.relatedChargeCount} additional charges.`}</small>
+      )}
+      {validAmount(row.totalPostedAmount) && Number.isFinite(row.differenceFromPlan) && (
+        <dl>
+          <div><dt>{russian ? 'Всего по списаниям' : 'Total charged'}</dt><dd>{money(row.totalPostedAmount)}</dd></div>
+          <div><dt>{russian ? 'Разница с планом' : 'Difference from plan'}</dt><dd>{signedMoney(row.differenceFromPlan)}</dd></div>
+        </dl>
+      )}
+      <small>{russian ? 'Назначение дополнительного списания стоит проверить по счёту продавца.' : 'Check the merchant invoice for the reason for the extra charge.'}</small>
+    </div>
+  );
+}
+
+function RecurringCategoryTransactions({ data, russian, onOpenTransactions }) {
+  const items = data.transactions.filter((item) => datePattern.test(item?.date) && validAmount(item.amount));
+  const count = Number.isSafeInteger(data.transactionCount) ? data.transactionCount : items.length;
+  const link = validText(data.categoryId) && data.endDate >= data.startDate
+    ? transactionCategoryUrl(data.categoryId, data.startDate, data.endDate) : null;
+  return (
+    <details className="assistant-visuals__audit-ledger">
+      <summary>{russian ? 'Все операции категории' : 'All category transactions'} ({count})</summary>
+      <div>
+        {validAmount(data.transactionTotal) && (
+          <p>{russian ? 'Расходы за период' : 'Recorded expenses'} <strong>{money(data.transactionTotal)}</strong></p>
+        )}
+        {items.length > 0 && (
+          <ul role="list">
+            {items.map((item, index) => (
+              <li key={item.id ?? index}>
+                <span>{item.description || (russian ? 'Без описания' : 'No description')}</span>
+                <strong>{money(item.amount)}</strong>
+                <small><time dateTime={item.date}>{displayDate(item.date)}</time>{item.generated && (russian ? ' · Автозапись Recurring' : ' · Recurring calendar entry')}</small>
+              </li>
+            ))}
+          </ul>
+        )}
+        {count > items.length && <small>{russian ? `Показано ${items.length} из ${count} операций.` : `Showing ${items.length} of ${count} transactions.`}</small>}
+        {link && <Link to={link} onClick={onOpenTransactions}>{russian ? 'Открыть в Transactions' : 'Open in Transactions'}</Link>}
+      </div>
+    </details>
+  );
+}
+
+function CompanyChargeReview({ row, russian, onReview }) {
+  const candidates = (row.companyCandidates ?? []).filter((item) => validText(item?.scheduleId) && validText(item.name));
+  const confirmed = candidates.find((item) => item.scheduleId === row.reviewDecision);
+  const separate = row.reviewDecision === null;
+  const answered = Boolean(confirmed) || separate;
+  const single = candidates.length === 1;
+  const question = single
+    ? (russian ? `Это списание ${row.company} относится к подписке ${candidates[0].name}?` : `Is this ${row.company} charge for ${candidates[0].name}?`)
+    : (russian ? `К какой подписке относится это списание ${row.company}?` : `Which subscription is this ${row.company} charge for?`);
+  return (
+    <div className="assistant-visuals__company-review">
+      <div className="assistant-visuals__recurring-row-heading">
+        <strong>{row.description || row.name}</strong>
+        {validAmount(row.actualAmount) && <b>{money(row.actualAmount)}</b>}
+      </div>
+      {datePattern.test(row.actualDate) && <time dateTime={row.actualDate}>{displayDate(row.actualDate)}</time>}
+      {answered ? (
+        <>
+          <p role="status">{confirmed
+            ? (russian ? `Вы связали это списание с ${confirmed.name}.` : `You linked this charge to ${confirmed.name}.`)
+            : (russian ? 'Вы отметили это списание как отдельное.' : 'You marked this as a separate charge.')}</p>
+          <div className="assistant-visuals__change-actions">
+            <button type="button" disabled={!onReview} onClick={() => onReview(row, undefined)}>{russian ? 'Изменить ответ' : 'Change answer'}</button>
+          </div>
+        </>
+      ) : candidates.length > 0 && (
+        <fieldset>
+          <legend>{question}</legend>
+          {candidates.map((candidate) => (
+            <div key={candidate.scheduleId} className="assistant-visuals__company-option">
+              {!single && <strong>{candidate.name}</strong>}
+              <dl className="assistant-visuals__recurring-dates">
+                <div>
+                  <dt>{russian ? 'По расписанию' : 'Scheduled payment'}</dt>
+                  <dd>
+                    {datePattern.test(candidate.expectedDate) && <time dateTime={candidate.expectedDate}>{displayDate(candidate.expectedDate)}</time>}
+                    {validAmount(candidate.expectedAmount) && <small>{money(candidate.expectedAmount)}</small>}
+                  </dd>
+                </div>
+                {datePattern.test(candidate.actualDate) && (
+                  <div>
+                    <dt>{russian ? 'Уже сопоставлено' : 'Already matched'}</dt>
+                    <dd>
+                      <time dateTime={candidate.actualDate}>{displayDate(candidate.actualDate)}</time>
+                      {validAmount(candidate.actualAmount) && <small>{money(candidate.actualAmount)}</small>}
+                      {validText(candidate.description) && <small>{candidate.description}</small>}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              {!single && (
+                <div className="assistant-visuals__change-actions">
+                  <button type="button" disabled={!onReview} onClick={() => onReview(row, candidate.scheduleId)}>
+                    {russian ? `Связать с ${candidate.name}` : `Link to ${candidate.name}`}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          <div className="assistant-visuals__change-actions">
+            {single && <button type="button" disabled={!onReview} onClick={() => onReview(row, candidates[0].scheduleId)}>
+              {russian ? 'Да, относится' : 'Yes, link charge'}
+            </button>}
+            <button type="button" disabled={!onReview} onClick={() => onReview(row, null)}>
+              {russian ? 'Нет, отдельное списание' : 'Separate charge'}
+            </button>
+          </div>
+        </fieldset>
+      )}
+    </div>
+  );
+}
+
+function RecurringDateAudit({ data, onOpenTransactions, onReviewCompanyCharge }) {
+  const russian = data.language === 'ru';
+  const title = russian ? 'Сверка дат Recurring' : 'Recurring date check';
+  const statuses = russian ? {
+    generated_only: 'Только автозапись', activity_unknown: 'Период активности неизвестен',
+    on_schedule: 'Дата совпала', early: 'Раньше', late: 'Позже', missing: 'Списание не найдено',
+    unmatched: 'Запись в Recurring не найдена', ambiguous: 'Нужна ручная проверка', possible: 'Возможное совпадение',
+    amount_mismatch: 'Возможная пара · сумма отличается', company_candidate: 'Та же компания',
+  } : {
+    generated_only: 'Calendar entry only', activity_unknown: 'Active dates unknown',
+    on_schedule: 'Date matches', early: 'Early', late: 'Late', missing: 'No posting found',
+    unmatched: 'No matching Recurring entry', ambiguous: 'Needs review', possible: 'Possible match',
+    amount_mismatch: 'Possible match · amount differs', company_candidate: 'Same company',
+  };
+  const rows = data.rows.filter((row) => validText(row?.name) && Object.hasOwn(statuses, row.status));
+  const count = (status) => Number.isSafeInteger(data.counts?.[status]) ? data.counts[status] : rows.filter((row) => row.status === status).length;
+  const totals = [
+    [russian ? 'Совпали' : 'Dates match', count('on_schedule')],
+    [russian ? 'Разные даты' : 'Different dates', count('early') + count('late')],
+    [russian ? 'Без точной пары' : 'Unresolved', count('missing') + count('unmatched') + count('ambiguous') + count('possible') + count('generated_only') + count('activity_unknown') + count('amount_mismatch')],
+  ];
+  const reviewed = rows.filter((row) => row.status === 'company_candidate' && row.reviewDecision !== undefined).length;
+  if (count('company_candidate')) totals.push([russian ? 'Уточнить подписку' : 'To identify', Math.max(0, count('company_candidate') - reviewed)]);
+  if (data.relatedChargeCount > 0) totals.push([russian ? 'Доп. списания' : 'Extra charges', data.relatedChargeCount]);
+  const priority = (row) => {
+    if (row.status === 'company_candidate') return -1;
+    if (row.relatedCharges?.length || row.status === 'amount_mismatch') return 0;
+    return row.status === 'on_schedule' ? 2 : 1;
+  };
+  const ordered = [...rows].sort((a, b) => priority(a) - priority(b));
+
+  return (
+    <section className="assistant-visuals__panel" aria-label={title}>
+      <header>
+        <h3>{title}</h3>
+        <p>{data.category} · {data.endDate >= data.startDate ? displayPeriod(data) : data.month}</p>
+      </header>
+      <dl className="assistant-visuals__recurring-counts" data-has-extra={totals.length > 3 || undefined}>
+        {totals.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+      </dl>
+      {Array.isArray(data.transactions) && <RecurringCategoryTransactions data={data} russian={russian} onOpenTransactions={onOpenTransactions} />}
+      {ordered.length > 0 ? (
+        <ol className="assistant-visuals__recurring-rows" tabIndex={0} aria-label={russian ? 'Операции и расписание' : 'Transactions and schedule'}>
+          {ordered.map((row, index) => row.status === 'company_candidate' ? (
+            <li key={row.id ?? index}><CompanyChargeReview row={row} russian={russian} onReview={onReviewCompanyCharge} /></li>
+          ) : (
+            <li key={row.id ?? index}>
+              <div className="assistant-visuals__recurring-row-heading">
+                <strong>{row.name}</strong>
+                <small data-status={row.status}>
+                  {statuses[row.status]}
+                  {Number.isInteger(row.differenceDays) && row.differenceDays !== 0 && (
+                    <> · {Math.abs(row.differenceDays)} {russian ? 'дн.' : 'd'}</>
+                  )}
+                </small>
+              </div>
+              <dl className="assistant-visuals__recurring-dates">
+                {[[russian ? 'По календарю Recurring' : 'On the Recurring calendar', row.expectedDate, row.expectedAmount, null],
+                  [russian ? 'В транзакциях' : 'In transactions', row.actualDate, row.actualAmount, row.expectedDate && row.description]].map(([label, date, amount, description]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>
+                        {datePattern.test(date) ? <time dateTime={date}>{displayDate(date)}</time> : '—'}
+                        {validAmount(amount) && <small>{money(amount)}</small>}
+                        {validText(description) && <small>{description}</small>}
+                      </dd>
+                    </div>
+                ))}
+              </dl>
+              {row.lastBusinessDayOfMonth ? <small>{russian ? 'Последний рабочий день месяца' : 'Last business day of the month'}</small>
+                : row.businessDaysOnly && <small>{russian ? 'Перенос на рабочий день включён' : 'Business-day adjustment enabled'}</small>}
+              {Array.isArray(row.relatedCharges) && <RelatedRecurringCharges row={row} russian={russian} />}
+              {row.status === 'amount_mismatch' && (
+                <small>{russian ? 'Описание похоже, но сумма отличается от плановой. Проверьте по счёту продавца, относится ли списание к этой подписке.' : 'The description matches, but the amount differs from the plan. Check the merchant invoice to confirm this subscription.'}</small>
+              )}
+              {row.status !== 'amount_mismatch' && row.matchSource === 'merchant_name' && row.expectedAmount !== row.actualAmount && (
+                <small>{russian ? 'Сопоставлено по названию подписки и близкой сумме' : 'Matched by subscription name and a similar amount'}</small>
+              )}
+              {row.matchSource === 'bank_statement' && <small>{russian ? 'Дата списания подтверждена импортированной выпиской.' : 'Posting date confirmed by the imported statement.'}</small>}
+              {row.status === 'generated_only' && <small>{russian ? 'Автозапись из календаря. Дата списания по выписке не подтверждена.' : 'Created from the calendar. The statement posting date is unconfirmed.'}</small>}
+              {row.status === 'activity_unknown' && <small>{russian ? 'Расписание сейчас на паузе. Дата начала паузы неизвестна.' : 'This schedule is paused. Its pause start date is unknown.'}</small>}
+              {row.status === 'possible' && (
+                <small>{russian ? 'Совпадают поставщик и сумма. Проверь подписку в выписке.' : 'Merchant and amount align. Confirm the subscription on your statement.'}</small>
+              )}
+            </li>
+          ))}
+        </ol>
+      ) : <p className="assistant-visuals__caption">{russian ? 'За этот период нет операций для сверки.' : 'No records to check for this period.'}</p>}
+      {Number.isSafeInteger(data.omittedRows) && data.omittedRows > 0 && (
+        <p className="assistant-visuals__caption">{russian ? `Показано ${rows.length} из ${data.rowCount} строк.` : `Showing ${rows.length} of ${data.rowCount} rows.`}</p>
+      )}
+    </section>
+  );
+}
+
+export default function AssistantReplyVisuals({ visuals, renderCategoryDetails, onComparePeriods, onRefreshUpcomingPayments, onOpenTransactions, onReviewCompanyCharge }) {
   const records = validAssistantReplyVisuals(visuals);
   if (!records.length) return null;
   const summaries = records.filter(({ kind }) => kind === 'spending-summary');
@@ -984,7 +1221,9 @@ export default function AssistantReplyVisuals({ visuals, renderCategoryDetails, 
           ? <BudgetReview key={index} data={data} />
           : data.kind === 'upcoming-payments'
             ? <UpcomingPayments key={index} data={data} onRefreshUpcomingPayments={onRefreshUpcomingPayments} />
-            : <CategoryComparison key={index} data={data} renderCategoryDetails={renderCategoryDetails} onComparePeriods={onComparePeriods} />
+            : data.kind === 'recurring-date-audit'
+              ? <RecurringDateAudit key={index} data={data} onOpenTransactions={onOpenTransactions} onReviewCompanyCharge={onReviewCompanyCharge} />
+              : <CategoryComparison key={index} data={data} renderCategoryDetails={renderCategoryDetails} onComparePeriods={onComparePeriods} />
       )}
     </div>
   );

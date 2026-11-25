@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { loginUser } from './test-utils.js';
 
 /**
- * Recurring page: the month's totals and strip, payments in the order they come due,
- * the agenda for the next thirty days and the form.
+ * Recurring page: the schedule catalog, the month's totals and strip, the upcoming
+ * agenda and the form.
  * The tests read the signed-in account's own data. They never pause, delete or save a payment.
  */
 
@@ -21,6 +21,10 @@ test.describe('Recurring payments', () => {
   });
 
   test.describe('The month', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole('button', { name: 'Upcoming payments', exact: true }).click();
+    });
+
     test('shows the net, the income and the expenses of the month', async ({ page }) => {
       const labels = page.locator('.bw-ledger dt');
       await expect(labels.filter({ hasText: /^Net in / })).toBeVisible();
@@ -56,53 +60,103 @@ test.describe('Recurring payments', () => {
   });
 
   test.describe('The list', () => {
-    test('has a tab for expenses and a tab for income, with counts', async ({ page }) => {
-      await expect(page.getByRole('tab', { name: /^Expenses \(\d+\)$/ })).toHaveAttribute('aria-selected', 'true');
+    test('opens on all schedules and offers expense and income filters', async ({ page }) => {
+      await expect(page.getByRole('button', { name: 'All schedules', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByRole('tab', { name: /^All \(\d+\)$/ })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('tab', { name: /^Expenses \(\d+\)$/ })).toBeVisible();
       const income = page.getByRole('tab', { name: /^Income \(\d+\)$/ });
       await income.click();
       await expect(income).toHaveAttribute('aria-selected', 'true');
     });
 
-    test('lists payments by how soon they are due', async ({ page }) => {
-      const rows = page.locator('.recurring-row');
-      test.skip(await rows.count() === 0, 'No recurring expenses.');
-      await expect(page.getByRole('heading', { name: /^(Due within a week|Later|Paused|Ended)$/ }).first()).toBeVisible();
-      await expect(rows.first().locator('.recurring-row__amount b')).toHaveText(/^-\$[\d,]+\.\d{2}$/);
-      await expect(rows.first().locator('.recurring-row__amount small')).toHaveText(/^(Due today|Due tomorrow|In \d+ days|Paused|Ended)$/);
-      // Within the dated groups the days until the payment never go down.
-      const dues = await page.locator('.recurring-row[data-paused="false"] .recurring-row__amount small').allTextContents();
-      const days = dues.filter((text) => text !== 'Ended').map((text) => (text === 'Due today' ? 0 : text === 'Due tomorrow' ? 1 : Number(text.match(/\d+/)[0])));
-      expect(days).toEqual([...days].sort((a, b) => a - b));
+    test('category shows active, ended, paused and distant schedules even outside the displayed month', async ({ page }) => {
+      const year = new Date().getFullYear();
+      const category = { id: 'subscriptions', name: 'Subscriptions', type: 'expense' };
+      const income = { id: 'salary', name: 'Salary', type: 'income' };
+      const schedule = (id, name, changes) => ({
+        id, name, type: 'expense', amount: 12, category_id: category.id, categories: category,
+        frequency: 'yearly', frequency_interval: 1, start_date: `${year + 2}-07-05`,
+        is_active: true, auto_add: false, ...changes,
+      });
+      const schedules = [
+        schedule('future', 'Annual journal', {}),
+        schedule('paused', 'Paused audio', { is_active: false }),
+        schedule('ended', 'Closed studio', { start_date: '2018-02-01', end_date: '2019-02-01' }),
+        schedule('salary', 'Income schedule', { category_id: income.id, categories: income, type: 'income' }),
+      ];
+      await page.route('**/rest/v1/recurring_payments?**', (route) => {
+        const query = new URL(route.request().url()).searchParams;
+        const items = query.has('auto_add') ? [] : schedules;
+        return route.fulfill({ json: items, headers: { 'Content-Range': items.length ? `0-${items.length - 1}/${items.length}` : '*/0' } });
+      });
+      await page.route('**/rest/v1/categories?**', (route) => route.fulfill({ json: [category, income] }));
+      await page.reload();
+      const catalog = page.getByRole('region', { name: 'All schedules', exact: true });
+      const names = catalog.locator('.recurring-row__name');
+      await expect(names).toHaveCount(4);
+      await catalog.getByRole('combobox', { name: 'Category' }).selectOption({ label: 'Subscriptions' });
+      await expect(catalog.getByRole('heading', { name: 'Subscriptions', exact: true })).toBeVisible();
+      await expect(names).toHaveText(['Annual journal', 'Closed studio', 'Paused audio']);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      const status = catalog.getByRole('combobox', { name: 'Status' });
+      for (const [label, name] of [['Active', 'Annual journal'], ['Paused', 'Paused audio'], ['Ended', 'Closed studio']]) {
+        await status.selectOption({ label });
+        await expect(names).toHaveText([name]);
+      }
+      await status.selectOption({ label: 'All statuses' });
+      await page.getByRole('button', { name: 'Upcoming payments', exact: true }).click();
+      const agenda = page.getByRole('complementary', { name: 'Next 30 days' });
+      await expect(agenda).toBeVisible();
+      await expect(agenda).not.toContainText('Annual journal');
+      await page.getByRole('button', { name: 'Go to next month' }).click();
+      await page.getByRole('button', { name: 'All schedules', exact: true }).click();
+      await expect(names).toHaveText(['Annual journal', 'Closed studio', 'Paused audio']);
     });
 
     test('each payment can be paused, edited or deleted', async ({ page }) => {
       const row = page.locator('.recurring-row').first();
       test.skip(await row.count() === 0, 'No recurring expenses.');
       const name = await row.locator('.recurring-row__name').textContent();
-      await expect(row.getByRole('button', { name: `Pause ${name}` })).toBeVisible();
+      const paused = await row.getAttribute('data-paused') === 'true';
+      await expect(row.getByRole('button', { name: `${paused ? 'Resume' : 'Pause'} ${name}` })).toBeVisible();
       await expect(row.getByRole('button', { name: `Edit ${name}` })).toBeVisible();
       await expect(row.getByRole('button', { name: `Delete ${name}` })).toBeVisible();
     });
 
     test('filters by category', async ({ page }) => {
       const filter = page.getByRole('combobox', { name: 'Category' });
-      test.skip(await filter.count() === 0, 'No categories to filter by.');
+      test.skip(await filter.locator('option').count() < 2, 'No categories to filter by.');
       const category = await filter.locator('option').nth(1).textContent();
       await filter.selectOption({ label: category });
-      await expect(page.locator('.bw-note')).toContainText(`${category}: `);
-      const metas = await page.locator('.recurring-row__meta').allTextContents();
-      expect(metas.length).toBeGreaterThan(0);
-      expect(metas.every((meta) => meta.startsWith(`${category},`))).toBe(true);
+      const catalog = page.getByRole('region', { name: 'All schedules', exact: true });
+      await expect(catalog.getByRole('heading', { level: 3 })).toHaveText([category]);
+      await expect(catalog.locator('.recurring-row').first()).toBeVisible();
     });
 
-    test('can show paused payments', async ({ page }) => {
-      const toggle = page.getByRole('button', { name: 'Show paused' });
-      await toggle.click();
-      await expect(page.getByRole('button', { name: 'Hide paused' })).toHaveAttribute('aria-pressed', 'true');
-    });
   });
 
-  test.describe('Next 30 days', () => {
+  test.describe('Upcoming payments', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole('button', { name: 'Upcoming payments', exact: true }).click();
+    });
+
+    test('lists scheduled expenses by how soon they are due', async ({ page }) => {
+      const rows = page.locator('.recurring-row');
+      test.skip(await rows.count() === 0, 'No recurring expenses.');
+      await expect(page.getByRole('heading', { name: /^(Due within a week|Later|Paused|Ended)$/ }).first()).toBeVisible();
+      await expect(rows.first().locator('.recurring-row__amount b')).toHaveText(/^-\$[\d,]+\.\d{2}$/);
+      const dues = await page.locator('.recurring-row[data-paused="false"] .recurring-row__amount small').allTextContents();
+      const days = dues.filter((text) => text !== 'Ended').map((text) => (
+        text === 'Due today' ? 0 : text === 'Due tomorrow' ? 1 : Number(text.match(/\d+/)[0])
+      ));
+      expect(days).toEqual([...days].sort((a, b) => a - b));
+    });
+
+    test('can include paused schedules in the due list', async ({ page }) => {
+      await page.getByRole('button', { name: 'Show paused' }).click();
+      await expect(page.getByRole('button', { name: 'Hide paused' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
     test('lists what is coming, day by day', async ({ page }) => {
       const agenda = page.getByRole('complementary', { name: 'Next 30 days' });
       await expect(agenda.getByRole('heading', { name: 'Next 30 days' })).toBeVisible();
@@ -137,6 +191,7 @@ test.describe('Recurring payments', () => {
     });
 
     test('opens with the values of the payment being edited', async ({ page }) => {
+      await page.getByRole('tab', { name: /^Expenses \(\d+\)$/ }).click();
       const row = page.locator('.recurring-row').first();
       test.skip(await row.count() === 0, 'No recurring expenses.');
       const name = await row.locator('.recurring-row__name').textContent();

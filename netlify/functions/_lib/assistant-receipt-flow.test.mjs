@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { applyFixtureChanges } from './test-support/transaction-change-rpc.mjs';
 import { checkReceipt, signReceipt, verifyReceipt } from './assistant-receipt.mjs';
 
 // The receipt path of the handler itself, with the model and the database scripted: what
@@ -17,7 +18,7 @@ const HOUSEHOLD = '33333333-3333-4333-8333-333333333332';
 const FOOD = '33333333-3333-4333-8333-333333333333';
 const categories = ['Food', 'Household', 'Clothes'].map((name, index) => ({ id: `44444444-4444-4444-8444-44444444444${index}`, name, type: 'expense' }));
 const recordedRow = (id, amount, description, category, deleted = null) => ({
-  id, user_id: USER, type: 'expense', amount: -amount, date: '2026-11-21', description, account_id: ACCOUNT,
+  id, user_id: USER, assistant_change_version: 1, type: 'expense', amount: -amount, date: '2026-11-21', description, account_id: ACCOUNT,
   category_id: categories.find(({ name }) => name === category).id, category: { name: category }, deleted_at: deleted, provider: null, recurring_payment_id: null,
 });
 // A payment at the same store that is not this purchase.
@@ -44,6 +45,11 @@ globalThis.fetch = async (input, init) => {
     return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(next) }] }] });
   }
   if (url.includes('/auth/v1/user')) return Response.json({ id: USER, aud: 'authenticated', email: 'user@example.test' });
+  if (url.endsWith('/rpc/apply_assistant_transaction_changes')) {
+    const { plan } = JSON.parse(init.body);
+    const { error } = applyFixtureChanges(transactions, USER, plan);
+    return error ? Response.json(error, { status: 409 }) : new Response(null, { status: 204 });
+  }
   const table = /\/rest\/v1\/([a-z_]+)/.exec(url)?.[1];
   if (table === 'transactions') {
     // A small in-memory ledger: reads filtered by id and by trash state, inserts and edits applied to it.
@@ -218,4 +224,144 @@ test('recorded amounts that were rounded by hand are still this purchase, and th
   } finally {
     transactions = unrelated();
   }
+});
+
+const csvImport = (csv, rows) => post({
+  mode: 'prepare_import', attachment: { kind: 'csv', content: csv }, requestId: crypto.randomUUID(),
+  timeZone: 'UTC', messages: [{ role: 'user', content: 'Import these posted rows' }],
+}, [{ rows, warnings: [] }]);
+const confirmImport = (draft, selection) => post({ mode: 'commit_import', importToken: draft.token, selection });
+const purchase = { source_row: 2, date: '2026-11-20', type: 'expense', amount: 25, currency: null,
+  description: 'UNKNOWN VENDOR', provider: null, category: 'Food', account: 'Main Account' };
+
+test('a foreign CSV row with no recognised category requires both a category and a confirmed CAD amount', async () => {
+  transactions = [];
+  categories.push({ id: 'catch-all', name: 'Unexpected', type: 'expense' });
+  try {
+    const { importDraft: draft } = await csvImport('date,description,amount,currency\n2026-11-20,UNKNOWN VENDOR,25,EUR',
+      [{ ...purchase, category: null }]);
+    const [row] = draft.rows;
+    assert.deepEqual([row.status, row.sourceCurrency, row.sourceAmount, row.amount, row.category_id],
+      ['needs_review', 'EUR', 25, null, null]);
+    for (const fields of [{}, { category_id: categories[0].id, amount: 25, sourceCurrency: 'CAD' },
+      { category_id: categories[0].id, cadAmount: 35.678 }, { cadAmount: 35.42 }]) {
+      const out = await confirmImport(draft, [{ rowId: row.rowId, ...fields }]);
+      assert.equal(out.importResult.counts.inserted, 0);
+    }
+    const selection = [{ rowId: row.rowId, category_id: categories[0].id, cadAmount: 35.42 }];
+    assert.equal((await confirmImport(draft, selection)).importResult.counts.inserted, 1);
+    assert.equal((await confirmImport(draft, selection)).importResult.counts.inserted, 0);
+    assert.deepEqual(transactions.map(({ amount, category_id }) => [amount, category_id]), [[35.42, categories[0].id]]);
+  } finally { categories.pop(); transactions = unrelated(); }
+});
+
+test('CAD confirmation rechecks the booked amount against the ledger before allowing a foreign row', async () => {
+  transactions = [recordedRow(OWN, 39.43, 'Same Shop', 'Food')];
+  try {
+    const { importDraft: draft } = await csvImport('date,category,description,amount,type,bank,currency\n2026-11-21,Food,OTHER STORE,25,expense,RBC,EUR', [purchase]);
+    const selection = [{ rowId: draft.rows[0].rowId, cadAmount: 39.43, allowDuplicate: true }];
+    const checked = await confirmImport(draft, selection);
+    assert.equal(checked.importResult.counts.inserted, 0);
+    assert.equal(checked.importDraft.rows[0].duplicates[0].id, OWN);
+    assert.equal(checked.importDraft.rows[0].cadAmount, 39.43);
+    assert.equal((await confirmImport(checked.importDraft, selection)).importResult.counts.inserted, 1);
+  } finally { transactions = unrelated(); }
+});
+
+test('same-file repeated payments require explicit per-row approval including for a subset, with replay-safe IDs', async () => {
+  transactions = [];
+  try {
+    const csv = 'date,amount,description\n2026-11-20,25,UNKNOWN VENDOR\n2026-11-20,25,UNKNOWN VENDOR';
+    const { importDraft: draft } = await csvImport(csv, [purchase, { ...purchase, source_row: 3 }]);
+    const [first, second] = draft.rows;
+    assert.equal(first.status, 'ready');
+    assert.equal(second.status, 'duplicate');
+    assert.equal(second.fileRepeatOf, first.rowId);
+    assert.equal((await confirmImport(draft, [{ rowId: second.rowId }])).importResult.counts.inserted, 0);
+    const selection = [{ rowId: first.rowId }, { rowId: second.rowId, allowDuplicate: true }];
+    assert.equal((await confirmImport(draft, selection)).importResult.counts.inserted, 2);
+    assert.equal((await confirmImport(draft, selection)).importResult.counts.inserted, 0);
+    assert.equal(new Set(transactions.map(({ id }) => id)).size, 2);
+  } finally { transactions = unrelated(); }
+});
+
+test('a foreign receipt with a note waits for the posted CAD total and apportions exactly that total', async () => {
+  transactions = [];
+  try {
+    const question = 'Add this purchase by category.';
+    const first = await post({ mode: 'prepare_import', requestId: crypto.randomUUID(), attachmentNote: true,
+      attachment: { kind: 'image', content: png }, messages: [{ role: 'user', content: question }] }, [{ ...copy, currency: 'EUR' }]);
+    assert.match(first.message, /13.00 EUR/);
+    assert.equal(first.importDraft, undefined);
+    assert.equal(first.changeReviews, undefined);
+    const answer = (content, plans) => post({ requestId: crypto.randomUUID(), receiptToken: first.receiptToken,
+      messages: [{ role: 'user', content: question }, { role: 'assistant', content: first.message }, { role: 'user', content }] }, plans);
+    assert.equal((await answer('13 EUR', [])).importDraft, undefined);
+    const priced = await answer('20.01 CAD', [plan()]);
+    assert.equal(priced.importDraft.rows.reduce((sum, row) => sum + Math.round(row.amount * 100), 0), 2001);
+    assert.match(priced.message, /13.00 EUR/);
+    assert.match(priced.message, /20.01 CAD/);
+    assert.equal(transactions.length, 0);
+    const out = await confirmImport(priced.importDraft, priced.importDraft.rows.map(({ rowId }) => ({ rowId })));
+    assert.equal(out.importResult.counts.inserted, 3);
+    assert.equal(transactions.reduce((sum, row) => sum + Math.round(row.amount * 100), 0), 2001);
+  } finally { transactions = unrelated(); }
+});
+
+test('explicit currency on a CSV amount is protected even when extraction omits it', async () => {
+  for (const csv of [
+    'date,category,description,amount,type,bank\n2026-11-20,Food,UNKNOWN VENDOR,€25.00,expense,RBC',
+    'date,description,Amount (USD)\n2026-11-20,UNKNOWN VENDOR,25',
+  ]) {
+    const { importDraft } = await csvImport(csv, [purchase]);
+    const [row] = importDraft.rows;
+    assert.equal(row.status, 'needs_review');
+    assert.equal(row.sourceAmount, 25);
+    assert.equal(row.amount, null);
+  }
+});
+
+test('an uncertain receipt category stays empty until the customer chooses it', async () => {
+  const out = await withFile('Record this receipt', [plan({ unsure: [{ line: 2, guess: 'item' }] })]);
+  assert.deepEqual(out.importDraft.rows.map(({ status }) => status), ['ready', 'needs_review', 'ready']);
+  assert.equal(out.importDraft.rows[1].category_id, null);
+});
+
+test('independent confirmations of the same foreign payment converge; a different CAD booking shows the prior one', async () => {
+  transactions = [];
+  try {
+    const read = () => csvImport('date,description,amount,currency\n2026-11-20,UNKNOWN VENDOR,25,EUR', [purchase]);
+    const { importDraft: a } = await read();
+    const { importDraft: b } = await read();
+    const pick = (cadAmount, allowDuplicate = false) => [{ rowId: '1', cadAmount, allowDuplicate }];
+    const saved = await Promise.all([confirmImport(a, pick(39.43)), confirmImport(b, pick(39.43))]);
+    assert.equal(saved.reduce((sum, o) => sum + o.importResult.counts.inserted, 0), 1);
+    const { importDraft: next } = await read();
+    assert.equal(next.rows[0].status, 'duplicate');
+    assert.equal(next.rows[0].duplicates[0].amount, 39.43);
+    assert.equal((await confirmImport(next, [{ rowId: '1', allowDuplicate: true }])).importResult.counts.inserted, 0);
+    assert.equal((await confirmImport(next, pick(38.52))).importResult.counts.inserted, 0);
+    assert.equal((await confirmImport(next, pick(38.52, true))).importResult.counts.inserted, 1);
+    assert.equal((await confirmImport(next, pick(38.52, true))).importResult.counts.inserted, 0);
+    assert.deepEqual(transactions.map(({ amount }) => amount), [39.43, 38.52]);
+  } finally { transactions = unrelated(); }
+});
+
+test('different CAD amounts confirmed at the same time get a fresh disclosure before a separate entry', async () => {
+  transactions = [];
+  try {
+    const read = () => csvImport('date,description,amount,currency\n2026-11-20,UNKNOWN VENDOR,25,EUR', [purchase]);
+    const { importDraft: a } = await read();
+    const { importDraft: b } = await read();
+    const pick = (cadAmount) => [{ rowId: '1', cadAmount }];
+    const confirmations = await Promise.all([confirmImport(a, pick(39.43)), confirmImport(b, pick(38.52))]);
+    assert.equal(transactions.length, 1);
+    const review = confirmations.find((out) => out.importDraft)?.importDraft;
+    assert.ok(review);
+    assert.equal(review.rows[0].duplicates[0].amount, transactions[0].amount);
+    assert.notEqual(review.rows[0].cadAmount, transactions[0].amount);
+    const separate = await confirmImport(review, [{ rowId: '1', allowDuplicate: true }]);
+    assert.equal(separate.importResult.counts.inserted, 1);
+    assert.deepEqual(transactions.map(({ amount }) => amount).sort(), [38.52, 39.43]);
+  } finally { transactions = unrelated(); }
 });

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NO_FILTERS, applyFilters, dayHeading, groupByDay, narrowedBy, periodLabel, periodRange, summary, timeline } from './transactionView.js';
+import { NO_FILTERS, applyFilters, dayHeading, groupByDay, narrowedBy, periodLabel, periodRange, summary, timeline, transactionCategoryUrl, transactionFiltersFromSearch } from './transactionView.js';
+import { createClient } from '@supabase/supabase-js';
+import { readActiveTransactions } from './transactionLedger.js';
 
 const now = new Date(2026, 10, 24); // Tuesday, 24 November 2026
 const tx = (id, date, amount, type = 'expense') => ({ id, date, amount, type });
@@ -13,6 +15,40 @@ const november = [
   tx('b', '2026-11-05', 2720.26),
   tx('a', '2026-11-02', 50),
 ];
+
+test('a category audit link shows every expense in the exact period, including unrelated merchant descriptions', async () => {
+  const dates = ['2025-04-01', '2025-04-18', '2025-04-19', '2025-04-17', '2025-04-18', '2025-03-31'];
+  const ledger = dates.map((date, index) => ({
+    id: `tx-${index}`, date, created_at: date + 'T00:00:00Z', amount: index === 0 ? -19 : 4,
+    type: index === 4 ? 'income' : 'expense', category_id: index === 3 ? 'other' : 'category',
+    description: index === 0 ? 'Notebook Studio' : 'Music lessons',
+  }));
+  const requests = [];
+  const supabase = createClient('https://ledger.test', 'public-fixture', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (url) => {
+      const params = new URL(url).searchParams;
+      assert.equal(params.get('user_id'), 'eq.test-user');
+      assert.equal(params.get('deleted_at'), 'is.null');
+      assert.equal(params.get('order'), 'id.asc');
+      const after = params.get('id')?.slice(3);
+      requests.push(after);
+      // This installation has a two-row response cap.
+      const remaining = ledger.filter(row => !after || row.id > after);
+      const page = remaining.slice(0, 2);
+      return Response.json(page, { headers: { 'Content-Range': `0-${page.length - 1}/${ledger.length}` } });
+    } },
+  });
+  const active = await readActiveTransactions(supabase, 'test-user');
+  assert.deepEqual(requests, [undefined, 'tx-1', 'tx-3']);
+  const link = transactionCategoryUrl('category', '2025-04-01', '2025-04-18');
+  const filters = transactionFiltersFromSearch(new URL(link, 'http://local.test').search);
+  const selected = applyFilters(active, filters);
+  assert.deepEqual(selected.map(row => row.id), ['tx-1', 'tx-0']);
+  assert.equal(summary(selected).expenses, 23);
+  assert.deepEqual(transactionFiltersFromSearch(''), NO_FILTERS);
+  assert.deepEqual(transactionFiltersFromSearch('?category=category&type=expense&from=2025-02-30&to=2025-03-30'), NO_FILTERS);
+});
 
 test('the totals of what is in view', () => {
   const totals = summary(november);

@@ -1,8 +1,11 @@
+import { projectionAtOpening } from '../../../frontend/src/lib/projectedBalance.js';
 import { createHash } from 'node:crypto';
 import { BudgetReviewError, categoryBudgetTimeline, getBudgetReview, getCategoryBudgetLimits, monthBounds } from './assistant-budget.mjs';
+import { auditWords, phrasePositions, reconcileRecurringDates, recurringAuditReport } from './assistant-recurring-audit.mjs';
 import { resolveSplits, SplitInputError } from './assistant-split.mjs';
 import { prepareAssistantTransaction, proposeAssistantChanges, TransactionReviewError } from './assistant-transaction.mjs';
-import { getPaymentDatesInRange, getPaymentsUntilSalary } from '../../../frontend/src/lib/recurringUtils.js';
+import { getPaymentDatesInRange, findNextSalary } from '../../../frontend/src/lib/recurringUtils.js';
+import { missingBankPostingColumn } from '../../../frontend/src/lib/recurringBankImport.js';
 import { MATCH_WINDOW_DAYS, matchesRecurringOccurrence } from '../../../frontend/src/lib/recurringAutoAdd.js';
 
 const MONEY_TYPES = ['income', 'expense'];
@@ -13,6 +16,8 @@ const SUMMARY_PAGE_SIZE = 500;
 const MAX_SUMMARY_ROWS = 5000;
 const MAX_DRILLDOWN_ROWS = 100;
 const MAX_UPCOMING_ROWS = 240;
+const MAX_RECURRING_AUDIT_ROWS = 150;
+const MAX_RECURRING_AUDIT_COMPARISONS = 2_000_000;
 const MAX_DAILY_PROJECTION_MOVEMENTS = 30;
 const MAX_PROJECTION_MOVEMENTS = 3000;
 const calendarDayMs = 86_400_000;
@@ -290,7 +295,7 @@ function paginate({ limit, offset }) {
 
 async function fetchData(query) {
   const { data, error } = await query;
-  if (error) throw new Error('BudgetWise data request failed.');
+  if (error) throw new Error('BudgetWise data request failed.', { cause: error });
   return data;
 }
 
@@ -383,7 +388,7 @@ async function listTransactions(supabase, userId, args) {
     .order('created_at', { ascending: false })
     .order('id')
     .range(page.start, page.start + page.size));
-  return listPage(rows, page);
+  return listPage(rows.map((row) => row.type === 'expense' ? { ...row, amount: Math.abs(Number(row.amount)) } : row), page);
 }
 
 export async function summarizeTransactions(supabase, userId, args) {
@@ -401,7 +406,7 @@ export async function summarizeTransactions(supabase, userId, args) {
     count += rows.length;
     if (count > MAX_SUMMARY_ROWS) throw new ToolInputError('This period contains too many transactions. Choose a shorter date range.');
     for (const row of rows) {
-      const cents = Math.round(Number(row.amount) * 100);
+      const cents = Math.round((row.type === 'expense' ? Math.abs(Number(row.amount)) : Number(row.amount)) * 100);
       if (row.type === 'income') income += cents;
       else {
         expenses += cents;
@@ -486,7 +491,7 @@ async function drilldownRows(supabase, userId, filters, categoryIds, includeUnca
   return records.map(({ id, date, amount, description }) => ({
     id,
     date,
-    amount: Number(amount),
+    amount: Math.abs(Number(amount)),
     description: typeof description === 'string' ? description.slice(0, 250) : null,
   }));
 }
@@ -587,14 +592,16 @@ async function listFinanceRecords(supabase, userId, args) {
   };
 }
 
-async function loadActiveRecurringSchedules(supabase, userId, type = null) {
+async function loadRecurringSchedules(supabase, userId, { type = null, categoryId = null, activeOnly = true } = {}) {
   const schedules = [];
   for (let offset = 0; offset <= MAX_SUMMARY_ROWS; offset += SUMMARY_PAGE_SIZE) {
-    const query = supabase.from('recurring_payments')
+    let query = supabase.from('recurring_payments')
       .select('id,name,amount,type,is_active,frequency,frequency_interval,start_date,end_date,business_days_only,last_business_day_of_month,match_description,categories(name)')
-      .eq('user_id', userId)
-      .eq('is_active', true);
-    const rows = await fetchData((type ? query.eq('type', type) : query)
+      .eq('user_id', userId);
+    if (activeOnly) query = query.eq('is_active', true);
+    if (type) query = query.eq('type', type);
+    if (categoryId) query = query.eq('category_id', categoryId);
+    const rows = await fetchData(query
       .order('id')
       .range(offset, offset + SUMMARY_PAGE_SIZE - 1));
     schedules.push(...rows);
@@ -615,15 +622,26 @@ function localCalendarDate(date) {
   return parts.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
 }
 
-async function readProjectionRows(query) {
+async function readLedgerRows(query, overflowMessage = 'There are too many records to project your account balance.') {
   const records = [];
   for (let offset = 0; offset <= MAX_SUMMARY_ROWS; offset += SUMMARY_PAGE_SIZE) {
     const page = await fetchData(query().order('id').range(offset, offset + SUMMARY_PAGE_SIZE - 1));
     records.push(...page);
-    if (records.length > MAX_SUMMARY_ROWS) throw new ToolInputError('There are too many records to project your account balance.');
+    if (records.length > MAX_SUMMARY_ROWS) throw new ToolInputError(overflowMessage);
     if (page.length < SUMMARY_PAGE_SIZE) break;
   }
   return records;
+}
+
+// Older deployments can still read schedules. Only the additional statement
+// evidence is absent before the recurring_bank_posting migration.
+async function readPostingRows(makeQuery, overflowMessage) {
+  try {
+    return await readLedgerRows(() => makeQuery(',recurring_bank_posting'), overflowMessage);
+  } catch (error) {
+    if (!missingBankPostingColumn(error.cause)) throw error;
+    return readLedgerRows(() => makeQuery(''), overflowMessage);
+  }
 }
 
 function addProjectedFlow(cash, date, { id, label, type, cents, source }) {
@@ -640,53 +658,59 @@ function manualPostingKey(date, type, cents) {
   return `${date}:${type}:${cents}`;
 }
 
-async function loadProjectionInputs(supabase, userId, start, end, days) {
-  const accounts = await readProjectionRows(() => supabase.from('accounts').select('id,balance').eq('user_id', userId));
-  if (!accounts.length) return null;
-
-  const accountIds = new Set(accounts.map(({ id }) => id));
+async function loadPaymentLedger(supabase, userId, start, end, days, includeProjection) {
   const firstMatch = addCalendarDays(start, -MATCH_WINDOW_DAYS);
   const lastMatch = addCalendarDays(end, MATCH_WINDOW_DAYS);
-  const recorded = await readProjectionRows(() => supabase.from('transactions')
-    .select('id,account_id,type,amount,date,description,deleted_at,recurring_payment_id')
-    .eq('user_id', userId)
-    .or(`deleted_at.not.is.null,date.gte.${firstMatch}`));
+  const [accounts, recorded] = await Promise.all([
+    includeProjection ? readLedgerRows(() => supabase.from('accounts').select('id,balance').eq('user_id', userId)) : [],
+    readPostingRows((postingColumn) => {
+      const query = supabase.from('transactions')
+        .select('id,account_id,type,amount,date,description,deleted_at,recurring_payment_id' + postingColumn)
+        .eq('user_id', userId);
+      // The balance trigger used the raw signed column, including old negative expenses.
+      // Read those rows as well when reconstructing an opening balance from that trigger.
+      return includeProjection
+        ? query.or(`deleted_at.not.is.null,date.gte.${firstMatch},and(type.eq.expense,amount.lt.0)`)
+        : query.gte('date', firstMatch).lte('date', lastMatch);
+    }),
+  ]);
+  const accountIds = new Set(accounts.map(({ id }) => id));
   const cash = {
-    daily: new Map(),
+    daily: new Map(), accountCount: accounts.length,
+    opening: accounts.reduce((sum, account) => sum + Math.round(Number(account.balance) * 100), 0),
     movementLimit: Math.min(MAX_DAILY_PROJECTION_MOVEMENTS, Math.floor(MAX_PROJECTION_MOVEMENTS / days)),
   };
-  const linked = new Set();
+  const linked = new Map();
   const manual = new Map();
-  let opening = 0;
-  for (const account of accounts) opening += Math.round(Number(account.balance) * 100);
-
   for (const row of recorded) {
-    if (!accountIds.has(row.account_id) || !MONEY_TYPES.includes(row.type)) continue;
-    const cents = Math.round(Number(row.amount) * 100);
-    if (!Number.isSafeInteger(cents)) throw new ToolInputError('A recorded amount exceeds the precision of this projection.');
-    const signed = row.type === 'income' ? cents : -cents;
-
-    // The ledger balance trigger includes each insert, even a future-dated or subsequently trashed row.
-    if (row.deleted_at || row.date > start) opening -= signed;
-    if (!row.deleted_at && row.date > start && row.date <= end) {
-      addProjectedFlow(cash, row.date, {
-        id: `recorded:${row.id}`, label: row.description?.trim().slice(0, 250) || 'Recorded transaction',
-        type: row.type, cents, source: 'recorded',
-      });
+    if (!MONEY_TYPES.includes(row.type)) continue;
+    const raw = Math.round(Number(row.amount) * 100);
+    if (!Number.isSafeInteger(raw)) throw new ToolInputError('A recorded amount exceeds the precision of this forecast.');
+    const evidence = row.recurring_payment_id && row.recurring_bank_posting;
+    const flowDate = evidence?.date ?? row.date;
+    const cents = row.type === 'expense' ? Math.abs(raw) : raw;
+    if (accountIds.has(row.account_id)) {
+      const storedEffect = row.type === 'income' ? raw : -raw;
+      const openingEffect = row.deleted_at || flowDate > start ? 0 : row.type === 'income' ? cents : -cents;
+      cash.opening += openingEffect - storedEffect;
+      if (!row.deleted_at && flowDate > start && flowDate <= end) {
+        addProjectedFlow(cash, flowDate, {
+          id: `recorded:${row.id}`, label: row.description?.trim().slice(0, 250) || 'Recorded transaction',
+          type: row.type, cents, source: 'recorded',
+        });
+      }
     }
-
     if (row.date < firstMatch || row.date > lastMatch) continue;
     if (row.recurring_payment_id) {
-      // A discarded generated occurrence is a cancellation, as in the auto-add flow.
-      linked.add(`${row.recurring_payment_id}:${row.date}`);
+      linked.set(`${row.recurring_payment_id}:${row.date}`, { ...row, date: flowDate });
     } else if (!row.deleted_at) {
       const key = manualPostingKey(row.date, row.type, cents);
       if (!manual.has(key)) manual.set(key, []);
       manual.get(key).push(row);
     }
   }
-  if (!Number.isSafeInteger(opening)) throw new ToolInputError('The account balance exceeds the precision of this projection.');
-  return { ...cash, opening, accountCount: accounts.length, linked, manual, matched: new Set() };
+  if (!Number.isSafeInteger(cash.opening)) throw new ToolInputError('The account balance exceeds the precision of this projection.');
+  return { cash: accounts.length ? cash : null, linked, manual, matched: new Set() };
 }
 
 function scheduleDates(schedule, start, end) {
@@ -696,35 +720,97 @@ function scheduleDates(schedule, start, end) {
   ).map(localCalendarDate);
 }
 
-function projectSchedule(cash, schedule, dates, label, cents, start, end) {
-  if (!dates.length) return;
-  const pending = new Set(dates.filter((date) => !cash.linked.has(`${schedule.id}:${date}`)));
-  if (pending.size && schedule.match_description?.trim() && cash.manual.size) {
-    // Let an exact posting around either boundary satisfy its own scheduled date first.
-    const extended = [
-      ...scheduleDates(schedule, addCalendarDays(start, -MATCH_WINDOW_DAYS), addCalendarDays(start, -1)),
-      ...pending,
-      ...scheduleDates(schedule, addCalendarDays(end, 1), addCalendarDays(end, MATCH_WINDOW_DAYS)),
-    ].filter((date) => !cash.linked.has(`${schedule.id}:${date}`));
-    const unmatched = new Set(extended);
+async function findAuditCategory(supabase, userId, category, question) {
+  if (category != null) return resolveName(supabase, userId, 'categories', category, 'expense');
+  if (typeof question !== 'string' || !question.trim() || question.length > 2_000) {
+    throw new ToolInputError('Which expense category should I compare with its recurring schedule?');
+  }
+  const categories = await readLedgerRows(() => supabase.from('categories').select('id,name')
+    .eq('user_id', userId).eq('type', 'expense'), 'Please specify one expense category by its exact name.');
+  const words = auditWords(question);
+  const hits = categories.flatMap((record) => {
+    const phrase = auditWords(record.name);
+    return phrasePositions(words, phrase).map((start) => ({ record, start, end: start + phrase.length }));
+  });
+  hits.sort((a, b) => a.start - b.start || b.end - a.end);
+  const unique = new Map();
+  let spanStart = -1;
+  let spanEnd = -1;
+  for (const hit of hits) {
+    if (hit.end < spanEnd || (hit.end === spanEnd && hit.start > spanStart)) continue;
+    unique.set(hit.record.id, hit.record);
+    spanStart = hit.start;
+    spanEnd = hit.end;
+  }
+  if (unique.size !== 1) throw new ToolInputError('Which single expense category should I compare with its recurring schedule?');
+  return unique.values().next().value;
+}
 
-    for (let distance = 0; distance <= MATCH_WINDOW_DAYS; distance++) {
-      for (const date of unmatched) {
-        const offsets = distance === 0 ? [0] : [-distance, distance];
-        const posting = offsets.flatMap((offset) => cash.manual.get(manualPostingKey(addCalendarDays(date, offset), schedule.type, cents)) ?? [])
-          .find((row) => !cash.matched.has(row.id) && matchesRecurringOccurrence(row, schedule, date));
-        if (!posting) continue;
-        cash.matched.add(posting.id);
-        unmatched.delete(date);
-        pending.delete(date);
-      }
+export async function getRecurringDateAudit(supabase, userId, { category, question, month = null }, today) {
+  const selectedMonth = month ?? today.slice(0, 7);
+  const { start, end } = monthBounds(selectedMonth);
+  const selected = await findAuditCategory(supabase, userId, category, question);
+  const endDate = end < today ? end : today;
+  const report = {
+    category: selected.name, categoryId: selected.id, month: selectedMonth, startDate: start, endDate, asOf: today,
+    transactions: [], transactionCount: 0, transactionTotal: 0,
+  };
+  if (endDate < start) return recurringAuditReport(report, [], MAX_RECURRING_AUDIT_ROWS);
+
+  // Include adjacent postings to identify charges that moved across the month boundary.
+  const windowStart = addCalendarDays(start, -MATCH_WINDOW_DAYS);
+  const windowEnd = addCalendarDays(endDate, MATCH_WINDOW_DAYS);
+  const first = windowStart < '0001-01-01' ? '0001-01-01' : windowStart;
+  const last = windowEnd < today ? windowEnd : today;
+  const tooMany = 'There are too many recurring payments or transactions to reconcile this month.';
+  const [payments, ledger] = await Promise.all([
+    loadRecurringSchedules(supabase, userId, { type: 'expense', categoryId: selected.id, activeOnly: false }),
+    readPostingRows((postingColumn) => supabase.from('transactions')
+      .select('id,date,amount,description,recurring_payment_id,deleted_at' + postingColumn)
+      .eq('user_id', userId).eq('category_id', selected.id).eq('type', 'expense')
+      .gte('date', first).lte('date', last), tooMany),
+  ]);
+  const schedules = payments.map((schedule) => ({ schedule, dates: scheduleDates(schedule, first, last) }));
+  const rows = reconcileRecurringDates({
+    schedules, ledger, category: selected.name, startDate: start, endDate, maxComparisons: MAX_RECURRING_AUDIT_COMPARISONS,
+  });
+  if (!rows) throw new ToolInputError(tooMany);
+  // The audit also reads adjacent days for matching. The category list uses the
+  // book date displayed on Transactions and includes each live ledger row once.
+  const transactions = ledger.filter((row) => !row.deleted_at && row.date >= start && row.date <= endDate)
+    .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  report.transactionCount = transactions.length;
+  report.transactionTotal = transactions.reduce((sum, row) => sum + Math.round(Math.abs(Number(row.amount)) * 100), 0) / 100;
+  report.transactions = transactions.slice(0, MAX_RECURRING_AUDIT_ROWS).map((row) => ({
+    id: row.id, date: row.date, description: row.description?.trim().slice(0, 250) || null,
+    amount: Math.abs(Number(row.amount)), generated: Boolean(row.recurring_payment_id),
+  }));
+  return recurringAuditReport(report, rows, MAX_RECURRING_AUDIT_ROWS);
+}
+
+// Allocate a posting to at most one occurrence. Check exact dates first, including
+// dates just outside the requested period so a nearby charge stays with its own bill.
+function occurrencePostings(ledger, schedule, dates, cents) {
+  const postings = new Map();
+  const unmatched = new Set();
+  for (const date of dates) {
+    const linked = ledger.linked.get(`${schedule.id}:${date}`);
+    if (linked) postings.set(date, linked);
+    else unmatched.add(date);
+  }
+  if (!schedule.match_description?.trim() || !ledger.manual.size) return postings;
+  for (let distance = 0; distance <= MATCH_WINDOW_DAYS; distance++) {
+    for (const date of unmatched) {
+      const offsets = distance === 0 ? [0] : [-distance, distance];
+      const posting = offsets.flatMap((offset) => ledger.manual.get(manualPostingKey(addCalendarDays(date, offset), schedule.type, cents)) ?? [])
+        .find((row) => !ledger.matched.has(row.id) && matchesRecurringOccurrence(row, schedule, date));
+      if (!posting) continue;
+      ledger.matched.add(posting.id);
+      unmatched.delete(date);
+      postings.set(date, posting);
     }
   }
-  for (const date of pending) {
-    addProjectedFlow(cash, date, {
-      id: `scheduled:${schedule.id}:${date}`, label, type: schedule.type, cents, source: 'scheduled',
-    });
-  }
+  return postings;
 }
 
 function projectedBalance(cash, start, dayCount) {
@@ -747,23 +833,33 @@ function projectedBalance(cash, start, dayCount) {
   return { startingBalance: cash.opening / 100, accountCount: cash.accountCount, days, firstNegative, lowestBalance };
 }
 
-export async function getUpcomingPaymentsPlan(supabase, userId, { startDate, endDate, type }, today) {
+export async function getUpcomingPaymentsPlan(supabase, userId, { startDate, endDate, type }, today, knownSchedules = null) {
   const firstDate = asDate(startDate ?? today, 'Starting date');
   const { start, end } = transactionDateRange(firstDate, endDate ?? addCalendarDays(firstDate, 29));
   const scope = type == null ? null : asType(type);
   const startMs = Date.parse(start);
   const days = (Date.parse(end) - startMs) / calendarDayMs + 1;
-  const [schedules, cash] = await Promise.all([
-    loadActiveRecurringSchedules(supabase, userId, scope),
-    !scope && start === today ? loadProjectionInputs(supabase, userId, start, end, days).catch(() => null) : null,
+  const includeProjection = !scope && start === today;
+  const ledgerRequest = loadPaymentLedger(supabase, userId, start, end, days, includeProjection)
+    .catch((error) => {
+      // A large balance history can exceed the projection limit. The schedule
+      // still needs a successful read of postings in its own date range.
+      if (!includeProjection || !(error instanceof ToolInputError)) throw error;
+      return loadPaymentLedger(supabase, userId, start, end, days, false);
+    });
+  const [schedules, ledger] = await Promise.all([
+    knownSchedules ?? loadRecurringSchedules(supabase, userId, { type: scope }), ledgerRequest,
   ]);
+  const { cash } = ledger;
   const windows = [];
   // The shared recurrence engine caps each schedule at 366 dates, including adjusted dates outside the window.
-  for (let windowStart = start; windowStart <= end; ) {
+  const firstMatch = addCalendarDays(start, -MATCH_WINDOW_DAYS);
+  const lastMatch = addCalendarDays(end, MATCH_WINDOW_DAYS);
+  for (let windowStart = firstMatch; windowStart <= lastMatch; ) {
     const possibleEnd = addCalendarDays(windowStart, 179);
-    const windowEnd = possibleEnd < end ? possibleEnd : end;
+    const windowEnd = possibleEnd < lastMatch ? possibleEnd : lastMatch;
     windows.push([windowStart, windowEnd]);
-    if (windowEnd === end) break;
+    if (windowEnd === lastMatch) break;
     windowStart = addCalendarDays(windowEnd, 1);
   }
 
@@ -781,23 +877,32 @@ export async function getUpcomingPaymentsPlan(supabase, userId, { startDate, end
     const cents = Math.round(Number(schedule.amount) * 100);
     if (!Object.hasOwn(totals, schedule.type) || !Number.isSafeInteger(cents) || cents <= 0) continue;
     const label = schedule.name?.trim().slice(0, 250) || 'Scheduled payment';
-    const dates = windows.flatMap(([first, last]) => scheduleDates(schedule, first, last));
-    if (cash) projectSchedule(cash, schedule, dates, label, cents, start, end);
-    for (const date of dates) {
+    const dates = [...new Set(windows.flatMap(([first, last]) => scheduleDates(schedule, first, last)))];
+    const postings = occurrencePostings(ledger, schedule, dates, cents);
+    for (const due of dates) {
+      const posting = postings.get(due);
+      if (posting && (posting.deleted_at || posting.date <= today)) continue;
+      const date = posting?.date ?? due;
+      if (date < start || date > end) continue;
+      // A future-dated posting already contributes its own movement to the chart.
+      if (cash && !posting) addProjectedFlow(cash, date, {
+        id: `scheduled:${schedule.id}:${due}`, label, type: schedule.type, cents, source: 'scheduled',
+      });
+      const paymentCents = posting ? Math.abs(Math.round(Number(posting.amount) * 100)) : cents;
       const week = weeks[Math.floor((Date.parse(date) - startMs) / (calendarDayMs * 7))];
-      week[schedule.type] += cents;
-      totals[schedule.type] += cents;
+      week[schedule.type] += paymentCents;
+      totals[schedule.type] += paymentCents;
       paymentCount++;
       const next = nextByType[schedule.type];
       if (!next || date < next.date) {
-        nextByType[schedule.type] = { date, label, amount: cents / 100, count: 1 };
+        nextByType[schedule.type] = { date, label, amount: paymentCents / 100, count: 1 };
       } else if (date === next.date) {
         next.count++;
       }
       if (!byDate.has(date)) byDate.set(date, []);
       const payments = byDate.get(date);
       if (payments.length < MAX_UPCOMING_ROWS) {
-        payments.push({ id: `${schedule.id}:${date}`, label, date, amount: cents / 100, type: schedule.type });
+        payments.push({ id: `${schedule.id}:${due}`, label, date, amount: paymentCents / 100, type: schedule.type });
       }
     }
   }
@@ -832,32 +937,32 @@ async function paymentsUntilSalary(supabase, userId, args, today) {
     }
   }
 
-  const schedules = await loadActiveRecurringSchedules(supabase, userId);
-  const plan = getPaymentsUntilSalary(schedules, asOf, endDate);
-  const availableCents = availableAmount == null ? null : Math.round(availableAmount * 100);
-  const difference = plan.totalCents == null || availableCents == null ? null : availableCents - plan.totalCents;
-  if ((plan.totalCents != null && !Number.isSafeInteger(plan.totalCents)) ||
-      (difference != null && !Number.isSafeInteger(difference))) {
-    throw new ToolInputError('The scheduled expenses are too large to compare precisely.');
-  }
+  const schedules = await loadRecurringSchedules(supabase, userId);
+  const salary = findNextSalary(schedules, asOf);
+  const cutoff = endDate ?? salary?.date ?? null;
+  const plan = cutoff && await getUpcomingPaymentsPlan(supabase, userId, {
+    startDate: asOf, endDate: cutoff, type: 'expense',
+  }, today, schedules.filter((row) => row.type === 'expense'));
+  const remaining = plan && availableAmount != null
+    ? (Math.round(availableAmount * 100) - Math.round(plan.expenses * 100)) / 100 : null;
   const maxOccurrences = 40;
 
   return trimStrings({
     ok: true,
     as_of: asOf,
-    salary_identified: plan.salary != null,
-    salary_date: plan.salary?.date ?? null,
-    salary_name: plan.salary?.name ?? null,
-    through_date: plan.throughDate,
-    source: endDate ? 'explicit_end_date' : plan.salary ? 'salary_schedule' : null,
+    salary_identified: salary != null,
+    salary_date: salary?.date ?? null,
+    salary_name: salary?.name ?? null,
+    through_date: cutoff,
+    source: endDate ? 'explicit_end_date' : salary ? 'salary_schedule' : null,
     includes_end_date: true,
-    total_scheduled_expenses: plan.totalCents == null ? null : plan.totalCents / 100,
+    total_scheduled_expenses: plan?.expenses ?? null,
     available_amount: availableAmount,
-    difference: difference == null ? null : difference / 100,
-    covers_scheduled_expenses: difference == null ? null : difference >= 0,
-    scheduled_occurrences: plan.expenses.slice(0, maxOccurrences),
-    scheduled_occurrence_count: plan.expenses.length,
-    occurrences_omitted: Math.max(0, plan.expenses.length - maxOccurrences),
+    difference: remaining,
+    covers_scheduled_expenses: remaining == null ? null : remaining >= 0,
+    scheduled_occurrences: (plan?.payments ?? []).slice(0, maxOccurrences).map(({ label, date, amount }) => ({ name: label, date, amount })),
+    scheduled_occurrence_count: plan?.paymentCount ?? 0,
+    occurrences_omitted: Math.max(0, (plan?.paymentCount ?? 0) - maxOccurrences),
   });
 }
 
@@ -985,7 +1090,12 @@ export async function executeAssistantTool(context) {
         startDate: args.start_date, endDate: args.end_date, type: args.type,
       }, context.today);
       const { payments, projection, ...summary } = upcomingPayments;
-      return { result: { ok: true, ...summary, payments: payments.slice(0, 40), omittedPayments: summary.paymentCount - Math.min(40, payments.length) }, upcomingPayments };
+      const daily = projectionAtOpening(projection);
+      const cashFlow = daily ? {
+        opening_balance: 0, required_top_up: daily.topUpCents / 100, top_up_by: daily.topUpDate ?? null,
+        lowest_daily_balance: daily.lowest.balance, lowest_date: daily.lowest.date,
+      } : null;
+      return { result: { ok: true, ...summary, cash_flow: cashFlow, payments: payments.slice(0, 40), omittedPayments: summary.paymentCount - Math.min(40, payments.length) }, upcomingPayments };
     }
     if (name === 'get_payments_until_salary') return { result: await paymentsUntilSalary(supabase, userId, args, context.today) };
     if (name === 'get_budget_review') {

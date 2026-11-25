@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated:** 2026-11-20
+**Last Updated:** 2026-11-25
 **Current Version:** 2.0.0
 **Status:** Active Development
 
@@ -9,6 +9,10 @@
 ## Current Status
 
 ### ✅ Completed
+
+The November 25 assistant review fixes are implemented locally. Production rollout requires the assistant database migrations followed by the matching function and frontend release.
+
+The local Recurring page opens on a category directory of saved schedules, including paused, ended and future payments. The calendar and 30-day agenda are available under Upcoming payments.
 
 #### Phase 1: React Migration (v1.0.0)
 - [x] Migrate from vanilla HTML/CSS/JS to React

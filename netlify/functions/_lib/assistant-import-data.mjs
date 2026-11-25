@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { MATCH_WINDOW_DAYS, matchesRecurringOccurrence } from '../../../frontend/src/lib/recurringAutoAdd.js';
+import { importSignature, isMissingImportSignatureColumn } from '../../../frontend/src/lib/importSignature.js';
 
 const MAX_ROWS = 100;
 const MAX_AMOUNT = 9_999_999_999.99;
@@ -33,6 +34,18 @@ function signature({ date, type, description, amount }) {
   return JSON.stringify([date, type, normalize(description), Math.abs(Number(amount)).toFixed(2)]);
 }
 
+// A saved row also answers for the bank row in its stored import signature, which an edit of
+// its amount or description does not change.
+function storedSignature(type, importedAs) {
+  return JSON.stringify([type, importedAs]);
+}
+
+function sourceSignature(row) {
+  return row.sourceCurrency
+    ? JSON.stringify([row.date, row.type, normalize(row.description), row.sourceCurrency, row.sourceAmount])
+    : signature(row);
+}
+
 function transactionId(userId, rowSignature, proposalId = null) {
   // Independent previews and concurrent confirmations share the same identity for the same row.
   const hash = createHash('sha256')
@@ -46,7 +59,9 @@ function transactionId(userId, rowSignature, proposalId = null) {
 
 async function read(query) {
   const { data, error } = await query;
-  if (error || !Array.isArray(data)) throw new Error('BudgetWise could not complete the import database request.');
+  if (error || !Array.isArray(data)) {
+    throw new Error('BudgetWise could not complete the import database request.', { cause: error });
+  }
   return data;
 }
 
@@ -97,10 +112,7 @@ function suggestedCategory(row, categories, mappings) {
     .filter((mapping) => description.includes(mapping.merchant))
     .map((mapping) => findByName(categories, mapping.category))
     .filter(Boolean);
-  if (matchingMappings.length) return matchingMappings[0];
-
-  const fallbackName = row.type === 'income' ? 'Other Income' : 'Unexpected';
-  return findByName(categories, fallbackName) ?? (categories.length === 1 ? categories[0] : undefined);
+  return matchingMappings[0];
 }
 
 function prepareRows(rows, options, mappings, defaultAccountId, commit) {
@@ -109,14 +121,18 @@ function prepareRows(rows, options, mappings, defaultAccountId, commit) {
     const issues = [];
     const date = validDate(row.date) ? row.date : null;
     const type = ['income', 'expense'].includes(row.type) ? row.type : null;
-    const amount = typeof row.amount === 'number' && Number.isFinite(row.amount) &&
-      row.amount > 0 && row.amount <= MAX_AMOUNT && Number(row.amount.toFixed(2)) === row.amount ? row.amount : null;
+    const foreign = row.sourceCurrency && row.sourceCurrency !== 'CAD';
+    const requestedAmount = foreign ? row.cadAmount : row.amount;
+    const amount = typeof requestedAmount === 'number' && Number.isFinite(requestedAmount) &&
+      requestedAmount > 0 && requestedAmount <= MAX_AMOUNT && Number(requestedAmount.toFixed(2)) === requestedAmount
+      ? requestedAmount : null;
     const description = text(row.description, 250);
     const provider = text(row.provider, 100) || null;
 
     if (!date) issues.push('Supply a valid posting date.');
     if (!type) issues.push('Choose income or expense.');
-    if (amount === null) issues.push('Supply a positive amount with at most two decimal places.');
+    if (amount === null) issues.push(foreign ? 'Enter the amount posted to your account in CAD.'
+      : 'Supply a positive amount with at most two decimal places.');
     if (!description) issues.push('Supply a transaction description.');
 
     const typeCategories = categories.filter((category) => category.type === type);
@@ -132,7 +148,7 @@ function prepareRows(rows, options, mappings, defaultAccountId, commit) {
     }
 
     let category = typeCategories.find(({ id }) => id === row.category_id);
-    if (row.category_id == null && !commit) {
+    if (row.category_id == null && !commit && !row.requireCategory) {
       category = suggestedCategory({ category: row.category, type, description }, typeCategories, mappings);
     }
 
@@ -144,6 +160,9 @@ function prepareRows(rows, options, mappings, defaultAccountId, commit) {
       date,
       type,
       amount,
+      ...(foreign && { sourceCurrency: row.sourceCurrency, sourceAmount: row.sourceAmount ?? row.amount, cadAmount: amount }),
+      ...(row.requireCategory && { requireCategory: true }),
+      ...(row.fileRepeatOf != null && { fileRepeatOf: row.fileRepeatOf }),
       description,
       provider,
       account_id: account?.id ?? null,
@@ -192,11 +211,18 @@ async function findDuplicates(supabase, userId, dates) {
   }
 
   const columns = 'id,date,description,amount,type,account_id,category_id,deleted_at';
+  const onDates = (selected) => Promise.all(chunk(dates).map((group) => readAll(() => supabase.from('transactions')
+    .select(selected)
+    .eq('user_id', userId)
+    .in('date', group))));
+  // Without migration 010 the column does not exist; rows are then matched on current values only.
+  let hasSignatureColumn = true;
   const [existing, generated] = await Promise.all([
-    Promise.all(chunk(dates).map((group) => readAll(() => supabase.from('transactions')
-      .select(columns)
-      .eq('user_id', userId)
-      .in('date', group)))),
+    onDates(`${columns},import_signature`).catch((error) => {
+      if (!isMissingImportSignatureColumn(error.cause)) throw error;
+      hasSignatureColumn = false;
+      return onDates(columns);
+    }),
     Promise.all(chunk([...neighbors]).map((group) => readAll(() => supabase.from('transactions')
       .select(`${columns},recurring_payments(match_description)`)
       .eq('user_id', userId)
@@ -205,14 +231,17 @@ async function findDuplicates(supabase, userId, dates) {
       .in('date', group)))),
   ]);
 
+  const byId = new Map();
   const exact = new Map();
   const possible = new Map();
   for (const row of existing.flat()) {
+    byId.set(row.id, row);
     // Preserve the existing exact-signature check, including entries removed from the ledger.
     addIndex(exact, signature(row), row);
+    if (row.import_signature) addIndex(exact, storedSignature(row.type, row.import_signature), row);
     if (!row.deleted_at) addIndex(possible, possibleMatchKey(row), row);
   }
-  return { exact, possible, generated: generated.flat() };
+  return { byId, exact, possible, generated: generated.flat(), hasSignatureColumn };
 }
 
 function detail(row, accounts, categories) {
@@ -230,42 +259,43 @@ function disclosureFingerprint(matches) {
   return createHash('sha256').update(JSON.stringify(matches)).digest('base64url');
 }
 
-function inFileRepeat(row) {
-  return { ...row, status: 'duplicate', issues: [...row.issues, 'This transaction is repeated in the import.'] };
-}
-
 async function markDuplicates(supabase, userId, rows, options) {
   const dates = [...new Set(rows.map(({ date }) => date).filter(Boolean))];
-  if (!dates.length) return rows.map((row) => ({ row, fingerprint: null }));
-  const { exact, possible, generated } = await findDuplicates(supabase, userId, dates);
+  if (!dates.length) return { entries: rows.map((row) => ({ row, fingerprint: null })), hasSignatureColumn: false };
+  const { byId, exact, possible, generated, hasSignatureColumn } = await findDuplicates(supabase, userId, dates);
   const accounts = new Map(options.accounts.map(({ id, name }) => [id, name]));
   const categories = new Map(options.categories.map(({ id, name }) => [id, name]));
-  const seen = new Set();
+  const seen = new Map();
 
-  return rows.map((row) => {
-    const complete = row.date && row.type && row.amount !== null && row.description;
+  const entries = rows.map((row) => {
+    const hasAmount = row.amount != null;
+    const complete = row.date && row.type && row.description && (hasAmount || (row.sourceCurrency && row.sourceAmount > 0));
     if (!complete) return { row, fingerprint: null };
 
-    const key = signature(row);
-    if (row.status === 'ready') {
-      if (seen.has(key)) return { row: inFileRepeat(row), fingerprint: null };
-      seen.add(key);
-    }
+    const key = sourceSignature(row);
+    // The signed reference survives importing just one selected row out of the file.
+    const fileRepeatOf = row.fileRepeatOf ?? seen.get(key);
+    if (!seen.has(key)) seen.set(key, row.rowId);
 
-    const rowExact = exact.get(key) ?? [];
-    const rowPossible = possible.get(possibleMatchKey(row)) ?? [];
-    const rowGenerated = generated.filter((occurrence) => matchesRecurringOccurrence(row, {
+    const priorSource = row.sourceCurrency && byId.get(transactionId(userId, key));
+    const rowExact = [
+      ...(priorSource ? [priorSource] : []),
+      ...(hasAmount ? exact.get(signature(row)) ?? [] : []),
+      ...(hasAmount ? exact.get(storedSignature(row.type, importSignature(row))) ?? [] : []),
+    ];
+    const rowPossible = (hasAmount && possible.get(possibleMatchKey(row))) || [];
+    const rowGenerated = generated.filter((occurrence) => hasAmount && matchesRecurringOccurrence(row, {
       type: occurrence.type,
       amount: occurrence.amount,
       match_description: occurrence.recurring_payments?.match_description,
     }, occurrence.date));
     const combined = new Map([...rowExact, ...rowPossible, ...rowGenerated].map((match) => [match.id, match]));
-    if (!combined.size) return { row, fingerprint: null };
+    if (!combined.size && fileRepeatOf == null) return { row, fingerprint: null };
 
     const ordered = [...combined.values()].sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
     const details = ordered.map((match) => detail(match, accounts, categories));
     const limitReached = details.length > MAX_DISCLOSED_MATCHES;
-    const issue = limitReached
+    const ledgerIssue = !combined.size ? null : limitReached
       ? 'Too many ledger matches to approve this row in the import. Check Transactions.'
       : rowExact.length
         ? 'An equivalent transaction was already recorded.'
@@ -276,21 +306,27 @@ async function markDuplicates(supabase, userId, rows, options) {
       row: {
         ...row,
         status: 'duplicate',
-        issues: [...row.issues, issue],
+        ...(fileRepeatOf != null && { fileRepeatOf }),
+        issues: [
+          ...row.issues,
+          ...(fileRepeatOf != null ? [`This also appears on row ${fileRepeatOf} of this file.`] : []),
+          ...(ledgerIssue ? [ledgerIssue] : []),
+        ],
         duplicates: details.slice(0, MAX_DISCLOSED_MATCHES),
         ...(limitReached && { duplicateLimitReached: true }),
       },
       // Include changes beyond the display cutoff and changes to the original saved row.
-      fingerprint: disclosureFingerprint(ordered.map((match, index) => ({
+      fingerprint: disclosureFingerprint([fileRepeatOf ?? null, key, ...ordered.map((match, index) => ({
         ...details[index],
         originalDescription: match.description,
         accountId: match.account_id,
         categoryId: match.category_id,
         type: match.type,
         deletedAt: match.deleted_at,
-      }))),
+      }))]),
     };
   });
+  return { entries, hasSignatureColumn };
 }
 
 function disclosedRows(entries) {
@@ -303,7 +339,8 @@ export async function previewAssistantImport({ supabase, userId, rows, accountId
     options ?? loadAssistantImportOptions({ supabase, userId }),
     loadMappings(supabase, userId),
   ]);
-  const preview = await markDuplicates(supabase, userId, prepareRows(rows, catalog, mappings, accountId, false), catalog);
+  const { entries: preview } = await markDuplicates(
+    supabase, userId, prepareRows(rows, catalog, mappings, accountId, false), catalog);
 
   return {
     ...catalog,
@@ -319,7 +356,8 @@ function priorImport(row, id) {
 export async function commitAssistantImport({ supabase, userId, rows, proposalId = null, disclosures = [] }) {
   validateRows(rows);
   const options = await loadAssistantImportOptions({ supabase, userId });
-  const prepared = await markDuplicates(supabase, userId, prepareRows(rows, options, [], null, true), options);
+  const { entries: prepared, hasSignatureColumn } = await markDuplicates(
+    supabase, userId, prepareRows(rows, options, [], null, true), options);
   const shown = new Map(disclosures.map(({ rowId, fingerprint }) => [rowId, fingerprint]));
   const overrideRequests = new Set(rows.filter(({ allowDuplicate }) => allowDuplicate === true).map(({ rowId }) => rowId));
 
@@ -340,10 +378,10 @@ export async function commitAssistantImport({ supabase, userId, rows, proposalId
     if (approvedId && alreadyApproved.has(approvedId)) return { row: priorImport(row, approvedId), id: null };
     if (fingerprint && fingerprint !== shown.get(row.rowId)) needsRefresh = true;
 
-    const canAdd = row.account_id && row.category_id && approvedId &&
+    const canAdd = row.amount != null && row.account_id && row.category_id && approvedId &&
       fingerprint && fingerprint === shown.get(row.rowId) && !row.duplicateLimitReached;
     const id = row.status === 'ready'
-      ? approvedId ?? transactionId(userId, signature(row))
+      ? approvedId ?? transactionId(userId, sourceSignature(row))
       : canAdd
         ? approvedId
         : null;
@@ -359,6 +397,8 @@ export async function commitAssistantImport({ supabase, userId, rows, proposalId
     amount: row.amount,
     description: row.description,
     provider: row.provider,
+    // The statement row this transaction answers for, so later edits don't cause a re-import
+    ...(hasSignatureColumn && { import_signature: importSignature(row) }),
   }] : []);
 
   const inserted = candidates.length
@@ -366,6 +406,23 @@ export async function commitAssistantImport({ supabase, userId, rows, proposalId
         .upsert(candidates, { onConflict: 'id', ignoreDuplicates: true })
         .select('id'))).map(({ id }) => id))
     : new Set();
+
+  // Two open previews may confirm the same foreign source at different booked amounts
+  // before either insert is visible. Show the winning amount before offering a separate entry.
+  const contested = decisions.filter(({ id, row }) => id && !inserted.has(id) && row.sourceCurrency
+    && id === transactionId(userId, sourceSignature(row)));
+  if (contested.length) {
+    const checked = await markDuplicates(supabase, userId, contested.map(({ row }) => row), options);
+    for (const entry of checked.entries) {
+      const index = decisions.findIndex(({ row }) => row.rowId === entry.row.rowId);
+      const stored = entry.row.duplicates?.find(({ id }) => id === decisions[index].id);
+      if (stored && Math.abs(stored.amount) !== entry.row.amount) {
+        prepared[index] = entry;
+        decisions[index] = { row: entry.row, id: null };
+        needsRefresh = true;
+      }
+    }
+  }
 
   const counts = { inserted: 0, duplicate: 0, needs_review: 0 };
   const results = decisions.map(({ row, id }) => {

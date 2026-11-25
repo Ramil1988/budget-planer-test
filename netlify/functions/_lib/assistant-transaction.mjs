@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { loadAssistantImportOptions } from './assistant-import-data.mjs';
 import { closeToReceipt } from './assistant-split.mjs';
+import { isMissingImportSignatureColumn, signatureStamp } from '../../../frontend/src/lib/importSignature.js';
 
 const reviewPurpose = 'budgetwise-assistant-transaction-v1:';
 const changesPurpose = 'budgetwise-assistant-changes-v1:';
@@ -307,9 +308,6 @@ function changeAmount(value) {
 // Some imported rows store expenses as negative numbers. Keep each row's convention.
 const withSign = (amount, like) => (Number(like) < 0 ? -amount : amount);
 const signedNet = (type, amount) => (type === 'income' ? 1 : -1) * Math.abs(Number(amount));
-const rowState = (id, amount, categoryId, description) =>
-  createHash('sha256').update(JSON.stringify([id, Number(amount), categoryId ?? null, description ?? ''])).digest('base64url');
-
 function verifyChanges(token, userId, signingKey) {
   const invalid = () => new TransactionReviewError('These changes are invalid. Ask the assistant to prepare them again.');
   const [payload, hash, extra] = typeof token === 'string' && token.length <= 32_000 ? token.split('.') : [];
@@ -333,7 +331,29 @@ function verifyChanges(token, userId, signingKey) {
   if (proposed.expires <= Date.now()) {
     throw new TransactionReviewError('These changes expired. Ask the assistant to prepare them again.', 410);
   }
+  if (!Array.isArray(plan.sources)) {
+    throw new TransactionReviewError('This card was prepared before the database update. Ask the assistant to prepare it again.', 409);
+  }
   return plan;
+}
+
+// The rows a change set touches, with their import signature when the database has the column
+// (migration 010). `signatureStored` is false on a database without it.
+async function rowsToChange(supabase, userId, ids) {
+  const columns = `${entryColumns},provider,recurring_payment_id,assistant_change_version`;
+  const load = (selected) => supabase.from('transactions').select(selected)
+    .eq('user_id', userId).in('id', ids).is('deleted_at', null);
+  let signatureStored = true;
+  let { data, error } = await load(`${columns},import_signature`);
+  if (isMissingImportSignatureColumn(error)) {
+    signatureStored = false;
+    ({ data, error } = await load(columns));
+  }
+  if (error?.code === '42703' && error.message?.includes('assistant_change_version')) {
+    throw new TransactionReviewError('The database update for reviewing transaction changes is required.', 503);
+  }
+  if (error) throw new Error('BudgetWise could not complete the transaction request.');
+  return { rows: data, signatureStored };
 }
 
 export async function proposeAssistantChanges({ supabase, userId, signingKey, args, newId }) {
@@ -355,9 +375,8 @@ export async function proposeAssistantChanges({ supabase, userId, signingKey, ar
     throw new TransactionReviewError('Each transaction can be edited or removed only once.');
   }
 
-  const [rows, options, liabilities] = await Promise.all([
-    read(supabase.from('transactions').select(`${entryColumns},provider,recurring_payment_id`)
-      .eq('user_id', userId).in('id', ids).is('deleted_at', null)),
+  const [{ rows, signatureStored }, options, liabilities] = await Promise.all([
+    rowsToChange(supabase, userId, ids),
     loadAssistantImportOptions({ supabase, userId }),
     read(supabase.from('liabilities').select('linked_category_id').eq('user_id', userId).not('linked_category_id', 'is', null)),
   ]);
@@ -419,7 +438,10 @@ export async function proposeAssistantChanges({ supabase, userId, signingKey, ar
   const count = updates.length + additions.length + removals.length;
   if (count > maxChanges) throw new TransactionReviewError(`Propose at most ${maxChanges} changes at a time.`);
 
-  const plan = { updates: [], additions: [], removals: [] };
+  const plan = {
+    sources: rows.map(({ id, assistant_change_version: version }) => ({ id, version })),
+    updates: [], additions: [], removals: [],
+  };
   const items = [];
   let before = 0;
   let after = 0;
@@ -434,7 +456,6 @@ export async function proposeAssistantChanges({ supabase, userId, signingKey, ar
   });
   const removalOf = (row, replaced) => ({
     id: row.id,
-    state: rowState(row.id, row.amount, row.category_id, row.description),
     description: (row.description ?? '').slice(0, 80),
     ...(replaced ? { replaced: true } : {}),
   });
@@ -449,24 +470,30 @@ export async function proposeAssistantChanges({ supabase, userId, signingKey, ar
       if (update.fromSplit) continue;
       throw new TransactionReviewError('An update does not change anything. Leave that transaction out.');
     }
-    // Bank imports recognise a row they already brought in by its date, description and
-    // amount, trashed rows included. Editing those fields in place would make the next sync
-    // import the original again, so an imported row is replaced: the original goes to the
-    // trash and a corrected copy takes its place. Everything else is edited in place:
+    // Imports recognise a bank row they already brought in by its import signature. With the
+    // signature stored on the row (migration 010) an edit is made in place; if the row has
+    // none yet, the edit first stamps the signature of the values it is about to replace.
+    //
+    // Without the column the signature is recomputed from the current values, trashed rows
+    // included, and editing them in place would make the next sync import the original
+    // again. An imported row is then replaced: the original goes to the trash and a
+    // corrected copy takes its place. Still edited in place in that case:
     //  - a row no import produced (no provider) has no such signature to keep;
     //  - a row generated by a recurring payment is found again through recurring_payment_id;
     //  - the liability triggers follow an UPDATE, but would deduct a copy a second time.
-    const editInPlace = (amount === Number(row.amount) && description === row.description)
+    const identityChanges = amount !== Number(row.amount) || description !== row.description;
+    const editInPlace = signatureStored
+      || !identityChanges
       || row.provider == null
       || row.recurring_payment_id != null
       || liabilityCategories.has(row.category_id) || liabilityCategories.has(categoryId);
     if (editInPlace) {
       plan.updates.push({
         id: row.id,
-        state: rowState(row.id, row.amount, row.category_id, row.description),
         amount,
         category_id: categoryId,
         description,
+        ...(signatureStored && identityChanges ? signatureStamp(row) : {}),
       });
     } else {
       plan.removals.push(removalOf(row, true));
@@ -542,57 +569,19 @@ export async function proposeAssistantChanges({ supabase, userId, signingKey, ar
 
 export async function confirmAssistantChanges({ token, userId, supabase, signingKey, language }) {
   const plan = verifyChanges(token, userId, signingKey);
-  const changed = () => new TransactionReviewError(
-    'These transactions were edited after the changes were prepared. Ask the assistant to prepare them again.', 409);
-  const ids = [...plan.updates, ...plan.removals].map(({ id }) => id);
-  const rows = ids.length
-    ? await read(supabase.from('transactions').select(entryColumns).eq('user_id', userId).in('id', ids))
-    : [];
-  const current = new Map(rows.map((row) => [row.id, row]));
-  const stateOf = (row) => rowState(row.id, row.amount, row.category_id, row.description);
-
-  // A retry may find part of the plan already applied. Anything else means the ledger moved on.
-  let progressed = false;
-  for (const update of plan.updates) {
-    const row = current.get(update.id);
-    if (!row || row.deleted_at) throw changed();
-    const applied = stateOf(row) === rowState(update.id, update.amount, update.category_id, update.description);
-    if (!applied && stateOf(row) !== update.state) throw changed();
-    progressed ||= applied;
+  // A lost response can replay the exact signed card. The receipt and all ledger
+  // mutations commit together; the database checks source versions under row locks.
+  const { error } = await supabase.rpc('apply_assistant_transaction_changes', {
+    card_key: createHash('sha256').update(token).digest('hex'),
+    plan,
+  });
+  if (error?.code === 'PT409') {
+    throw new TransactionReviewError('The transactions changed after this card was prepared. Ask the assistant to prepare it again.', 409);
   }
-  for (const removal of plan.removals) {
-    const row = current.get(removal.id);
-    if (!row || (!row.deleted_at && stateOf(row) !== removal.state)) throw changed();
-    progressed ||= Boolean(row.deleted_at);
+  if (error?.code === 'PGRST202' || error?.code === '42883') {
+    throw new TransactionReviewError('The database update for applying transaction changes is required.', 503);
   }
-  // This plan writes its own new rows first, in one statement. Rows that already look
-  // changed while those new rows are missing were changed by something else, typically a
-  // second card for the same request, and applying this one would add its parts twice.
-  // A new row of this plan that is already in the trash was removed by the user after a
-  // failed attempt; finishing the plan now would leave neither version in the ledger.
-  if (plan.additions.length) {
-    const saved = await read(supabase.from('transactions').select('id,deleted_at').eq('user_id', userId)
-      .in('id', plan.additions.map(({ id }) => id)));
-    if (saved.some((row) => row.deleted_at) || (progressed && saved.length !== plan.additions.length)) throw changed();
-  }
-
-  if (plan.additions.length) {
-    await read(supabase.from('transactions').upsert(
-      plan.additions.map((addition) => ({ ...addition, user_id: userId })),
-      { onConflict: 'id', ignoreDuplicates: true },
-    ).select('id'));
-  }
-  // Not one database transaction. The new rows and the trashing of the rows they replace are
-  // adjacent so a failure between them is as unlikely as it can be; until a retry finishes the
-  // plan, both versions are in the ledger. Category edits, which cannot change a total, go last.
-  if (plan.removals.length) {
-    await read(supabase.from('transactions').update({ deleted_at: new Date().toISOString() })
-      .in('id', plan.removals.map(({ id }) => id)).eq('user_id', userId).is('deleted_at', null).select('id'));
-  }
-  for (const { id, amount, category_id, description } of plan.updates) {
-    await read(supabase.from('transactions').update({ amount, category_id, description })
-      .eq('id', id).eq('user_id', userId).is('deleted_at', null).select('id'));
-  }
+  if (error) throw new Error('BudgetWise could not apply the transaction changes.');
 
   const russian = language === 'ru';
   return {

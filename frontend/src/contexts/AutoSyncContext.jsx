@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { fetchTransactionsFromGoogleSheets, validateTransactions, extractSheetId } from '../lib/importUtils';
-import { filterOutRecurringDuplicates } from '../lib/recurringAutoAdd';
+import { prepareBankImport, confirmBankPostings } from '../lib/recurringBankImport';
+import { importSignature } from '../lib/importSignature';
 import { showNotification, checkBudgetAndNotify, getNotificationPermission } from '../lib/notifications';
 
 const AutoSyncContext = createContext();
@@ -197,37 +198,11 @@ export function AutoSyncProvider({ children }) {
         return;
       }
 
-      // Get existing transactions to avoid duplicates
-      const { data: existingTransactions, error: fetchError } = await supabase
-        .from('transactions')
-        .select('date, description, amount')
-        .eq('user_id', user.id);
-
-      if (fetchError) throw fetchError;
-
-      // Create a set of existing transaction signatures for fast lookup
-      // Normalize: uppercase, trim, collapse whitespace, use absolute amounts
-      const normalizeDesc = (desc) => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ');
-      const normalizeAmount = (amt) => Math.abs(Number(amt)).toFixed(2);
-
-      const existingSet = new Set(
-        (existingTransactions || []).map(t =>
-          `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`
-        )
-      );
-
-      // Filter out duplicates
-      const notAlreadyImported = newTransactions.filter(t => {
-        const signature = `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`;
-        return !existingSet.has(signature);
-      });
-
-      // Also drop rows the bank is reporting for a recurring payment that already
-      // recorded itself via auto-add (matched on its "bank description").
-      const uniqueTransactions = await filterOutRecurringDuplicates(supabase, user.id, notAlreadyImported);
+      const { remaining: uniqueTransactions, links, reviewMessage, hasColumn } = await prepareBankImport(supabase, user.id, newTransactions);
 
       if (uniqueTransactions.length === 0) {
-        setLastSyncResult({ success: true, message: 'All transactions already imported', imported: 0 });
+        await confirmBankPostings(supabase, user.id, links);
+        setLastSyncResult({ success: !reviewMessage, message: reviewMessage || (links.length ? `Confirmed ${links.length} recurring bank posting(s).` : 'All transactions already imported'), imported: 0 });
         setLastSyncTime(new Date());
         return;
       }
@@ -312,6 +287,8 @@ export function AutoSyncProvider({ children }) {
           provider: t.bank || null, // Store bank name in provider field
           description: t.description,
           date: t.date,
+          // The bank row this transaction answers for, so later edits don't cause a re-import
+          ...(hasColumn && { import_signature: importSignature(t) }),
         };
       });
 
@@ -321,6 +298,7 @@ export function AutoSyncProvider({ children }) {
         .select();
 
       if (insertError) throw insertError;
+      await confirmBankPostings(supabase, user.id, links);
 
       // Send notification for new transactions
       if (insertedTransactions.length > 0 && getNotificationPermission() === 'granted') {
@@ -344,8 +322,8 @@ export function AutoSyncProvider({ children }) {
       }
 
       setLastSyncResult({
-        success: true,
-        message: `Imported ${insertedTransactions.length} new transaction${insertedTransactions.length !== 1 ? 's' : ''}`,
+        success: !reviewMessage,
+        message: [`Imported ${insertedTransactions.length} new transaction${insertedTransactions.length !== 1 ? 's' : ''}`, reviewMessage].filter(Boolean).join('. '),
         imported: insertedTransactions.length,
       });
 

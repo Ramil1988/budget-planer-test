@@ -1,17 +1,27 @@
-import { formatDate, formatFrequency } from '../../lib/recurringUtils';
+import { formatDate, formatFrequency, FREQUENCY_CONFIG, parseLocalDate } from '../../lib/recurringUtils';
 
 const HEADINGS = { week: 'Due within a week', later: 'Later', paused: 'Paused', ended: 'Ended' };
 const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 
 // "Subscriptions, monthly, on weekdays, added automatically, until Jul 7, 2029"
-function describe(payment) {
+function describe(payment, catalog) {
+  const frequency = formatFrequency(payment.frequency, payment.frequency_interval);
+  const start = parseLocalDate(payment.start_date);
+  const months = FREQUENCY_CONFIG[payment.frequency]?.months * (payment.frequency_interval ?? 1);
+  let anchor;
+  if (catalog && Number.isFinite(+start) && !payment.last_business_day_of_month) {
+    if (months) anchor = months % 12 === 0
+      ? start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : `Day ${start.getDate()}`;
+    else if (['weekly', 'biweekly'].includes(payment.frequency)) anchor = start.toLocaleDateString('en-US', { weekday: 'long' });
+  }
   return [
-    payment.categories?.name || 'No category',
-    lowerFirst(formatFrequency(payment.frequency, payment.frequency_interval)),
+    !catalog && (payment.categories?.name || 'No category'),
+    catalog ? frequency : lowerFirst(frequency),
+    anchor,
     payment.last_business_day_of_month ? 'on the last business day' : payment.business_days_only && 'on weekdays',
     payment.auto_add && 'added automatically',
     payment.end_date && `until ${formatDate(payment.end_date)}`,
-  ].filter(Boolean).join(', ');
+  ].filter(Boolean).join(catalog ? ' · ' : ', ');
 }
 
 function due(payment) {
@@ -22,17 +32,17 @@ function due(payment) {
   return `In ${payment.daysUntil} days`;
 }
 
-// Payments in the order they come due, grouped by how soon. Takes the groups of groupByDue.
-export default function PaymentList({ groups, formatCurrency, onToggle, onEdit, onDelete }) {
+export default function PaymentList({ groups, catalog = false, formatCurrency, onToggle, onEdit, onDelete }) {
   return (
     <div className="bw-panel">
       {groups.map((group) => {
-        const total = group.items.reduce((sum, { amount }) => sum + Number(amount), 0);
+        const unit = catalog ? 'schedule' : 'payment';
         return (
-          <section className="bw-group" data-status={group.status === 'week' ? 'close' : group.status === 'later' ? 'ok' : 'none'} key={group.status}>
+          <section className="bw-group" data-status={group.status === 'week' ? 'close' : group.status === 'later' ? 'ok' : 'none'} key={group.key ?? group.status}>
             <header className="bw-group__head">
-              <h3>{HEADINGS[group.status]}</h3>
-              <span>{group.items.length} {group.items.length === 1 ? 'payment' : 'payments'}, {formatCurrency(total)}</span>
+              <h3>{group.label ?? HEADINGS[group.status]}</h3>
+              <span>{group.items.length} {unit}{group.items.length === 1 ? '' : 's'}
+                {!catalog && `, ${formatCurrency(group.items.reduce((sum, { amount }) => sum + Number(amount), 0))}`}</span>
             </header>
             <ul className="bw-rows">
               {group.items.map((payment) => {
@@ -49,7 +59,7 @@ export default function PaymentList({ groups, formatCurrency, onToggle, onEdit, 
                     )}
                     <div className="recurring-row__body">
                       <p className="recurring-row__name">{payment.name}</p>
-                      <p className="recurring-row__meta">{describe(payment)}</p>
+                      <p className="recurring-row__meta">{describe(payment, catalog)}</p>
                     </div>
                     <div className="recurring-row__amount">
                       <b>{formatCurrency(payment.type === 'income' ? payment.amount : -payment.amount)}</b>

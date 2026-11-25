@@ -19,7 +19,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAutoSync } from '../contexts/AutoSyncContext';
 import PageContainer from '../components/PageContainer';
 import { fetchTransactionsFromGoogleSheets, parseCSVFile, validateTransactions, extractSheetId } from '../lib/importUtils';
-import { filterOutRecurringDuplicates } from '../lib/recurringAutoAdd';
+import { prepareBankImport, confirmBankPostings } from '../lib/recurringBankImport';
+import { importSignature } from '../lib/importSignature';
 import { supabase } from '../lib/supabaseClient';
 import {
   showNotification,
@@ -420,6 +421,22 @@ export default function ImportTransactions() {
     setError('');
 
     try {
+      const { remaining: uniqueTransactions, links, review, reviewMessage, hasColumn } = await prepareBankImport(supabase, user.id, transactions);
+
+      const duplicateCount = transactions.length - uniqueTransactions.length - review.length;
+
+      if (uniqueTransactions.length === 0) {
+        await confirmBankPostings(supabase, user.id, links);
+        if (reviewMessage) setError(reviewMessage);
+        else setSuccess(links.length ? `Confirmed bank posting dates for ${links.length} recurring payment(s).` : 'These transactions are already recorded.');
+        setLoading(false);
+        return;
+      }
+
+      if (duplicateCount > 0) {
+        setError(`Skipped ${duplicateCount} duplicate transaction(s). Importing ${uniqueTransactions.length} new ones.`);
+      }
+
       // Get or create default account
       let { data: accounts, error: accountError } = await supabase
         .from('accounts')
@@ -496,47 +513,6 @@ export default function ImportTransactions() {
         }
       }
 
-      // Check for duplicates - get existing transactions
-      const { data: existingTransactions, error: fetchError } = await supabase
-        .from('transactions')
-        .select('date, description, amount')
-        .eq('user_id', user.id);
-
-      if (fetchError) throw fetchError;
-
-      // Create a set of existing transaction signatures for fast lookup
-      // Normalize: uppercase, trim, collapse whitespace, use absolute amounts
-      const normalizeDesc = (desc) => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ');
-      const normalizeAmount = (amt) => Math.abs(Number(amt)).toFixed(2);
-
-      const existingSet = new Set(
-        (existingTransactions || []).map(t =>
-          `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`
-        )
-      );
-
-      // Filter out duplicates
-      const notAlreadyImported = transactions.filter(t => {
-        const signature = `${t.date}|${normalizeDesc(t.description)}|${normalizeAmount(t.amount)}`;
-        return !existingSet.has(signature);
-      });
-
-      // Also drop rows the bank is reporting for a recurring payment that already
-      // recorded itself via auto-add (matched on its "bank description").
-      const uniqueTransactions = await filterOutRecurringDuplicates(supabase, user.id, notAlreadyImported);
-
-      const duplicateCount = transactions.length - uniqueTransactions.length;
-
-      if (uniqueTransactions.length === 0) {
-        setError(`All ${transactions.length} transactions already exist in the database.`);
-        setLoading(false);
-        return;
-      }
-
-      if (duplicateCount > 0) {
-        setError(`Skipped ${duplicateCount} duplicate transaction(s). Importing ${uniqueTransactions.length} new ones.`);
-      }
-
       // Prepare and insert transactions
       const transactionsToInsert = uniqueTransactions.map(t => {
         const isIncome = t.type === 'income';
@@ -563,6 +539,8 @@ export default function ImportTransactions() {
           provider: t.bank || null, // Store bank name in provider field
           description: t.description,
           date: t.date,
+          // The bank row this transaction answers for, so later edits don't cause a re-import
+          ...(hasColumn && { import_signature: importSignature(t) }),
         };
       });
 
@@ -572,6 +550,8 @@ export default function ImportTransactions() {
         .select();
 
       if (insertError) throw insertError;
+      await confirmBankPostings(supabase, user.id, links);
+      if (reviewMessage) setError(reviewMessage);
 
       // Send notification for imported transactions
       if (insertedTransactions.length > 0 && getNotificationPermission() === 'granted') {

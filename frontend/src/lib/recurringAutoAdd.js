@@ -43,10 +43,12 @@ export function matchesRecurringOccurrence(tx, recurring, occurrenceDate) {
   const needle = (recurring?.match_description || '').trim();
   if (!needle) return false;
   if (tx.type !== recurring.type) return false;
-  if (Math.abs(Number(tx.amount) - Number(recurring.amount)) > 0.005) return false;
+  const amount = tx.type === 'expense' ? Math.abs(Number(tx.amount)) : Number(tx.amount);
+  if (Math.abs(amount - Number(recurring.amount)) > 0.005) return false;
   if (!(tx.description || '').toUpperCase().includes(needle.toUpperCase())) return false;
 
-  const daysApart = Math.abs(parseLocalDate(tx.date) - parseLocalDate(occurrenceDate)) / 86400000;
+  // Compare calendar dates, since consecutive local midnights may be 23 or 25 hours apart.
+  const daysApart = Math.abs(Date.parse(toDateKey(tx.date)) - Date.parse(toDateKey(occurrenceDate))) / 86400000;
   return daysApart <= MATCH_WINDOW_DAYS;
 }
 
@@ -166,35 +168,4 @@ export async function generateDueRecurringTransactions(supabase, userId) {
   if (insertError) throw insertError;
 
   return inserted?.length || 0;
-}
-
-/**
- * Drop imported rows that are the bank's version of an already generated recurring transaction.
- * Used by both import paths so a payment isn't counted once by auto-add and again by the sheet.
- *
- * @param {Array} transactions - Parsed rows: { date, description, amount, type }
- * @returns {Promise<Array>} The rows that are safe to import
- */
-export async function filterOutRecurringDuplicates(supabase, userId, transactions) {
-  if (!transactions?.length) return transactions;
-
-  const dates = transactions.map(t => t.date).sort();
-
-  const { data: generated, error } = await supabase
-    .from('transactions')
-    .select('date, amount, type, recurring_payments(match_description)')
-    .eq('user_id', userId)
-    .not('recurring_payment_id', 'is', null)
-    .is('deleted_at', null)
-    .gte('date', shiftDays(dates[0], -MATCH_WINDOW_DAYS))
-    .lte('date', shiftDays(dates[dates.length - 1], MATCH_WINDOW_DAYS));
-
-  if (error) throw error;
-  if (!generated?.length) return transactions;
-
-  return transactions.filter(t => !generated.some(g => matchesRecurringOccurrence(
-    t,
-    { type: g.type, amount: g.amount, match_description: g.recurring_payments?.match_description },
-    g.date
-  )));
 }

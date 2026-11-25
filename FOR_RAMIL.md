@@ -892,6 +892,36 @@ description changes, because only those rows have an import signature worth pres
 compromise, and `CLAUDE.md` lists what it still gets wrong. The real fix is to stop deriving a row's
 identity from fields a user can edit — store the import signature once, at import.
 
+**And then we did the real fix.** Think of a coat check. The old system had no tickets: the
+attendant recognised your coat by looking at it — "grey, wool, medium." Sew on a new button and
+he no longer recognises it, so he hangs up a "second" coat for you. The workaround was to keep
+the old coat in the back room (the trash) forever so he could still find it. The fix is a ticket:
+`transactions.import_signature`, the `date|DESCRIPTION|amount` of the bank row, written once
+when the row is imported. Alter the coat all you like; the ticket still says which bank row it is.
+
+Three decisions in that change are worth remembering:
+
+- **Stamp on first edit, not only at import.** Thousands of rows were imported before the column
+  existed. Rather than trust a one-off backfill to get every one of them right, any edit that
+  changes an amount or a description first writes down the signature of the values it is about to
+  replace — in the same `UPDATE`. The rule is one sentence: *an edit never changes which bank row
+  a transaction answers for.*
+- **A backfill in SQL is a second implementation, so keep it where the two provably agree.**
+  The signature is built in JavaScript (`toUpperCase()`, `\s`). Postgres `upper()` and `\s` agree
+  with those for plain ASCII and can disagree beyond it (a German sharp s, a non-breaking space).
+  A backfilled signature that is *almost* right is worse than none: the row would look protected
+  and still be re-imported after an edit. So the migration backfills only ASCII descriptions and
+  leaves the rest to the stamp-on-edit rule, which runs the real JavaScript.
+- **The code ships before the SQL does.** You run migrations by hand, so for a while the new code
+  talks to the old database. Selecting a column that does not exist is a hard PostgREST error
+  (`42703`; `PGRST204` on a write), not a missing field. The code recognises exactly that error
+  and falls back to the old behaviour, old workaround included. Feature-detect the schema; don't
+  assume the deploy order.
+
+It also deleted code: three hand-copied normalisers ("uppercase, trim, collapse spaces") became one
+module that the browser and the functions both import. Three copies of a rule that must match
+exactly is three chances to change one and forget the others.
+
 **The lessons from the review itself:**
 
 - **A fix is a change, and a change needs the same scrutiny as the thing it fixes.** The first review

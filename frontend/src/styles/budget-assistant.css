@@ -861,6 +861,7 @@
   min-width: 0;
 }
 
+.budget-assistant__import-edits input,
 .budget-assistant__import-edits select,
 .budget-assistant__transaction-fields select {
   width: 100%;

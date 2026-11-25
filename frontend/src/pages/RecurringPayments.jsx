@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Box, Heading, IconButton, Input, Spinner } from '@chakra-ui/react';
 import { FiChevronLeft, FiChevronRight, FiPlus } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { readRecurringCatalog } from '../lib/recurringCatalog';
 import {
   getNextPaymentDate,
   getUpcomingPayments,
@@ -14,6 +15,7 @@ import {
 import { agendaDays, groupByDue, monthDays, withNextDue } from '../lib/recurringView';
 import MonthStrip from '../components/recurring/MonthStrip';
 import PaymentList from '../components/recurring/PaymentList';
+import ScheduleCatalog from '../components/recurring/ScheduleCatalog';
 import Agenda from '../components/recurring/Agenda';
 import PaymentForm, { customSchedule } from '../components/recurring/PaymentForm';
 import '../styles/ledger.css';
@@ -26,6 +28,7 @@ const currentMonthKey = () => {
 };
 
 const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+const formatCurrency = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format;
 
 export default function RecurringPayments() {
   const { user } = useAuth();
@@ -37,6 +40,8 @@ export default function RecurringPayments() {
   // Data state
   const [recurringPayments, setRecurringPayments] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [view, setView] = useState('catalog');
+  const [catalogFilters, setCatalogFilters] = useState({ type: 'all', category: '', status: 'all' });
   const [activeTab, setActiveTab] = useState('expense');
   const [showInactive, setShowInactive] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null); // Category filter
@@ -77,24 +82,9 @@ export default function RecurringPayments() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [paymentsResult, categoriesResult] = await Promise.all([
-        supabase
-          .from('recurring_payments')
-          .select('*, categories(name)')
-          .eq('user_id', user.id)
-          .order('name'),
-        supabase
-          .from('categories')
-          .select('id, name, type')
-          .eq('user_id', user.id)
-          .order('name'),
-      ]);
-
-      if (paymentsResult.error) throw paymentsResult.error;
-      if (categoriesResult.error) throw categoriesResult.error;
-
-      setRecurringPayments(paymentsResult.data || []);
-      setCategories(categoriesResult.data || []);
+      const [payments, editableCategories] = await readRecurringCatalog(supabase, user.id);
+      setRecurringPayments(payments);
+      setCategories(editableCategories);
     } catch (err) {
       setError('Failed to load data: ' + err.message);
     } finally {
@@ -134,7 +124,7 @@ export default function RecurringPayments() {
         start_date: formData.start_date,
         end_date: formData.end_date || null,
         notes: formData.notes.trim() || null,
-        is_active: true,
+        is_active: editingPayment ? editingPayment.is_active : true,
         business_days_only: formData.business_days_only,
         last_business_day_of_month: !!FREQUENCY_CONFIG[frequency]?.months && formData.last_business_day_of_month,
         auto_add: formData.auto_add,
@@ -198,11 +188,15 @@ export default function RecurringPayments() {
   // Modal handlers
   const openCreateModal = () => {
     setEditingPayment(null);
+    const catalogCategory = categories.find((category) => category.id === catalogFilters.category);
+    const type = view === 'catalog'
+      ? catalogCategory?.type ?? (catalogFilters.type === 'income' ? 'income' : 'expense')
+      : activeTab;
     setFormData({
       name: '',
       amount: '',
-      type: activeTab,
-      category_id: '',
+      type,
+      category_id: view === 'catalog' ? catalogCategory?.id ?? '' : '',
       frequency: 'monthly',
       frequency_interval: 1,
       custom_frequency: 'monthly',
@@ -246,7 +240,10 @@ export default function RecurringPayments() {
     }, 3000);
   };
 
-  // Get unique categories for the current tab (for filter chips)
+  const today = new Date().setHours(0, 0, 0, 0);
+  const datedPayments = useMemo(() => withNextDue(recurringPayments, new Date(today)), [recurringPayments, today]);
+
+  // Categories available in the date-ordered view.
   const availableCategories = [...new Set(
     recurringPayments
       .filter(p => p.type === activeTab && (showInactive || p.is_active) && p.categories?.name)
@@ -254,7 +251,7 @@ export default function RecurringPayments() {
   )].sort();
 
   // Filter payments
-  const filteredPayments = recurringPayments.filter(p => {
+  const filteredPayments = datedPayments.filter(p => {
     if (p.type !== activeTab) return false;
     if (!showInactive && !p.is_active) return false;
     // Category filter
@@ -276,7 +273,8 @@ export default function RecurringPayments() {
   // occurrence. A biweekly salary counts twice in most months and three times in
   // the months that hold a third payday, instead of showing a smoothed average
   // that matches no real month.
-  const projection = getMonthlyProjection(recurringPayments, summaryMonth);
+  const projection = useMemo(() => getMonthlyProjection(view === 'upcoming' ? recurringPayments : [], summaryMonth),
+    [recurringPayments, summaryMonth, view]);
   const summary = {
     income: projection.income,
     expenses: projection.expenses,
@@ -294,16 +292,7 @@ export default function RecurringPayments() {
     setSummaryMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   };
 
-  const upcomingPayments = getUpcomingPayments(recurringPayments.filter(p => p.is_active), 30);
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
+  const upcomingPayments = view === 'upcoming' ? getUpcomingPayments(recurringPayments.filter(p => p.is_active), 30) : [];
 
   if (loading) {
     return (
@@ -318,13 +307,9 @@ export default function RecurringPayments() {
     );
   }
 
-  const active = recurringPayments.filter((payment) => payment.is_active);
-  const bills = active.filter((payment) => payment.type === 'expense').length;
-  const incomes = active.length - bills;
-  const paused = recurringPayments.length - active.length;
-  const onSchedule = active.length === 0
-    ? 'Nothing is on a schedule yet'
-    : [bills > 0 && plural(bills, 'bill', 'bills'), incomes > 0 && plural(incomes, 'income', 'incomes')].filter(Boolean).join(' and ');
+  const active = datedPayments.filter((payment) => payment.is_active && payment.nextDate).length;
+  const paused = datedPayments.filter((payment) => !payment.is_active).length;
+  const ended = datedPayments.length - active - paused;
 
   // The strip opens on today, or on the next day something moves.
   const days = monthDays(projection.payments, summaryMonth);
@@ -333,7 +318,7 @@ export default function RecurringPayments() {
   const opensOn = (busy.find((day) => day.day - 1 >= todayIndex) ?? busy[0])?.day ?? null;
   const shownDay = pickedDay?.month === summaryMonth ? pickedDay.day : opensOn;
 
-  const groups = groupByDue(withNextDue(filteredPayments));
+  const groups = view === 'upcoming' ? groupByDue(filteredPayments) : [];
   const kind = activeTab === 'expense' ? 'expenses' : 'income';
   const stepButton = { variant: 'ghost', minW: '36px', h: '40px', color: 'var(--bw-muted)', _hover: { bg: 'var(--bw-hover)' } };
 
@@ -344,12 +329,12 @@ export default function RecurringPayments() {
           <div>
             <Heading as="h1" className="bw-title">Recurring Payments</Heading>
             <p className="bw-subtitle">
-              {onSchedule}{active.length > 0 && ' on a schedule'}{paused > 0 && `, ${paused} paused`}
+              {datedPayments.length ? [`${active} active`, paused > 0 && `${paused} paused`, ended > 0 && `${ended} ended`].filter(Boolean).join(' · ') : 'No recurring schedules yet'}
             </p>
           </div>
 
           <div className="recurring-actions">
-            <div className="bw-month-control">
+            {view === 'upcoming' && <div className="bw-month-control">
               <IconButton {...stepButton} aria-label="Go to previous month" onClick={() => shiftSummaryMonth(-1)}>
                 <FiChevronLeft />
               </IconButton>
@@ -373,7 +358,7 @@ export default function RecurringPayments() {
               <IconButton {...stepButton} aria-label="Go to next month" onClick={() => shiftSummaryMonth(1)}>
                 <FiChevronRight />
               </IconButton>
-            </div>
+            </div>}
             <button type="button" className="bw-button" onClick={openCreateModal}>
               <FiPlus aria-hidden="true" style={{ display: 'inline', verticalAlign: '-2px', marginRight: 6 }} />
               Add recurring
@@ -384,101 +369,115 @@ export default function RecurringPayments() {
         {success && <p className="bw-note" role="status">{success}</p>}
         {error && !isModalOpen && <p className="bw-note" data-tone="bad" role="alert">{error}</p>}
 
-        <section className="bw-ledger" aria-label={`Recurring payments in ${summaryMonthLabel}`}>
-          <dl className="bw-figures" data-count="3">
-            <div className="bw-figure bw-figure--lead">
-              <dt>Net in {summaryMonthLabel}</dt>
-              <dd data-tone={summary.net < 0 ? 'bad' : 'good'}>{summary.net > 0 ? '+' : ''}{formatCurrency(summary.net)}</dd>
-            </div>
-            <div className="bw-figure">
-              <dt>Income</dt>
-              <dd>{formatCurrency(summary.income)}</dd>
-              <small>{plural(summary.incomeCount, 'payment', 'payments')}</small>
-            </div>
-            <div className="bw-figure">
-              <dt>Expenses</dt>
-              <dd>{formatCurrency(summary.expenses)}</dd>
-              <small>{plural(summary.expenseCount, 'payment', 'payments')}</small>
-            </div>
-          </dl>
-
-          <MonthStrip
-            days={days}
-            selectedDay={shownDay}
-            onSelect={(day) => setPickedDay({ month: summaryMonth, day })}
-            formatCurrency={formatCurrency}
+        <div className="bw-segment recurring-views" role="group" aria-label="Recurring view">
+          <button type="button" aria-pressed={view === 'catalog'} onClick={() => setView('catalog')}>All schedules</button>
+          <button type="button" aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>Upcoming payments</button>
+        </div>
+        {view === 'catalog' ? (
+          <ScheduleCatalog
+            payments={datedPayments} filters={catalogFilters} onFilters={setCatalogFilters}
+            formatCurrency={formatCurrency} onToggle={handleToggleActive} onEdit={openEditModal}
+            onDelete={handleDelete} onAdd={openCreateModal}
           />
-        </section>
+        ) : (
+          <>
+            <section className="bw-ledger" aria-label={`Recurring payments in ${summaryMonthLabel}`}>
+              <dl className="bw-figures" data-count="3">
+                <div className="bw-figure bw-figure--lead">
+                  <dt>Net in {summaryMonthLabel}</dt>
+                  <dd data-tone={summary.net < 0 ? 'bad' : 'good'}>{summary.net > 0 ? '+' : ''}{formatCurrency(summary.net)}</dd>
+                </div>
+                <div className="bw-figure">
+                  <dt>Income</dt>
+                  <dd>{formatCurrency(summary.income)}</dd>
+                  <small>{plural(summary.incomeCount, 'payment', 'payments')}</small>
+                </div>
+                <div className="bw-figure">
+                  <dt>Expenses</dt>
+                  <dd>{formatCurrency(summary.expenses)}</dd>
+                  <small>{plural(summary.expenseCount, 'payment', 'payments')}</small>
+                </div>
+              </dl>
 
-        <div className="bw-switches">
-          <div className="bw-tabs" role="tablist" aria-label="Expenses or income">
-            {[['expense', 'Expenses'], ['income', 'Income']].map(([value, label]) => (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === value}
-                className="bw-tab"
-                onClick={() => { setActiveTab(value); setSelectedCategory(null); }}
-                key={value}
-              >
-                {label} ({recurringPayments.filter((payment) => payment.type === value && (showInactive || payment.is_active)).length})
-              </button>
-            ))}
-          </div>
+              <MonthStrip
+                days={days}
+                selectedDay={shownDay}
+                onSelect={(day) => setPickedDay({ month: summaryMonth, day })}
+                formatCurrency={formatCurrency}
+              />
+            </section>
 
-          <div className="bw-tools" style={{ marginBottom: 8 }}>
-            {availableCategories.length > 0 && (
-              <select
-                className="bw-select"
-                aria-label="Category"
-                value={selectedCategory ?? ''}
-                onChange={(event) => setSelectedCategory(event.target.value || null)}
-              >
-                <option value="">All categories</option>
-                {availableCategories.map((name) => <option value={name} key={name}>{name}</option>)}
-              </select>
-            )}
-            <button type="button" className="bw-button bw-button--quiet" aria-pressed={showInactive} onClick={() => setShowInactive(!showInactive)}>
-              {showInactive ? 'Hide paused' : 'Show paused'}
-            </button>
-          </div>
-        </div>
+            <div className="bw-switches">
+              <div className="bw-tabs" role="tablist" aria-label="Expenses or income">
+                {[['expense', 'Expenses'], ['income', 'Income']].map(([value, label]) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === value}
+                    className="bw-tab"
+                    onClick={() => { setActiveTab(value); setSelectedCategory(null); }}
+                    key={value}
+                  >
+                    {label} ({recurringPayments.filter((payment) => payment.type === value && (showInactive || payment.is_active)).length})
+                  </button>
+                ))}
+              </div>
 
-        {selectedCategory && filteredPayments.length > 0 && (
-          // The total of the payments listed, not a slice of the month: a payment that is not
-          // due in the month shown still belongs to its category.
-          <p className="bw-note">
-            {selectedCategory}: {plural(filteredPayments.length, 'payment', 'payments')},{' '}
-            {formatCurrency(filteredPayments.reduce((sum, payment) => sum + Number(payment.amount), 0))} in total
-          </p>
-        )}
-
-        <div className="recurring-columns">
-          {groups.length > 0 ? (
-            <PaymentList
-              groups={groups}
-              formatCurrency={formatCurrency}
-              onToggle={handleToggleActive}
-              onEdit={openEditModal}
-              onDelete={handleDelete}
-            />
-          ) : (
-            <div className="bw-panel">
-              <p className="bw-nothing">
-                {selectedCategory ? `No recurring ${kind} in “${selectedCategory}”.` : `No recurring ${kind} yet.`}
-              </p>
-              <p className="bw-nothing" style={{ paddingTop: 0 }}>
-                {selectedCategory ? (
-                  <button type="button" className="bw-button bw-button--quiet" onClick={() => setSelectedCategory(null)}>Show all categories</button>
-                ) : (
-                  <button type="button" className="bw-button" onClick={openCreateModal}>Add the first one</button>
+              <div className="bw-tools" style={{ marginBottom: 8 }}>
+                {availableCategories.length > 0 && (
+                  <select
+                    className="bw-select"
+                    aria-label="Category"
+                    value={selectedCategory ?? ''}
+                    onChange={(event) => setSelectedCategory(event.target.value || null)}
+                  >
+                    <option value="">All categories</option>
+                    {availableCategories.map((name) => <option value={name} key={name}>{name}</option>)}
+                  </select>
                 )}
-              </p>
+                <button type="button" className="bw-button bw-button--quiet" aria-pressed={showInactive} onClick={() => setShowInactive(!showInactive)}>
+                  {showInactive ? 'Hide paused' : 'Show paused'}
+                </button>
+              </div>
             </div>
-          )}
 
-          <Agenda days={agendaDays(upcomingPayments)} formatCurrency={formatCurrency} />
-        </div>
+            {selectedCategory && filteredPayments.length > 0 && (
+              // The total of the payments listed, not a slice of the month: a payment that is not
+              // due in the month shown still belongs to its category.
+              <p className="bw-note">
+                {selectedCategory}: {plural(filteredPayments.length, 'payment', 'payments')},{' '}
+                {formatCurrency(filteredPayments.reduce((sum, payment) => sum + Number(payment.amount), 0))} in total
+              </p>
+            )}
+
+            <div className="recurring-columns">
+              {groups.length > 0 ? (
+                <PaymentList
+                  groups={groups}
+                  formatCurrency={formatCurrency}
+                  onToggle={handleToggleActive}
+                  onEdit={openEditModal}
+                  onDelete={handleDelete}
+                />
+              ) : (
+                <div className="bw-panel">
+                  <p className="bw-nothing">
+                    {selectedCategory ? `No recurring ${kind} in “${selectedCategory}”.` : `No recurring ${kind} yet.`}
+                  </p>
+                  <p className="bw-nothing" style={{ paddingTop: 0 }}>
+                    {selectedCategory ? (
+                      <button type="button" className="bw-button bw-button--quiet" onClick={() => setSelectedCategory(null)}>Show all categories</button>
+                    ) : (
+                      <button type="button" className="bw-button" onClick={openCreateModal}>Add the first one</button>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              <Agenda days={agendaDays(upcomingPayments)} formatCurrency={formatCurrency} />
+            </div>
+          </>
+        )}
       </Box>
 
       <PaymentForm

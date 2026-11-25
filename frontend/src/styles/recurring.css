@@ -9,6 +9,57 @@
   gap: 10px;
 }
 
+.recurring-views {
+  justify-self: start;
+  align-self: start;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 0;
+}
+
+.recurring-views button {
+  min-height: 40px;
+  font-weight: 600;
+}
+
+.recurring-catalog {
+  display: grid;
+  gap: 16px;
+}
+
+.recurring-catalog__filters .bw-tools {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.recurring-catalog__filters label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--bw-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.recurring-catalog__filters select {
+  max-width: 100%;
+}
+
+.recurring-catalog .bw-group__head {
+  align-items: center;
+  border-bottom: 1px solid var(--bw-border);
+  background: var(--bw-soft);
+  padding-block: 10px;
+}
+
+.recurring-catalog .bw-group:first-child .bw-group__head {
+  border-radius: 14px 14px 0 0;
+}
+
+.recurring-catalog .bw-group__head h3::before {
+  display: none;
+}
+
 /* ---- The month strip ----------------------------------------------------------------- */
 
 .recurring-strip {
@@ -414,6 +465,13 @@
 }
 
 @media (max-width: 720px) {
+  .recurring-catalog__filters .bw-tools {
+    width: 100%;
+  }
+
+  .recurring-catalog__filters label {
+    flex: 1 1 120px;
+  }
   .recurring-row {
     grid-template-columns: 44px minmax(0, 1fr) auto;
     grid-template-areas:

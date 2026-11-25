@@ -1010,3 +1010,185 @@ button.assistant-visuals__change-row:is(:hover, [aria-expanded="true"]),
     min-height: 44px;
   }
 }
+.assistant-visuals__recurring-counts,
+.assistant-visuals__recurring-dates {
+  display: grid;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__recurring-counts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.assistant-visuals__recurring-counts[data-has-extra] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.assistant-visuals__recurring-dates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.assistant-visuals__recurring-counts > div {
+  padding: 6px 7px;
+  border-radius: 6px;
+  background: var(--assistant-paper);
+}
+
+.assistant-visuals__recurring-counts dt,
+.assistant-visuals__recurring-dates dt {
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__recurring-counts dd,
+.assistant-visuals__recurring-dates time {
+  font-weight: 750;
+}
+
+.assistant-visuals__recurring-rows {
+  display: grid;
+  gap: 7px;
+  max-height: 360px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.assistant-visuals__recurring-rows > li {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 7px 8px;
+  border: 1px solid var(--assistant-border);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__recurring-row-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3px 8px;
+}
+
+.assistant-visuals__recurring-row-heading [data-status="on_schedule"] {
+  color: var(--assistant-accent);
+}
+
+.assistant-visuals__recurring-row-heading :is([data-status="early"], [data-status="late"], [data-status="amount_mismatch"]) {
+  color: var(--assistant-issue);
+}
+
+.assistant-visuals__related-charges {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-inline-start: 3px solid var(--assistant-issue);
+  border-radius: 4px;
+  background: var(--assistant-issue-surface);
+}
+
+.assistant-visuals__company-review,
+.assistant-visuals__company-review fieldset,
+.assistant-visuals__company-option {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.assistant-visuals__company-review > time {
+  color: var(--assistant-muted);
+  font-size: 0.75rem;
+}
+
+.assistant-visuals__company-review fieldset {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.assistant-visuals__company-review legend {
+  padding: 0 0 5px;
+  font-weight: 700;
+}
+
+.assistant-visuals__company-option {
+  border-inline-start: 2px solid var(--assistant-border);
+  padding-inline-start: 8px;
+}
+
+.assistant-visuals__company-review .assistant-visuals__change-actions button {
+  white-space: normal;
+}
+
+.assistant-visuals__related-charges ul {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-visuals__related-charges li,
+.assistant-visuals__related-charges dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 8px;
+}
+
+.assistant-visuals__related-charges li > span {
+  flex-basis: 100%;
+}
+
+.assistant-visuals__related-charges li time,
+.assistant-visuals__related-charges dt {
+  color: var(--assistant-muted);
+}
+
+.assistant-visuals__related-charges dl {
+  border-top: 1px solid var(--assistant-border);
+  padding-top: 5px;
+}
+
+.assistant-visuals__related-charges dd {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-visuals__audit-ledger summary,
+.assistant-visuals__audit-ledger a {
+  color: var(--assistant-accent);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.assistant-visuals__audit-ledger > div {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.assistant-visuals__audit-ledger ul {
+  display: grid;
+  max-height: 15rem;
+  overflow: auto;
+  list-style: none;
+  padding: 0;
+}
+
+.assistant-visuals__audit-ledger li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 6px;
+  border-top: 1px solid var(--assistant-border);
+  padding: 5px 0;
+  overflow-wrap: anywhere;
+}
+
+.assistant-visuals__audit-ledger li small {
+  grid-column: 1 / -1;
+}

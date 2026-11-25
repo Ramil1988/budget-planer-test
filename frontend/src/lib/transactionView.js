@@ -9,7 +9,7 @@ const parse = (date) => {
   return new Date(year, month - 1, day);
 };
 const iso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const amountOf = (transaction) => Number(transaction.amount) || 0;
+const amountOf = (transaction) => transaction.type === 'expense' ? Math.abs(transaction.amount) || 0 : Number(transaction.amount) || 0;
 
 export const today = (now = new Date()) => iso(now);
 
@@ -28,6 +28,21 @@ export const PERIODS = [
 
 // `category` and `bank` hold an id or a name, or 'none' for transactions that have neither.
 export const NO_FILTERS = { query: '', period: 'this-month', from: '', to: '', type: '', category: '', bank: '', min: '', max: '' };
+
+export function transactionCategoryUrl(categoryId, from, to) {
+  return `/transactions?${new URLSearchParams({ category: categoryId, type: 'expense', from, to })}`;
+}
+
+export function transactionFiltersFromSearch(search) {
+  const params = new URLSearchParams(search);
+  const category = params.get('category');
+  const type = params.get('type');
+  const from = params.get('from');
+  const to = params.get('to');
+  const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && iso(parse(value)) === value;
+  if (!category || type !== 'expense' || !isDate(from) || !isDate(to) || from > to) return NO_FILTERS;
+  return { ...NO_FILTERS, category, type, period: 'custom', from, to };
+}
 
 // The first and the last day a period covers; an empty string is an open end.
 export function periodRange({ period, from, to }, now = new Date()) {

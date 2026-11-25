@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "playwright test",
-    "test:unit": "node --test src/lib/recurringUtils.test.js src/lib/budgetMath.test.js src/lib/recurringView.test.js src/lib/reportView.test.js src/lib/assetsView.test.js src/lib/transactionView.test.js ../netlify/functions/_lib/assistant-reply.test.mjs ../netlify/functions/_lib/assistant-split.test.mjs ../netlify/functions/_lib/assistant-receipt.test.mjs ../netlify/functions/_lib/assistant-receipt-flow.test.mjs",
+    "test:unit": "node --test src/lib/*.test.js ../netlify/functions/_lib/*.test.mjs",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",

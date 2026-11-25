@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { sourceCurrency } from './assistant-currency.mjs';
 import { closeToReceipt } from './assistant-split.mjs';
 
 // Reading a receipt is done in two steps so that neither asks the model for arithmetic.
@@ -15,7 +16,7 @@ export const receiptFormat = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['is_receipt', 'wants', 'merchant', 'date', 'subtotal', 'tax', 'total', 'lines'],
+    required: ['is_receipt', 'wants', 'merchant', 'date', 'currency', 'subtotal', 'tax', 'total', 'lines'],
     properties: {
       wants: {
         type: 'string',
@@ -28,6 +29,7 @@ export const receiptFormat = {
       },
       merchant: { type: ['string', 'null'], description: 'Store name as printed, or null.' },
       date: { type: ['string', 'null'], description: 'Purchase date as YYYY-MM-DD, or null if it is not printed.' },
+      currency: { type: ['string', 'null'], description: 'Currency of the printed receipt total, as an ISO code when identified; null when unlabelled. A bare $ alone does not identify it.' },
       subtotal: { type: ['number', 'null'], description: 'The printed subtotal before tax, or null if none is printed.' },
       tax: { type: ['number', 'null'], description: 'The printed total tax, or null if none is printed.' },
       total: { type: ['number', 'null'], description: 'The printed total paid.' },
@@ -133,6 +135,7 @@ export function checkReceipt(raw) {
     receipt: {
       merchant: typeof raw.merchant === 'string' ? raw.merchant.trim().slice(0, 80) || null : null,
       date,
+      sourceCurrency: sourceCurrency(raw.currency),
       subtotal: listed / 100,
       tax: tax / 100,
       extra: onTop / 100,
@@ -141,6 +144,26 @@ export function checkReceipt(raw) {
       lines: numbered,
     },
   };
+}
+
+// Use the posted CAD total supplied by the customer. Rounding cumulative prices preserves the
+// sum of the receipt (including discounts and tax) to the cent before category allocation.
+export function receiptAtPostedCad(receipt, answer) {
+  const match = /^(?:(?:CAD|CA\$)\s*)?(\d{1,9}(?:[.,]\d{1,2})?)(?:\s*CAD)?$/i.exec(answer.trim());
+  const paidCents = match && toCents(Number(match[1].replace(',', '.')));
+  if (!paidCents) return null;
+  const total = toCents(receipt.total);
+  const inCad = (cents) => Math.round((cents / total) * paidCents);
+  let subtotal = 0;
+  const lines = receipt.lines.map((line) => {
+    const before = inCad(subtotal);
+    subtotal += toCents(line.amount);
+    return { ...line, amount: (inCad(subtotal) - before) / 100 };
+  });
+  const extra = paidCents - inCad(subtotal);
+  return { ...receipt, sourceCurrency: 'CAD', originalCurrency: receipt.sourceCurrency, originalTotal: receipt.total,
+    lines, subtotal: inCad(subtotal) / 100, extra: extra / 100,
+    tax: Math.min(extra, inCad(toCents(receipt.tax))) / 100, total: paidCents / 100 };
 }
 
 // requestModel(extra) runs one structured call over the file; `extra` is appended to the
@@ -304,6 +327,11 @@ export function receiptMessage(language, receipt, breakdown, currency, guesses =
     return `${line.name}${guess ? ` (${guess})` : ''} → ${category}`;
   }));
   const notes = [];
+  if (receipt.originalCurrency) {
+    notes.push(russian
+      ? `Чек на ${receipt.originalTotal.toFixed(2)} ${receipt.originalCurrency}. Суммы по категориям распределены из указанного списания ${receipt.total.toFixed(2)} CAD.`
+      : `Receipt total ${receipt.originalTotal.toFixed(2)} ${receipt.originalCurrency}. Category amounts are allocated from your posted total of ${receipt.total.toFixed(2)} CAD.`);
+  }
   if (unsure.length) {
     notes.push(russian
       ? `Проверьте категорию: ${unsure.join('; ')}. Если она не та, напишите, куда перенести.`

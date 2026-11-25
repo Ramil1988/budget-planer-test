@@ -21,7 +21,7 @@ async function openAssistant(page, reply) {
 }
 
 async function say(dialog, text) {
-  await dialog.getByRole('textbox').fill(text);
+  await dialog.getByRole('textbox', { name: 'Message' }).fill(text);
   await dialog.getByTitle('Send message').click();
 }
 
@@ -244,5 +244,192 @@ test.describe('Budget assistant', () => {
       return Boolean(card.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING);
     });
     expect(cardComesFirst).toBe(true);
+  });
+
+  test('correcting one of two uploaded receipts preserves the other approval', async ({ page }) => {
+    const proposal = (title) => ({
+      token: title, totals: { before: -10, after: -10 },
+      items: [{ kind: 'update', type: 'expense', date: '2026-11-21', description: title, amount: 10, newAmount: 10, category: 'Food', newCategory: 'Gifts' }],
+    });
+    const { dialog } = await openAssistant(page, (body) => {
+      if (body.mode === 'prepare_import') {
+        return { message: 'Review the receipt.', receiptToken: body.attachment.name, changeReviews: [proposal(body.attachment.name)] };
+      }
+      if (body.mode || body.receiptToken !== 'B.png') return null;
+      return { message: 'Corrected the second receipt.', receiptToken: 'B-corrected', changeReviews: [proposal('Corrected B')] };
+    });
+    for (const name of ['A.png', 'B.png']) {
+      await dialog.locator('input[type=file]').setInputFiles({ name, mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) });
+      await dialog.getByRole('textbox').fill('Split this receipt');
+      await dialog.getByTitle('Analyze attachment').click();
+      await expect(dialog.getByRole('region', { name: /Review changes/ }).getByText(`Change: ${name}`, { exact: true })).toBeVisible();
+    }
+    await say(dialog, 'Update the second split');
+    const cards = dialog.getByRole('region', { name: /Review changes/ });
+    await expect(cards.getByText('Change: Corrected B', { exact: true })).toBeVisible();
+    await expect(cards).toHaveCount(2);
+    await expect(cards.getByText('Change: A.png', { exact: true })).toBeVisible();
+  });
+
+  test('the next question carries the month selected on the comparison chart', async ({ page }) => {
+    const period = (month, total) => ({ startDate: `2026-${month}-01`, endDate: `2026-${month}-25`, total });
+    const chart = (earlier) => ({
+      kind: 'category-comparison', currency: 'CAD', earlier, latest: period('11', 80), scope: { account: 'Checking' },
+      categories: [{ label: 'Subscriptions', earlier: 100, latest: 80, change: -20, percentChange: -20 }],
+    });
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if ((body.mode && body.mode !== 'category_comparison') || body.messages?.at(-1).content.startsWith('Why')) {
+        return body.mode ? null : { message: 'Here are the records.' };
+      }
+      return { message: 'Spending decreased by CAD 20.00.', visuals: [chart(body.periods ? { ...body.periods[0], total: 100 } : period('10', 100))] };
+    });
+    await say(dialog, 'Compare spending for two periods');
+    await dialog.getByLabel('Comparison month').fill('2026-09');
+    await expect(dialog.getByText('01.09.2026 – 25.09.2026')).toBeVisible();
+    await say(dialog, 'Why was the earlier period higher?');
+    await expect(dialog.getByText('Here are the records.')).toBeVisible();
+    const earlierReply = requests.at(-1).messages.at(-2).content;
+    expect(earlierReply).toContain('2026-09-01');
+    expect(earlierReply).toContain('2026-11-25');
+    expect(earlierReply).toContain('Checking');
+    expect(earlierReply).not.toContain('2026-10-01');
+  });
+
+  test('recurring audit groups additional merchant charges with their statement evidence', async ({ page }) => {
+    const { dialog } = await openAssistant(page, (body) => body.mode ? null : {
+      message: 'Сверка готова.', visuals: [{
+        kind: 'recurring-date-audit', currency: 'CAD', language: 'ru', category: 'Subscriptions',
+        month: '2026-04', startDate: '2026-04-01', endDate: '2026-04-30', relatedChargeCount: 1,
+        categoryId: 'f5d5e546-5cf8-4fad-a504-000000000123', transactionCount: 4, transactionTotal: 120.05,
+        transactions: [
+          { id: 'calendar', date: '2026-04-12', amount: 45, description: 'Cobalt', generated: true },
+          { id: 'other', date: '2026-04-08', amount: 51.30, description: 'at ORIOLE STUDIO' },
+          { id: 'primary', date: '2026-04-06', amount: 18.75, description: 'ORIOLE STUDIO' },
+          { id: 'unmatched', date: '2026-04-02', amount: 5, description: 'Unknown charge' },
+        ],
+        rows: [
+          { name: 'Unknown charge', status: 'unmatched', actualDate: '2026-04-02', actualAmount: 5 },
+          { name: 'Oriole', status: 'on_schedule', matchSource: 'merchant_name', expectedDate: '2026-04-06', expectedAmount: 19,
+            actualDate: '2026-04-06', actualAmount: 18.75, description: 'ORIOLE STUDIO',
+            relatedCharges: [{ description: 'at ORIOLE STUDIO', date: '2026-04-08', amount: 51.30 }],
+            totalPostedAmount: 70.05, differenceFromPlan: 51.05 },
+          { name: 'Cobalt', status: 'amount_mismatch', matchSource: 'merchant_name', expectedDate: '2026-04-12',
+            expectedAmount: 25, actualDate: '2026-04-12', actualAmount: 90, description: 'COBALT MONTHLY' },
+        ],
+      }],
+    });
+    await say(dialog, 'Сверь подписки за апрель');
+    const card = dialog.getByRole('region', { name: 'Сверка дат Recurring' });
+    await expect(card.getByText('Доп. списания')).toBeVisible();
+    const recurringRows = card.getByRole('list', { name: 'Операции и расписание' }).locator(':scope > li');
+    const group = recurringRows.first();
+    await expect(group.getByText('Oriole', { exact: true })).toBeVisible();
+    await expect(group.getByText('Дата совпала')).toBeVisible();
+    await expect(group.getByText('ORIOLE STUDIO', { exact: true })).toBeVisible();
+    const extra = group.getByRole('listitem');
+    await expect(extra).toHaveCount(1);
+    await expect(extra.getByText('2 дн. после плановой даты')).toBeVisible();
+    await expect(extra).toHaveText(/at ORIOLE STUDIO.*08\.04\.2026.*51\.30\s*CAD/);
+    await expect(group.getByText('70.05 CAD', { exact: true })).toBeVisible();
+    await expect(group.getByText('+51.05 CAD', { exact: true })).toBeVisible();
+    const discrepancy = recurringRows.filter({ hasText: 'Cobalt' });
+    await expect(discrepancy.getByText('Возможная пара · сумма отличается')).toBeVisible();
+    await expect(discrepancy.getByText(/близкой сумме/)).toHaveCount(0);
+    await card.getByText('Все операции категории (4)').click();
+    const ledger = card.locator('details[open]');
+    await expect(ledger.getByRole('listitem')).toHaveCount(4);
+    await expect(ledger.getByText('120.05 CAD')).toBeVisible();
+    await expect(ledger.getByText(/Автозапись Recurring/)).toBeVisible();
+    const link = ledger.getByRole('link', { name: 'Открыть в Transactions' });
+    await link.click();
+    await expect(page).toHaveURL(/\/transactions\?/);
+    expect(Object.fromEntries(new URL(page.url()).searchParams)).toMatchObject({
+      category: 'f5d5e546-5cf8-4fad-a504-000000000123', type: 'expense', from: '2026-04-01', to: '2026-04-30',
+    });
+    await expect(dialog).toBeHidden();
+  });
+
+  test('a company-only charge asks for confirmation and lets the user revise the link', async ({ page }) => {
+    const first = {
+      scheduleId: '96ba9d04-922b-4de6-b114-9dba3a1db730', name: 'Studio Plus',
+      expectedDate: '2026-04-08', expectedAmount: 24, actualDate: '2026-04-09',
+      actualAmount: 23.50, description: 'POLAR STUDIO SUBSCRIPTION',
+    };
+    const second = { ...first, scheduleId: '0782be1d-8364-474d-9ccb-dcf055a16408', name: 'Studio Business', actualDate: null, actualAmount: null, description: null };
+    const charge = {
+      id: 'actual:test-bank-entry', status: 'company_candidate', company: 'Polar', actualAmount: 8.25,
+      actualDate: '2026-04-08', name: 'at POLAR', description: 'at POLAR', reviewKey: 'a'.repeat(64),
+      companyCandidates: [first],
+    };
+    const report = {
+      kind: 'recurring-date-audit', language: 'ru', currency: 'CAD', category: 'Subscriptions',
+      categoryId: 'f5d5e546-5cf8-4fad-a504-000000000123', month: '2026-04', startDate: '2026-04-01', endDate: '2026-04-30',
+      rows: [charge, { ...charge, id: 'actual:another-test-entry', reviewKey: 'b'.repeat(64), companyCandidates: [first, second] }],
+      counts: { company_candidate: 2 },
+    };
+    const { dialog, requests } = await openAssistant(page, (body) => body.mode ? null : {
+      message: 'Проверьте два списания.', visuals: [report], actions: [],
+    });
+    await say(dialog, 'Сверь Subscriptions за апрель');
+    const card = dialog.getByRole('region', { name: 'Сверка дат Recurring' });
+    const rows = card.getByRole('list', { name: 'Операции и расписание' }).locator(':scope > li');
+    const single = rows.first();
+    await expect(single.getByRole('group', { name: 'Это списание Polar относится к подписке Studio Plus?' })).toBeVisible();
+    await expect(single.getByText('at POLAR', { exact: true })).toBeVisible();
+    await expect(single.getByText('8.25 CAD', { exact: true })).toBeVisible();
+    await expect(single.getByText('Уже сопоставлено')).toBeVisible();
+    await expect(single.getByText('POLAR STUDIO SUBSCRIPTION')).toBeVisible();
+    await expect(single.getByText('23.50 CAD', { exact: true })).toBeVisible();
+    await single.getByRole('button', { name: 'Да, относится' }).click();
+    await expect(single.getByRole('status')).toHaveText('Вы связали это списание с Studio Plus.');
+    await single.getByRole('button', { name: 'Изменить ответ' }).click();
+    await single.getByRole('button', { name: 'Нет, отдельное списание' }).click();
+    await expect(single.getByRole('status')).toHaveText('Вы отметили это списание как отдельное.');
+
+    const multi = rows.nth(1);
+    await expect(multi.getByRole('button', { name: 'Да, относится' })).toHaveCount(0);
+    await multi.getByRole('button', { name: 'Связать с Studio Business' }).click();
+    await expect(multi.getByRole('status')).toHaveText('Вы связали это списание с Studio Business.');
+    expect(requests.filter((request) => request.mode)).toHaveLength(0);
+    await say(dialog, 'Сверь ещё раз');
+    const repeated = dialog.getByRole('region', { name: 'Сверка дат Recurring' }).last();
+    await expect(repeated.getByText('Вы отметили это списание как отдельное.')).toBeVisible();
+    await expect(repeated.getByText('Вы связали это списание с Studio Business.')).toBeVisible();
+    await expect.poll(() => requests.filter((request) => !request.mode)).toHaveLength(2);
+    const history = requests.at(-1).messages.at(-2);
+    expect(history.role).toBe('assistant');
+    expect(history.content).toContain('"subscription":"Studio Business"');
+    expect(history.content).toContain('"subscription":null');
+  });
+
+  test('the import form requires CAD and category and lets a repeated file row be confirmed separately', async ({ page }) => {
+    const row = { date: '2026-11-20', type: 'expense', description: 'TEST PURCHASE', account_id: 'a', category_id: 'c', amount: 5 };
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode === 'commit_import') return { message: 'The test selection was confirmed.', actions: [] };
+      if (body.mode !== 'prepare_import') return null;
+      return { message: 'Review your statement.', actions: [], importDraft: {
+        token: 'signed', accounts: [{ id: 'a', name: 'Checking' }], categories: [{ id: 'c', name: 'Food', type: 'expense' }],
+        rows: [
+          { ...row, rowId: '1', status: 'needs_review', amount: null, sourceAmount: 25, sourceCurrency: 'EUR', category_id: null },
+          { ...row, rowId: '2', status: 'ready' },
+          { ...row, rowId: '3', status: 'duplicate', fileRepeatOf: '2', duplicates: [] },
+        ],
+      } };
+    });
+    await dialog.locator('input[type=file]').setInputFiles({ name: 'amounts.csv', mimeType: 'text/csv', buffer: Buffer.from('synthetic') });
+    await dialog.getByTitle('Analyze attachment').click();
+    const card = dialog.getByRole('region', { name: 'Review transactions' });
+    const first = card.getByRole('checkbox').first();
+    await expect(first).toBeDisabled();
+    await card.getByLabel('Posted amount in CAD for TEST PURCHASE').fill('39.43');
+    await expect(first).toBeDisabled();
+    await card.getByLabel('Category for TEST PURCHASE').first().selectOption('c');
+    await first.check();
+    await card.getByRole('button', { name: 'This is a separate transaction' }).click();
+    await card.getByRole('button', { name: 'Import 3 transactions' }).click();
+    await expect(dialog.getByText('The test selection was confirmed.')).toBeVisible();
+    expect(requests.at(-1).selection).toEqual([
+      { rowId: '1', cadAmount: 39.43, category_id: 'c' }, { rowId: '2' }, { rowId: '3', allowDuplicate: true },
+    ]);
   });
 });

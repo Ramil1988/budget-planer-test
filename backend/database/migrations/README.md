@@ -53,6 +53,16 @@ Grants the Data API roles explicit privileges on every table (required since Sup
   `007_dismissed_suggestions.sql`) now grant their own tables, so a fresh install
   ends up with the same privileges without it
 
+### 010_import_signature.sql
+Stores the import signature on the transaction so that editing an imported row does not make
+the next Google Sheets sync import the original again (see "Import Deduplication" in
+`docs/architecture.md`):
+- Adds nullable `transactions.import_signature` and a partial index on `(user_id, import_signature)`
+- Backfills rows that came from a bank import (`provider IS NOT NULL`), trashed rows included,
+  where the description is ASCII; the app stamps the remaining rows on their first edit
+- Needs no grants (the table-level grants from 009 cover the column) and is safe to re-run
+- The app works without it, but edits of imported transactions are protected only after it runs
+
 ### 011_liability_interest.sql
 Makes a payment on a linked liability pay its interest first, instead of taking the whole
 payment off the balance:
@@ -66,6 +76,14 @@ payment off the balance:
   every payment since, equals the stored balance) and prints each change as a `NOTICE`.
   Other liabilities keep their balance and get interest from now on
 - Needs no grants and is safe to re-run. Until it is applied the app works as before
+
+### 20261125145446_assistant_transaction_changes.sql
+
+Apply this migration before deploying the assistant transaction-change handler. It adds a row version, a user-scoped retry receipt and an invoker RPC that applies a reviewed card atomically. Start with `004_soft_delete_transactions.sql`. Migration 010 is optional for this RPC.
+
+### 20261125150216_recurring_bank_posting.sql
+
+Apply this migration after recurring auto-add (008) so a confirmed bank import can keep the statement date alongside the calendar entry. Existing generated transactions keep an unconfirmed posting date until a statement matches. The Google Sheets webhook receives UPDATE access to this column only.
 
 ## How to Apply Migrations
 

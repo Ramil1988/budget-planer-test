@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { Box, Heading, Spinner } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { NO_FILTERS, applyFilters, groupByDay, periodLabel, periodRange, summary, timeline } from '../lib/transactionView';
+import { isMissingImportSignatureColumn, signatureStamp } from '../lib/importSignature';
+import { NO_FILTERS, applyFilters, groupByDay, periodLabel, periodRange, summary, timeline, transactionFiltersFromSearch } from '../lib/transactionView';
+import { readActiveTransactions } from '../lib/transactionLedger';
 import SpendChart from '../components/transactions/SpendChart';
 import TransactionList from '../components/transactions/TransactionList';
 import TrashList from '../components/transactions/TrashList';
@@ -33,11 +35,12 @@ const formatDate = (dateString) => {
 
 export default function Transactions() {
   const { user } = useAuth();
+  const location = useLocation();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // Every filter of the list: see NO_FILTERS and applyFilters in lib/transactionView.
-  const [filters, setFilters] = useState(NO_FILTERS);
+  const [filters, setFilters] = useState(() => transactionFiltersFromSearch(location.search));
 
   // The day (or month) picked on the chart: the list shows only it.
   const [pickedBucket, setPickedBucket] = useState(null);
@@ -50,6 +53,13 @@ export default function Transactions() {
   const [viewMode, setViewMode] = useState('active'); // 'active' | 'trash'
   const [trashedTransactions, setTrashedTransactions] = useState([]);
   const [loadingTrash, setLoadingTrash] = useState(false);
+
+  // A report can open while the ledger already has a search or a selected chart day.
+  useEffect(() => {
+    setFilters(transactionFiltersFromSearch(location.search));
+    setPickedBucket(null);
+    setViewMode('active');
+  }, [location.search, location.key]);
 
   // Restore/Permanent delete states
   const [restoringId, setRestoringId] = useState(null);
@@ -154,9 +164,20 @@ export default function Transactions() {
       return;
     }
     try {
+      // Imports recognise a bank row by its stored signature. Stamp the row with the signature
+      // of its current values before the amount changes, or the next sync would import the
+      // original again. Skipped on a database without migration 010.
+      const { data: current, error: readError } = await supabase
+        .from('transactions')
+        .select('date, description, amount, import_signature')
+        .eq('id', transactionId)
+        .eq('user_id', user.id)
+        .single();
+      if (readError && !isMissingImportSignatureColumn(readError)) throw readError;
+
       const { error } = await supabase
         .from('transactions')
-        .update({ amount: parsed })
+        .update({ amount: parsed, ...(current ? signatureStamp(current) : {}) })
         .eq('id', transactionId)
         .eq('user_id', user.id);
 
@@ -184,45 +205,19 @@ export default function Transactions() {
     setLoading(true);
     setError('');
     try {
-      const { data, error: txError } = await supabase
-        .from('transactions')
-        .select(`
-          id,
-          description,
-          date,
-          amount,
-          type,
-          provider,
-          category_id,
-          created_at,
-          categories (name)
-        `)
-        .eq('user_id', user.id)
-        .is('deleted_at', null)  // Only load active (non-deleted) transactions
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (txError) throw txError;
-
-      // Sort chronologically (oldest first) for balance calculation
-      const sortedData = [...(data || [])].sort((a, b) => {
-        const dateCompare = new Date(a.date) - new Date(b.date);
-        if (dateCompare !== 0) return dateCompare;
-        // Secondary sort by created_at for same-day transactions
-        return new Date(a.created_at) - new Date(b.created_at);
-      });
+      const data = await readActiveTransactions(supabase, user.id);
 
       // Calculate cumulative spending (expenses only, not affected by income)
       let runningSpend = 0;
       const balanceMap = new Map();
-      sortedData.forEach((t) => {
+      for (const t of data.slice().reverse()) {
         if (t.type === 'expense') {
-          runningSpend += t.amount;
+          runningSpend += Math.abs(t.amount);
         }
         balanceMap.set(t.id, -runningSpend); // Show as negative for expenses
-      });
+      }
 
-      const transformedTransactions = (data || []).map((t) => ({
+      const transformedTransactions = data.map((t) => ({
         id: t.id,
         description: t.description,
         date: t.date,

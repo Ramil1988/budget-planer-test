@@ -108,7 +108,7 @@ export function categoryBudgetTimeline(records, monthLimits, endDate, selectedId
   const impacts = new Map();
   for (const { id, date, description, amount } of records) {
     const month = months.get(date.slice(0, 7));
-    const rowCents = cents(amount);
+    const rowCents = Math.abs(cents(amount));
     month.spent = addCents(month.spent, rowCents);
     if (date > endDate) continue;
 
@@ -158,7 +158,7 @@ async function budgetSnapshot(supabase, userId, month, { categoryName = null, wi
   const [categories, { limits, limitMonth }] = await Promise.all([loadCategories(), loadLimits(supabase, userId, month, bounds)]);
   const category = categoryId == null ? findCategory(categories, categoryName) : categories[0];
 
-  const transactions = await readAll(() => {
+  const expenseRows = await readAll(() => {
     const query = supabase.from('transactions')
       .select(withDetails ? 'category_id,amount,date,description,id' : 'category_id,amount')
       .eq('user_id', userId)
@@ -168,6 +168,7 @@ async function budgetSnapshot(supabase, userId, month, { categoryName = null, wi
       .lte('date', through ?? bounds.end);
     return category ? query.eq('category_id', category.id) : query;
   });
+  const transactions = expenseRows.map((row) => ({ ...row, amount: Math.abs(Number(row.amount)) }));
   const byCategory = new Map();
   let total = 0;
   for (const transaction of transactions) {

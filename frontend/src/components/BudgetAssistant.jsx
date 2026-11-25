@@ -23,6 +23,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 import { useAuth } from '../contexts/AuthContext';
+import { createCompanyReviewStore } from '../lib/assistantCompanyReviews';
 import { budgetSuggestionKey, collectAskedSuggestions, currentSuggestionMonth, mergeAskedSuggestions, readAskedSuggestions } from '../lib/assistantSuggestionHistory';
 import AssistantCategoryDetails from './AssistantCategoryDetails';
 import AssistantReplyFollowUps from './AssistantReplyFollowUps';
@@ -353,15 +354,20 @@ function ImportReviewRows({ preview, selected, setSelected, results, pending, on
     const isDuplicate = status === 'duplicate';
     const duplicates = result?.duplicates ?? row.duplicates ?? [];
     const duplicateLimitReached = result?.duplicateLimitReached ?? row.duplicateLimitReached;
-    const canOverride = duplicates.length > 0 && !duplicateLimitReached;
+    const canOverride = (duplicates.length > 0 || row.fileRepeatOf != null) && !duplicateLimitReached;
+    const needsCad = Boolean(row.sourceCurrency && row.sourceCurrency !== 'CAD');
+    const amount = needsCad ? row.sourceAmount : row.amount;
+    const cadAmount = Number(choices.cadAmount);
+    const validCad = !needsCad || (Number.isFinite(cadAmount) && cadAmount > 0 && cadAmount <= 9_999_999_999.99
+      && Number(cadAmount.toFixed(2)) === cadAmount);
     const valid = ['income', 'expense'].includes(row.type)
-      && typeof row.amount === 'number' && row.amount > 0
-      && Boolean(row.date && row.description);
+      && typeof amount === 'number' && amount > 0 && Boolean(row.date && row.description);
     const editable = valid && status !== 'inserted' && (!isDuplicate || canOverride) && !preview.readOnly;
-    const selectable = editable && choices.account_id != null && choices.category_id != null;
+    const selectable = editable && validCad && choices.account_id != null && choices.category_id != null;
     const chosen = selectable && (isDuplicate ? approvedDuplicates.has(row.rowId) : selected.has(row.rowId));
     return {
       ...choices,
+      needsCad,
       status,
       isDuplicate,
       issues: result?.issues ?? row.issues,
@@ -371,9 +377,10 @@ function ImportReviewRows({ preview, selected, setSelected, results, pending, on
       chosen,
     };
   });
-  const selection = rows.filter(({ chosen }) => chosen).map(({ rowId, isDuplicate }) => ({
+  const selection = rows.filter(({ chosen }) => chosen).map(({ rowId, isDuplicate, needsCad, cadAmount }) => ({
     rowId,
     ...edits[rowId],
+    ...(needsCad && { cadAmount: Number(cadAmount) }),
     ...(isDuplicate ? { allowDuplicate: true } : {}),
   }));
 
@@ -426,9 +433,10 @@ function ImportReviewRows({ preview, selected, setSelected, results, pending, on
                   }}
                 />
                 <span className="budget-assistant__import-description">{row.description || 'Unidentified transaction'}</span>
-                {typeof row.amount === 'number' && (
+                {typeof (row.needsCad ? row.sourceAmount : row.amount) === 'number' && (
                   <span className="budget-assistant__import-amount" data-type={row.type}>
-                    {row.type === 'income' ? '+' : row.type === 'expense' ? '−' : ''}${formatAmount.format(row.amount)}
+                    {row.type === 'income' ? '+' : row.type === 'expense' ? '−' : ''}
+                    {row.needsCad ? `${formatAmount.format(row.sourceAmount)} ${row.sourceCurrency === 'UNKNOWN' ? '(currency unclear)' : row.sourceCurrency}` : `$${formatAmount.format(row.amount)}`}
                   </span>
                 )}
               </label>
@@ -449,8 +457,18 @@ function ImportReviewRows({ preview, selected, setSelected, results, pending, on
                   className="budget-assistant__import-edits"
                   open={row.status === 'needs_review' || (row.isDuplicate && !row.selectable) || undefined}
                 >
-                  <summary>Edit account or category</summary>
+                  <summary>{row.needsCad ? 'Review CAD amount and category' : 'Edit account or category'}</summary>
                   <div>
+                    {row.needsCad && (
+                      <label>
+                        Posted amount in CAD
+                        <input type="number" min="0.01" step="0.01" inputMode="decimal"
+                          aria-label={`Posted amount in CAD for ${row.description}`}
+                          disabled={Boolean(pending)} value={row.cadAmount ?? ''}
+                          onChange={(event) => updateField(row.rowId, 'cadAmount', event.target.value)}
+                        />
+                      </label>
+                    )}
                     <label>
                       Account
                       <select
@@ -497,7 +515,7 @@ function ImportReviewRows({ preview, selected, setSelected, results, pending, on
                       disabled={!row.selectable || Boolean(pending)}
                       onClick={() => updateSelection(row.rowId, !row.chosen, true)}
                     >
-                      {row.chosen ? 'Skip' : 'Add anyway'}
+                      {row.chosen ? 'Skip' : row.fileRepeatOf != null ? 'This is a separate transaction' : 'Add anyway'}
                     </button>
                   )}
                 </div>
@@ -764,21 +782,71 @@ function AssistantWindowResize({ dialogRef, dialogId }) {
   );
 }
 
+function withCompanyReviews(message, store) {
+  if (!message.visuals?.some((visual) => visual.kind === 'recurring-date-audit'
+    && visual.rows?.some((row) => row.status === 'company_candidate'))) return message;
+  return {
+    ...message,
+    visuals: message.visuals.map((visual) => visual.kind === 'recurring-date-audit' ? {
+      ...visual, rows: visual.rows.map((row) => row.status === 'company_candidate' ? { ...row, reviewDecision: store.read(row) } : row),
+    } : visual),
+  };
+}
+
+function assistantHistoryMessage({ role, content, requestPrompt, visuals, choices }) {
+  const chart = visuals?.find(({ kind }) => kind === 'category-comparison');
+  const notes = [];
+  if (chart) {
+    // The selected ranges and scope let the next tool call read the current rows.
+    const periods = [chart.earlier, chart.latest].map(({ startDate, endDate, total }) => ({ startDate, endDate, total }));
+    notes.push(`Displayed category comparison (CAD): ${JSON.stringify({ periods, scope: chart.scope ?? {} })}`);
+  }
+  const audit = visuals?.find(({ kind }) => kind === 'recurring-date-audit');
+  if (audit) {
+    notes.push(`Recurring audit filter: ${JSON.stringify({
+      category: audit.category, type: 'expense', start_date: audit.startDate, end_date: audit.endDate,
+    })}`);
+    const decisions = audit.rows.filter((row) => row.status === 'company_candidate' && row.reviewDecision !== undefined)
+      .slice(0, 8).map((row) => ({
+        transaction: row.description?.slice(0, 100), date: row.actualDate, amount: row.actualAmount,
+        subscription: row.companyCandidates.find((c) => c.scheduleId === row.reviewDecision)?.name?.slice(0, 100) ?? null,
+      }));
+    if (decisions.length) notes.push(`Company links reviewed by the user (null means separate charge): ${JSON.stringify(decisions)}`);
+  }
+  if (choices?.length) notes.push(`Options offered:\n${choices.map((choice, index) => `${index + 1}) ${choice}`).join('\n')}`);
+  const suffix = notes.length ? `\n\n${notes.join('\n')}`.slice(0, 5000) : '';
+  return { role, content: (requestPrompt ?? content).slice(0, 6000 - suffix.length) + suffix };
+}
+
 export default function BudgetAssistant({ onDataChanged, dataVersion }) {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [heightExpanded, setHeightExpanded] = useState(false);
   const [heightFraction, setHeightFraction] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [companyReviews] = useState(() => createCompanyReviewStore(user.id));
+  const [reviewVersion, setReviewVersion] = useState(0);
+  const reviewedMessages = useMemo(() => messages.map((message) => withCompanyReviews(message, companyReviews)),
+    [messages, companyReviews, reviewVersion]);
+  const reviewCompanyCharge = (row, scheduleId) => {
+    if (companyReviews.write(row, scheduleId)) setReviewVersion((version) => version + 1);
+  };
+  useEffect(() => {
+    const sync = (event) => {
+      if (!event.key || event.key.startsWith('budgetwise:company-review:')) setReviewVersion((version) => version + 1);
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(null);
   const [failure, setFailure] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [attachmentError, setAttachmentError] = useState('');
-  const [importPreview, setImportPreview] = useState(null);
-  const [importResults, setImportResults] = useState({});
+  const [importCards, setImportCards] = useState({});
+  const activeImport = useRef(null);
   const [transactionReviews, setTransactionReviews] = useState([]);
   const [changeReviews, setChangeReviews] = useState([]);
   const dialogId = useId();
@@ -814,7 +882,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     // message. While it is being committed, keep it in view instead of jumping to the bottom.
     const committing = pending === 'commit_import' || failure?.turn.body.mode === 'commit_import'
       || latestMessage?.replyMode === 'commit_import';
-    const importCard = committing && panel.querySelector('.budget-assistant__messages .budget-assistant__import');
+    const importCard = committing && document.getElementById(`assistant-import-${activeImport.current}`);
     if (importCard) {
       importCard.scrollIntoView({ block: 'nearest' });
       return;
@@ -828,7 +896,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     } else {
       panel.scrollTop = panel.scrollHeight;
     }
-  }, [open, latestMessageId, showLatestFromStart, pending, failure, importPreview, transactionReviews, changeReviews]);
+  }, [open, latestMessageId, showLatestFromStart, pending, failure, importCards, transactionReviews, changeReviews]);
 
   useLayoutEffect(() => {
     if (open) fitComposer(composerRef.current);
@@ -923,11 +991,12 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
   };
 
   const requestReply = async (turn) => {
-    const staleImport = turn.body.mode === 'commit_import' && turn.body.importToken !== importPreview?.token;
+    const staleImport = turn.body.mode === 'commit_import' && turn.body.importToken !== importCards[turn.importSourceId]?.token;
     if (staleImport || requestRef.current || !session?.access_token || settledReviews.current.has(turn.reviewId)) return;
 
     const controller = new AbortController();
     requestRef.current = controller;
+    activeImport.current = turn.importSourceId ?? null;
     setPending(turn.body.mode ?? 'chat');
     setFailure(null);
     const directReview = ['budget_review', 'financial_summary', 'category_comparison', 'upcoming_payments'].includes(turn.body.mode);
@@ -953,9 +1022,9 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         throw new Error('Your session expired. Sign in again to continue.');
       }
       if (!response.ok || typeof payload?.message !== 'string' || !payload.message.trim()) {
-        throw new Error(typeof payload?.error === 'string' && payload.error
-          ? payload.error
-          : 'The assistant couldn’t reply. Try again.');
+        const error = new Error(payload?.error || 'The assistant couldn’t reply. Try again.');
+        error.retryable = payload?.retryable !== false;
+        throw error;
       }
       if (requestRef.current !== controller) return;
 
@@ -964,8 +1033,10 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
             typeof action?.type === 'string' && typeof action?.id === 'string' && typeof action?.title === 'string',
           )
         : [];
+      const receiptSourceId = payload.receiptToken ? (turn.receiptSourceId ?? turn.id) : null;
       const message = {
         id: `reply:${turn.id}`,
+        receiptSourceId,
         role: 'assistant',
         content: payload.message,
         replyMode: turn.body.mode,
@@ -979,21 +1050,25 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         visuals: validAssistantReplyVisuals(payload.visuals),
       };
       // A follow-up about a receipt replaces what the receipt proposed before, whichever kind of card that was.
-      const receiptFollowUp = typeof turn.body.receiptToken === 'string' && typeof payload.receiptToken === 'string';
+      const receiptFollowUp = Boolean(turn.receiptSourceId && receiptSourceId);
+      const importId = turn.importSourceId ?? receiptSourceId ?? turn.id;
       if (payload.importDraft) {
-        setImportPreview((previous) => ({
-          ...payload.importDraft,
-          id: turn.id,
-          sourceId: turn.body.mode === 'commit_import' ? previous?.sourceId ?? previous?.id ?? turn.id : turn.id,
-          fromReceipt: turn.body.mode === 'commit_import' ? Boolean(previous?.fromReceipt) : typeof payload.receiptToken === 'string',
+        setImportCards((cards) => ({
+          ...cards,
+          [importId]: {
+            ...payload.importDraft, id: turn.id,
+            selectionId: turn.importSourceId ? cards[importId].selectionId : turn.id,
+            results: {},
+          },
         }));
-        setImportResults({});
-        if (receiptFollowUp) setChangeReviews((previous) => previous.filter(({ fromReceipt }) => !fromReceipt));
+        if (receiptFollowUp) setChangeReviews((reviews) => reviews.filter((review) => review.receiptSourceId !== receiptSourceId));
       }
       if (Array.isArray(payload.importResult?.rows)) {
         if (!payload.importDraft) {
           const results = Object.fromEntries(payload.importResult.rows.map((row) => [row.rowId, row]));
-          setImportResults((previous) => ({ ...previous, ...results }));
+          setImportCards((cards) => ({
+            ...cards, [importId]: { ...cards[importId], results: { ...cards[importId].results, ...results } },
+          }));
         }
         dataChanged = (payload.importResult.counts?.inserted ?? 0) > 0;
       }
@@ -1009,7 +1084,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         ? payload.changeReviews
             .filter((review) => typeof review?.token === 'string' && Array.isArray(review.items) && review.items.length
               && Number.isFinite(review.totals?.before) && Number.isFinite(review.totals?.after))
-            .map((review, index) => ({ ...review, id: `changes:${turn.id}:${index}`, fromReceipt: typeof payload.receiptToken === 'string' }))
+            .map((review, index) => ({ ...review, id: `changes:${turn.id}:${index}`, receiptSourceId }))
         : [];
       if (turn.reviewId) {
         settledReviews.current.add(turn.reviewId);
@@ -1023,9 +1098,15 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       // A corrected proposal for a receipt replaces the earlier receipt card instead of sitting beside it.
       // Only a follow-up does that: a card for a newly attached receipt, or from anything else, is added.
       if (changes.length) {
-        const corrected = typeof turn.body.receiptToken === 'string' && changes.some(({ fromReceipt }) => fromReceipt);
-        setChangeReviews((previous) => [...(corrected ? previous.filter(({ fromReceipt }) => !fromReceipt) : previous), ...changes]);
-        if (corrected) setImportPreview((previous) => (previous?.fromReceipt ? null : previous));
+        setChangeReviews((previous) => [
+          ...(receiptFollowUp ? previous.filter((review) => review.receiptSourceId !== receiptSourceId) : previous),
+          ...changes,
+        ]);
+        if (receiptFollowUp) setImportCards((previous) => {
+          const remaining = { ...previous };
+          delete remaining[receiptSourceId];
+          return remaining;
+        });
       }
       setMessages((current) => [...current, message]);
       dataChanged ||= actions.length > 0;
@@ -1033,6 +1114,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       if (requestRef.current !== controller) return;
       setFailure({
         turn,
+        retryable: error.retryable !== false,
         message: controller.signal.aborted
           ? 'This reply is taking longer than expected. Try again.'
           : error instanceof TypeError
@@ -1134,27 +1216,20 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const usesRussian = review && (/^ru\b/i.test(navigator.language) || messages.some(({ role, content: previousText }) =>
       role === 'user' && /[А-Яа-яЁё]/.test(previousText)));
+    const previousReply = messages.findLast(({ role }) => role === 'assistant');
+    const receipt = !review && !fileAttachment && previousReply?.receiptToken ? previousReply : null;
     const body = review
       ? { ...review, timeZone, language: usesRussian ? 'ru' : 'en', visuals: true }
       : {
         // A file with a request lets the assistant decide what to do with it; a file on its own is an import.
         ...(fileAttachment ? { mode: 'prepare_import', attachmentNote: Boolean(text.trim()) } : { visuals: true }),
-        // The latest reply, even if a failed request left a user message after it.
-        ...(!fileAttachment && messages.findLast(({ role }) => role === 'assistant')?.receiptToken
-          ? { receiptToken: messages.findLast(({ role }) => role === 'assistant').receiptToken }
-          : {}),
+        ...(receipt && { receiptToken: receipt.receiptToken }),
         ...(analysisOnly ? { analysisOnly: true } : {}),
         requestId,
-        messages: updatedMessages.slice(-MAX_HISTORY).map(({ role, content, requestPrompt: prompt, choices }) => {
-          // The server rejects any message over 6000 characters, and with it the whole request.
-          if (prompt || !choices?.length) return { role, content: (prompt ?? content).slice(0, 6000) };
-          // The server rejects a message over 6000 characters, so the options never push one past it.
-          const offered = `\n\nOptions offered:\n${choices.map((choice, index) => `${index + 1}) ${choice}`).join('\n')}`;
-          return { role, content: `${content.slice(0, 6000 - offered.length)}${offered}` };
-        }),
+        messages: [...reviewedMessages, updatedMessages.at(-1)].slice(-MAX_HISTORY).map(assistantHistoryMessage),
         timeZone,
       };
-    requestReply({ id: requestId, attachment: fileAttachment, body });
+    requestReply({ id: requestId, attachment: fileAttachment, receiptSourceId: receipt?.receiptSourceId, body });
     composerRef.current?.focus();
     return true;
   };
@@ -1237,16 +1312,18 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     return schedule;
   };
 
-  const commitImport = (selection) => {
+  const commitImport = (sourceId, selection) => {
+    const importPreview = importCards[sourceId];
     if (!importPreview?.token || importPreview.readOnly || !selection.length) return;
     requestReply({
       id: crypto.randomUUID(),
+      importSourceId: sourceId,
       body: { mode: 'commit_import', importToken: importPreview.token, selection },
     });
   };
 
-  const clearImportFailure = () => {
-    setFailure((current) => current?.turn.body.mode === 'commit_import' ? null : current);
+  const clearImportFailure = (sourceId) => {
+    setFailure((current) => current?.turn.importSourceId === sourceId ? null : current);
   };
 
   const clearReviewFailure = (reviewId) => {
@@ -1302,29 +1379,12 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     setConfirmReset(false);
     setAttachment(null);
     setAttachmentError('');
-    setImportPreview(null);
-    setImportResults({});
+    setImportCards({});
     setTransactionReviews([]);
     setChangeReviews([]);
     settledReviews.current.clear();
     closeRef.current?.focus();
   };
-
-  // The import card belongs to the reply that produced it. Pinned under the newest
-  // message, it looked as if every later reply proposed the same import again.
-  const importReview = importPreview && (importPreview.rows.length > 0 || importPreview.warnings?.length > 0) && (
-    <ImportReview
-      key={importPreview.sourceId ?? importPreview.id}
-      preview={importPreview}
-      results={importResults}
-      pending={pending}
-      onImport={commitImport}
-      onModify={clearImportFailure}
-    />
-  );
-  // sourceId stays the same when an import refreshes its draft, so the card keeps its place and its selection.
-  const importAnchor = importReview
-    && messages.find(({ id }) => id === `reply:${importPreview.sourceId ?? importPreview.id}`)?.id;
 
   return createPortal(
     <div className="budget-assistant">
@@ -1413,7 +1473,9 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
             </div>
           ) : (
             <div className="budget-assistant__messages" role="log" aria-label="Conversation">
-              {messages.map(({ id, role, content, originalContent, actions, choices, attachmentName, visuals, timeZone }, index) => {
+              {reviewedMessages.map(({ id, role, content, originalContent, actions, choices, attachmentName, visuals, timeZone }, index) => {
+                const importId = role === 'assistant' ? id.slice('reply:'.length) : null;
+                const importCard = importCards[importId];
                 const previous = messages[index - 1];
                 const request = previous?.role === 'user' ? previous.requestPrompt ?? previous.content : '';
                 const plainComparison = role === 'assistant' && !visuals?.length && isPlainCategoryComparison(content, request);
@@ -1441,6 +1503,8 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                     {visuals?.length > 0 && (
                       <AssistantReplyVisuals
                         visuals={visuals}
+                        onReviewCompanyCharge={reviewCompanyCharge}
+                        onOpenTransactions={closeDialog}
                         onComparePeriods={session?.access_token ? (chart, periods, signal) =>
                           replaceCategoryComparison(id, chart, periods, signal, language) : undefined}
                         onRefreshUpcomingPayments={session?.access_token ? (chart, signal) =>
@@ -1511,13 +1575,23 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                       </ul>
                     )}
                   </div>
-                  {id === importAnchor && importReview}
+                  {importCard && (importCard.rows.length > 0 || importCard.warnings?.length > 0) && (
+                    <div id={`assistant-import-${importId}`}>
+                      <ImportReview
+                        key={importCard.selectionId}
+                        preview={importCard}
+                        results={importCard.results}
+                        pending={pending}
+                        onImport={(selection) => commitImport(importId, selection)}
+                        onModify={() => clearImportFailure(importId)}
+                      />
+                    </div>
+                  )}
                   </Fragment>
                 );
               })}
             </div>
           )}
-          {!importAnchor && importReview}
           {changeReviews.map((review) => (
             <ChangeReview
               key={review.id}
@@ -1564,7 +1638,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
           {failure && (
             <div className="budget-assistant__error">
               <p role="alert">{failure.message}</p>
-              {failure.turn.body.mode !== 'commit_import' && (
+              {failure.retryable && failure.turn.body.mode !== 'commit_import' && (
                 <button
                   type="button"
                   disabled={!session?.access_token}

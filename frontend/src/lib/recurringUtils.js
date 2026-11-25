@@ -309,12 +309,8 @@ function hasSalaryLabel(payment) {
     name.split(/[^\p{L}]+/u).some((word) => recognized.has(word) || word.startsWith('зарплат'));
 }
 
-/**
- * Find the main upcoming salary and scheduled expenses through that payday.
- * Salary must occur after today. Expense dates include today and the cutoff date.
- * `endDate` selects a user-supplied cutoff while leaving the salary lookup available.
- */
-export function getPaymentsUntilSalary(recurringPayments, asOf, endDate = null) {
+// The main salary is the largest recognized recurring paycheck with a date after today.
+export function findNextSalary(recurringPayments, asOf) {
   const today = parseLocalDate(asOf);
   const searchEnd = new Date(today.getFullYear(), today.getMonth() + 3, 0);
   let salary = null;
@@ -330,7 +326,13 @@ export function getPaymentsUntilSalary(recurringPayments, asOf, endDate = null) 
     }
   }
 
-  const cutoff = endDate == null ? salary?.date : parseLocalDate(endDate);
+  return salary && { date: calendarDateKey(salary.date), name: salary.name };
+}
+
+export function getPaymentsUntilSalary(recurringPayments, asOf, endDate = null) {
+  const today = parseLocalDate(asOf);
+  const salary = findNextSalary(recurringPayments, today);
+  const cutoff = endDate == null ? salary && parseLocalDate(salary.date) : parseLocalDate(endDate);
   if (!cutoff) return { salary: null, throughDate: null, daysUntilSalary: null, expenses: [], totalCents: null };
 
   const expenses = [];
@@ -356,9 +358,9 @@ export function getPaymentsUntilSalary(recurringPayments, asOf, endDate = null) 
   }
 
   const asOfKey = calendarDateKey(today);
-  const salaryDate = salary ? calendarDateKey(salary.date) : null;
+  const salaryDate = salary?.date;
   return {
-    salary: salary && { date: salaryDate, name: salary.name },
+    salary,
     throughDate: calendarDateKey(cutoff),
     daysUntilSalary: salaryDate ? (Date.parse(salaryDate) - Date.parse(asOfKey)) / 86_400_000 : null,
     expenses: expenses.sort((a, b) => a.date.localeCompare(b.date)),
