@@ -1109,7 +1109,7 @@ function CompanyChargeReview({ row, russian, onReview }) {
   );
 }
 
-function RecurringDateAudit({ data, onOpenTransactions, onReviewCompanyCharge }) {
+function RecurringDateAudit({ data, onOpenTransactions, onReviewCompanyCharge, onPrepareRecurring, busy }) {
   const russian = data.language === 'ru';
   const title = russian ? 'Сверка дат Recurring' : 'Recurring date check';
   const statuses = russian ? {
@@ -1149,6 +1149,20 @@ function RecurringDateAudit({ data, onOpenTransactions, onReviewCompanyCharge })
       <dl className="assistant-visuals__recurring-counts" data-has-extra={totals.length > 3 || undefined}>
         {totals.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       </dl>
+      {onPrepareRecurring && (count('unmatched') > 0 || count('early') + count('late') > 0) && (
+        <div className="assistant-visuals__change-actions">
+          {count('unmatched') > 0 && <button type="button" disabled={busy} onClick={() => onPrepareRecurring(russian
+            ? 'Создай ежемесячные расписания в Recurring для списаний без пары из этой сверки.'
+            : 'Create monthly Recurring schedules for the unmatched charges in this audit.')}>
+            {russian ? 'Добавить расписания' : 'Add missing schedules'}
+          </button>}
+          {count('early') + count('late') > 0 && <button type="button" disabled={busy} onClick={() => onPrepareRecurring(russian
+            ? 'Исправь даты в Recurring по сопоставленным списаниям с расхождением дат.'
+            : 'Update the Recurring dates to match the posted dates for the matched charges in this audit.')}>
+            {russian ? 'Исправить даты' : 'Correct schedule dates'}
+          </button>}
+        </div>
+      )}
       {Array.isArray(data.transactions) && <RecurringCategoryTransactions data={data} russian={russian} onOpenTransactions={onOpenTransactions} />}
       {ordered.length > 0 ? (
         <ol className="assistant-visuals__recurring-rows" tabIndex={0} aria-label={russian ? 'Операции и расписание' : 'Transactions and schedule'}>
@@ -1204,7 +1218,7 @@ function RecurringDateAudit({ data, onOpenTransactions, onReviewCompanyCharge })
   );
 }
 
-export default function AssistantReplyVisuals({ visuals, renderCategoryDetails, onComparePeriods, onRefreshUpcomingPayments, onOpenTransactions, onReviewCompanyCharge }) {
+export default function AssistantReplyVisuals({ visuals, renderCategoryDetails, onComparePeriods, onRefreshUpcomingPayments, onOpenTransactions, onReviewCompanyCharge, onPrepareRecurring, busy }) {
   const records = validAssistantReplyVisuals(visuals);
   if (!records.length) return null;
   const summaries = records.filter(({ kind }) => kind === 'spending-summary');
@@ -1222,7 +1236,8 @@ export default function AssistantReplyVisuals({ visuals, renderCategoryDetails, 
           : data.kind === 'upcoming-payments'
             ? <UpcomingPayments key={index} data={data} onRefreshUpcomingPayments={onRefreshUpcomingPayments} />
             : data.kind === 'recurring-date-audit'
-              ? <RecurringDateAudit key={index} data={data} onOpenTransactions={onOpenTransactions} onReviewCompanyCharge={onReviewCompanyCharge} />
+              ? <RecurringDateAudit key={index} data={data} onOpenTransactions={onOpenTransactions} onReviewCompanyCharge={onReviewCompanyCharge}
+                onPrepareRecurring={onPrepareRecurring} busy={busy} />
               : <CategoryComparison key={index} data={data} renderCategoryDetails={renderCategoryDetails} onComparePeriods={onComparePeriods} />
       )}
     </div>

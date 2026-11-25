@@ -1028,6 +1028,28 @@
   white-space: nowrap;
 }
 
+.budget-assistant__changes .budget-assistant__schedule-items li {
+  display: block;
+}
+
+.budget-assistant__schedule-items label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 44px;
+  align-items: start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.budget-assistant__schedule-items label > span > strong {
+  color: var(--assistant-ink);
+}
+
+.budget-assistant__schedule-items input {
+  margin: 0.2em 0;
+  accent-color: var(--assistant-accent);
+}
+
 .budget-assistant__changes li[data-kind="remove"] > div strong {
   text-decoration: line-through;
 }

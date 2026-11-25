@@ -10,7 +10,7 @@
 
 ### ✅ Completed
 
-The November 25 assistant review fixes are implemented locally. Production rollout requires the assistant database migrations followed by the matching function and frontend release.
+The recurring date audit and category directory shipped on November 25. Follow-up messages can prepare missing schedules and correct matched dates. The confirmation endpoint uses the `20261125203756_assistant_recurring_changes.sql` migration.
 
 The local Recurring page opens on a category directory of saved schedules, including paused, ended and future payments. The calendar and 30-day agenda are available under Upcoming payments.
 

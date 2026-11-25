@@ -32,21 +32,24 @@ function sign(payload, signingKey, purpose = reviewPurpose) {
   return `${encoded}.${signature(encoded, signingKey, purpose).toString('base64url')}`;
 }
 
-function verify(token, userId, signingKey) {
-  const invalid = () => new TransactionReviewError('This transaction review is invalid. Send the request again.');
-  const [payload, hash, extra] = typeof token === 'string' && token.length <= 16_000 ? token.split('.') : [];
+function decodeReview(token, signingKey, purpose, maxLength, invalid) {
+  const [payload, hash, extra] = typeof token === 'string' && token.length <= maxLength ? token.split('.') : [];
   if (!payload || !hash || extra !== undefined || !/^[A-Za-z0-9_-]{43}$/.test(hash)) throw invalid();
 
-  const expected = signature(payload, signingKey);
+  const expected = signature(payload, signingKey, purpose);
   const actual = Buffer.from(hash, 'base64url');
-  if (actual.length !== expected.length || !timingSafeEqual(expected, actual)) throw invalid();
+  if (actual.toString('base64url') !== hash || actual.length !== expected.length || !timingSafeEqual(expected, actual)) throw invalid();
 
-  let proposed;
   try {
-    proposed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
   } catch {
     throw invalid();
   }
+}
+
+function verify(token, userId, signingKey) {
+  const invalid = () => new TransactionReviewError('This transaction review is invalid. Send the request again.');
+  const proposed = decodeReview(token, signingKey, reviewPurpose, 16_000, invalid);
   if (proposed?.userId !== userId || typeof proposed.id !== 'string' || !proposed.draft ||
       !Array.isArray(proposed.duplicateFingerprints) || !Number.isFinite(proposed.expires)) {
     throw invalid();
@@ -310,19 +313,7 @@ const withSign = (amount, like) => (Number(like) < 0 ? -amount : amount);
 const signedNet = (type, amount) => (type === 'income' ? 1 : -1) * Math.abs(Number(amount));
 function verifyChanges(token, userId, signingKey) {
   const invalid = () => new TransactionReviewError('These changes are invalid. Ask the assistant to prepare them again.');
-  const [payload, hash, extra] = typeof token === 'string' && token.length <= 32_000 ? token.split('.') : [];
-  if (!payload || !hash || extra !== undefined || !/^[A-Za-z0-9_-]{43}$/.test(hash)) throw invalid();
-
-  const expected = signature(payload, signingKey, changesPurpose);
-  const actual = Buffer.from(hash, 'base64url');
-  if (actual.length !== expected.length || !timingSafeEqual(expected, actual)) throw invalid();
-
-  let proposed;
-  try {
-    proposed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-  } catch {
-    throw invalid();
-  }
+  const proposed = decodeReview(token, signingKey, changesPurpose, 32_000, invalid);
   const { plan } = proposed ?? {};
   if (proposed?.userId !== userId || !Number.isFinite(proposed.expires) ||
       ![plan?.updates, plan?.additions, plan?.removals].every(Array.isArray)) {
@@ -335,6 +326,24 @@ function verifyChanges(token, userId, signingKey) {
     throw new TransactionReviewError('This card was prepared before the database update. Ask the assistant to prepare it again.', 409);
   }
   return plan;
+}
+
+const recurringPurpose = 'budgetwise-assistant-recurring-v1:';
+
+export function signRecurringReview(changes, userId, signingKey, manualSelection = false) {
+  return sign({ userId, changes, manualSelection, expires: Date.now() + reviewLifetime }, signingKey, recurringPurpose);
+}
+
+export function readRecurringReview(token, userId, signingKey, language) {
+  const ru = language === 'ru';
+  const invalid = () => new TransactionReviewError(ru
+    ? 'Открой новую карточку изменений Recurring.' : 'Prepare a new Recurring review.');
+  const review = decodeReview(token, signingKey, recurringPurpose, 180_000, invalid);
+  if (review?.userId !== userId || !Array.isArray(review.changes) || !review.changes.length ||
+      !Number.isFinite(review.expires)) throw invalid();
+  if (review.expires <= Date.now()) throw new TransactionReviewError(ru
+    ? 'Срок карточки истёк. Подготовь изменения ещё раз.' : 'This review expired. Prepare the changes again.', 410);
+  return review;
 }
 
 // The rows a change set touches, with their import signature when the database has the column

@@ -2,17 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import handler from '../budget-assistant.mjs';
 import { recurringAuditTurn, auditMonthPrompt } from './assistant-recurring-intent.mjs';
+import { signRecurringReview } from './assistant-transaction.mjs';
 
 const user = '33333333-3333-4333-8333-333333333333';
 const category = '11111111-1111-4111-8111-111111111111';
 const userMessage = (content) => ({ role: 'user', content });
 
-function setup(t, model, records = {}) {
+function setup(t, model, records = {}, applyRecurring) {
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     const address = new URL(url.url ?? url);
     if (address.hostname === 'api.openai.com') return model(JSON.parse(options.body));
     assert.equal(address.hostname, 'db.invalid');
     if (address.pathname === '/auth/v1/user') return Response.json({ id: user, aud: 'authenticated' });
+    if (applyRecurring && address.pathname === '/rest/v1/rpc/apply_assistant_recurring_changes') {
+      assert.equal(options.method, 'POST');
+      return Response.json(applyRecurring(JSON.parse(options.body)));
+    }
     assert.equal(options.method, 'GET');
     assert.equal(address.searchParams.get('user_id'), 'eq.' + user);
     return Response.json(records[address.pathname.split('/').at(-1)] ?? []);
@@ -22,15 +27,92 @@ function setup(t, model, records = {}) {
   process.env.OPENAI_API_KEY = 'test-only';
 }
 
-function chat(messages) {
+function chat(messages, options = {}) {
   return handler(new Request('http://local.test/', {
     method: 'POST', headers: { Authorization: 'Bearer fixture' },
-    body: JSON.stringify({ messages, visuals: true, timeZone: 'UTC', requestId: crypto.randomUUID() }),
+    body: JSON.stringify({ messages, visuals: true, timeZone: 'UTC', requestId: crypto.randomUUID(), ...options }),
   }));
 }
 
 const textReply = (message) => Response.json({
   status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ message, choices: [] }) }] }],
+});
+
+test('a follow-up to a legacy audit re-reads the category and prepares only the requested schedules', async (t) => {
+  const entries = [
+    ['CLOUDLAB BILLING', 17.35], ['MARKET', 8.45], ['MARKET.CA', 6.25],
+    ['MARKET.CA', 14.80], ['MARKET', 22.90],
+  ].map(([description, amount], i) => ({
+    id: `12345678-1234-4123-8123-00000000000${i}`, type: 'expense', category_id: category,
+    date: '2024-11-07', description, amount, assistant_change_version: 1,
+  }));
+  setup(t, () => assert.fail('This follow-up should not call the model'), {
+    categories: [{ id: category, name: 'Subscriptions' }], transactions: entries,
+  });
+  const filter = { category: 'Subscriptions', type: 'expense', start_date: '2024-11-01', end_date: '2024-11-30' };
+  const history = [userMessage('Сверь подписки за ноябрь'), { role: 'assistant', content: 'Сверка\n\nRecurring audit filter: ' + JSON.stringify(filter) },
+    userMessage('Там где записей нет — создай их сам в Recurrings с датами как в транзакциях кроме Market 6.25 CAD, 14.80 CAD 22.90 CAD'),
+    { role: 'assistant', content: 'Могу создать Recurring. Подтверди выбор.' },
+    userMessage('Да, создать ежемесячные Recurring для всех непарных списаний (исключая указанные Market).')];
+  const response = await chat(history);
+  const answer = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(answer));
+  assert.deepEqual(answer.actions, []);
+  assert.deepEqual(answer.recurringReview.items.map(({ name, amount, actualDate }) => [name, amount, actualDate]).sort(), [
+    ['CLOUDLAB BILLING', 17.35, '2024-11-07'], ['MARKET', 8.45, '2024-11-07'],
+  ]);
+  for (const amount of ['6.25', '14.80', '22.90']) assert.ok(answer.recurringReview.notes.join(' ').includes(amount));
+  // Neither a stray index nor an edited token can add an unreviewed item.
+  for (const overrides of [{ selectedIndices: [-1] }, { selectedIndices: [0, 0] }, { recurringToken: 'invalid' }]) {
+    const rejected = await chat([], { mode: 'confirm_recurring_changes', recurringToken: answer.recurringReview.token, ...overrides });
+    assert.equal(rejected.status, 400);
+  }
+});
+
+test('recurring confirmation applies the selected signed rows and binds retries to that selection and actor', async (t) => {
+  const calls = [];
+  setup(t, () => assert.fail('Approval should not call the model'), {}, (args) => {
+    calls.push(args);
+    return calls.filter((previous) => previous.card_key === args.card_key).length > 1;
+  });
+  const entries = ['one', 'two', 'three'].map((name, index) => ({ id: String(index), name, kind: 'create' }));
+  const token = signRecurringReview(entries, user, 'test-only');
+  const apply = async (recurringToken, selectedIndices) => chat([], {
+    mode: 'confirm_recurring_changes', language: 'ru', recurringToken, selectedIndices,
+  });
+  const first = await (await apply(token, [2, 0])).json();
+  const retry = await (await apply(token, [0, 2])).json();
+  assert.deepEqual(first.actions.map((action) => action.title), ['one', 'three']);
+  assert.match(retry.message, /уже сохранены/);
+  assert.deepEqual(calls[0].plan.map((item) => item.id), ['0', '2']);
+  assert.equal(calls[0].card_key, calls[1].card_key);
+  const other = signRecurringReview(entries, category, 'test-only');
+  assert.equal((await apply(other, [0])).status, 400);
+  const selectManually = signRecurringReview(entries, user, 'test-only', true);
+  assert.equal((await apply(selectManually, undefined)).status, 400);
+  assert.equal(calls.length, 2);
+});
+
+test('ordinary questions can read the matching rows from the last audit without a list from the user', async (t) => {
+  let calls = 0;
+  setup(t, (request) => {
+    if (++calls === 1) return Response.json({
+      status: 'completed', output: [{ type: 'function_call', call_id: 'audit', name: 'get_recurring_date_audit',
+        arguments: JSON.stringify({ month: null, category: null, limit: null, offset: null }) }],
+    });
+    const result = JSON.parse(request.input.at(-1).output);
+    assert.equal(result.category, 'Subscriptions');
+    assert.equal(result.month, '2024-11');
+    assert.equal(result.records[0].name, 'Example Music');
+    assert.equal(result.records[0].status, 'unmatched');
+    return textReply('Example Music');
+  }, {
+    categories: [{ id: category, name: 'Subscriptions' }],
+    transactions: [{ id: 'one', description: 'Example Music', date: '2024-11-15', amount: 19.99 }],
+  });
+  const response = await chat([userMessage('А что там было у Example Music?')], { auditContext: { month: '2024-11', category: 'Subscriptions' } });
+  assert.equal((await response.json()).message, 'Example Music');
+  assert.equal(calls, 2);
 });
 
 test('a month selection finishes the category audit without OpenAI, keeping the year; unrelated requests still use chat', async (t) => {

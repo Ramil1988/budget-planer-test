@@ -1,6 +1,7 @@
 import { projectionAtOpening } from '../../../frontend/src/lib/projectedBalance.js';
 import { createHash } from 'node:crypto';
 import { BudgetReviewError, categoryBudgetTimeline, getBudgetReview, getCategoryBudgetLimits, monthBounds } from './assistant-budget.mjs';
+import { recurringScheduleSetHash } from './assistant-recurring-writes.mjs';
 import { auditWords, phrasePositions, reconcileRecurringDates, recurringAuditReport } from './assistant-recurring-audit.mjs';
 import { resolveSplits, SplitInputError } from './assistant-split.mjs';
 import { prepareAssistantTransaction, proposeAssistantChanges, TransactionReviewError } from './assistant-transaction.mjs';
@@ -114,6 +115,11 @@ export const assistantTools = [
   tool('get_budget_review', 'Read actual recorded expenses, effective monthly budget limits, and the largest expense records to explain what drove spending. Use it to review a month or an expense category, including questions about budget suggestions. This is actual recorded spending, not a projection.', {
     month: optionalText('Month in YYYY-MM format, or null to use the current month.'),
     category: optionalText('Exact existing expense category name, or null to review all expenses.'),
+  }),
+  tool('get_recurring_date_audit', 'Read the matching results behind a Recurring audit card, including unmatched expenses, date differences and uncertain matches. Pass null month and category to reuse the displayed audit.', {
+    month: optionalText('YYYY-MM or null for the audited month.'),
+    category: optionalText('Expense category or null for the audited category.'),
+    ...paginationFields,
   }),
   tool('get_upcoming_payments', 'Read upcoming scheduled payment and income occurrences from the calendar, with exact totals. Use when asked what is coming up, for a dated schedule, or a chart of upcoming payments.', {
     start_date: optionalText('Inclusive first day in YYYY-MM-DD, or null for today.'),
@@ -785,7 +791,10 @@ export async function getRecurringDateAudit(supabase, userId, { category, questi
     id: row.id, date: row.date, description: row.description?.trim().slice(0, 250) || null,
     amount: Math.abs(Number(row.amount)), generated: Boolean(row.recurring_payment_id),
   }));
-  return recurringAuditReport(report, rows, MAX_RECURRING_AUDIT_ROWS);
+  const audit = recurringAuditReport(report, rows, MAX_RECURRING_AUDIT_ROWS);
+  // The review uses this guard only on the server. Spreading the audit into a visual omits it.
+  Object.defineProperty(audit, 'scheduleSetHash', { value: recurringScheduleSetHash(payments) });
+  return audit;
 }
 
 // Allocate a posting to at most one occurrence. Check exact dates first, including
@@ -1080,6 +1089,20 @@ export async function executeAssistantTool(context) {
       return { ...proposal, receiptBreakdown: breakdown };
     }
     if (name === 'list_transactions') return { result: await listTransactions(supabase, userId, args) };
+    if (name === 'get_recurring_date_audit') {
+      const page = paginate(args);
+      const audit = await getRecurringDateAudit(supabase, userId, {
+        month: args.month ?? context.auditContext?.month,
+        category: args.category ?? context.auditContext?.category,
+      }, context.today);
+      const records = audit.rows.slice(page.start, page.start + page.size + 1).map((row) => ({
+        name: row.name, status: row.status, expectedDate: row.expectedDate, expectedAmount: row.expectedAmount,
+        description: row.description, actualDate: row.actualDate, actualAmount: row.actualAmount, differenceDays: row.differenceDays,
+        relatedCharges: row.relatedCharges?.slice(0, 4), relatedChargeCount: row.relatedChargeCount,
+        possibleSubscriptions: row.companyCandidates?.map(({ name }) => name),
+      }));
+      return { result: { ...listPage(records, page), month: audit.month, category: audit.category, counts: audit.counts, omitted: audit.omittedRows } };
+    }
     if (name === 'summarize_transactions') return await summarizeTransactions(supabase, userId, args);
     if (name === 'compare_spending_categories') {
       const summaries = await compareExpenseCategories(supabase, userId, args.periods, context.today, args.scope);

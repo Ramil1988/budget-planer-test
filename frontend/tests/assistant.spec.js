@@ -402,6 +402,143 @@ test.describe('Budget assistant', () => {
     expect(history.content).toContain('"subscription":null');
   });
 
+  test('an audit follow-up keeps its filter and exclusions and applies only the reviewed schedule proposal', async ({ page }) => {
+    const audit = {
+      kind: 'recurring-date-audit', language: 'ru', currency: 'CAD', category: 'Subscriptions',
+      month: '2026-04', startDate: '2026-04-01', endDate: '2026-04-30', rows: [
+        { name: 'Ledger Studio', status: 'unmatched', actualAmount: 7.5, actualDate: '2026-04-07' },
+        { name: 'Example shop', status: 'unmatched', actualAmount: 9, actualDate: '2026-04-10' },
+        { name: 'Cloud app', status: 'late', expectedDate: '2026-04-09', actualDate: '2026-04-11', differenceDays: 2, actualAmount: 5 },
+      ],
+    };
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode === 'confirm_recurring_changes') return { message: 'Расписание сохранено.', actions: [{ type: 'recurring', id: 'schedule', title: 'Ledger Studio' }] };
+      if (body.mode) return null;
+      if (!body.auditContext) return { message: 'Сверка готова.', visuals: [audit] };
+      if (body.messages.at(-1).content.includes('кроме')) return { message: 'Понял исключение.', choices: ['Да, подготовь расписание'] };
+      return { message: 'Проверь расписания перед сохранением.', recurringReview: {
+        token: 'reviewed-schedules', language: 'ru', notes: ['Исключено по запросу: Example shop.'],
+        items: [
+          { action: 'create', name: 'Ledger Studio', amount: 7.5, actualDate: '2026-04-07', frequency: 'monthly' },
+          { action: 'create', name: 'Mobile studio', amount: 10, actualDate: '2026-04-12', frequency: 'monthly' },
+        ],
+      } };
+    });
+    await say(dialog, 'Сверь подписки за апрель');
+    const auditCard = dialog.getByRole('region', { name: 'Сверка дат Recurring' });
+    await expect(auditCard.getByRole('button', { name: 'Добавить расписания' })).toBeVisible();
+    await expect(auditCard.getByRole('button', { name: 'Исправить даты' })).toBeVisible();
+    await say(dialog, 'Создай расписания кроме Example shop 9 CAD.');
+    await dialog.getByRole('button', { name: 'Да, подготовь расписание' }).click();
+    const card = dialog.getByRole('region', { name: 'Изменения в Recurring' });
+    await expect(card.getByText(/Ежемесячно/)).toHaveCount(2);
+    await expect(card.getByText('07.04.2026')).toBeVisible();
+    await expect(card.getByText('Исключено по запросу: Example shop.')).toBeVisible();
+    const request = requests.at(-1);
+    expect(request.auditContext).toEqual({ month: '2026-04', category: 'Subscriptions', fromIndex: 2 });
+    expect(request.messages.slice(request.auditContext.fromIndex).map(({ content }) => content)).toContain('Создай расписания кроме Example shop 9 CAD.');
+    expect(requests.some(({ mode }) => mode === 'confirm_recurring_changes')).toBe(false);
+    const apply = card.getByRole('button', { name: 'Применить изменения' });
+    await card.getByRole('checkbox', { name: /Mobile studio/ }).uncheck();
+    await card.getByRole('checkbox', { name: /Ledger Studio/ }).uncheck();
+    await expect(apply).toBeDisabled();
+    await card.getByRole('checkbox', { name: /Ledger Studio/ }).check();
+    await apply.click();
+    await expect(dialog.getByText('Расписание сохранено.')).toBeVisible();
+    expect(requests.at(-1)).toEqual({ mode: 'confirm_recurring_changes', recurringToken: 'reviewed-schedules', language: 'ru', selectedIndices: [0] });
+    await expect(card.getByRole('button')).toHaveCount(0);
+    await expect(dialog.getByRole('link', { name: 'Ledger Studio' })).toHaveAttribute('href', '/recurring');
+  });
+
+  test('a schedule date preview can be cancelled and a new chat forgets its audit', async ({ page }) => {
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode) return null;
+      if (body.auditContext) return { message: 'Review the schedule date.', recurringReview: {
+        token: 'date-change', items: [{ action: 'update', name: 'Cloud app', amount: 12.5, expectedDate: '2026-04-09',
+          actualDate: '2026-04-11', previousBusinessDaysOnly: true, businessDaysOnly: false }],
+      } };
+      return { message: 'Here is your audit.', visuals: [{
+        kind: 'recurring-date-audit', language: 'en', currency: 'CAD', category: 'Services',
+        month: '2026-04', startDate: '2026-04-01', endDate: '2026-04-30', rows: [
+          { status: 'late', name: 'Cloud app', differenceDays: 2, expectedDate: '2026-04-09', actualDate: '2026-04-11' },
+        ],
+      }] };
+    });
+    await say(dialog, 'Check my April schedules');
+    await dialog.getByRole('button', { name: 'Correct schedule dates' }).click();
+    const card = dialog.getByRole('region', { name: 'Review recurring schedules' });
+    await expect(card.getByText('09.04.2026 → 11.04.2026')).toBeVisible();
+    await expect(card.getByText(/Weekend payments/)).toBeVisible();
+    const before = requests.length;
+    await card.getByRole('button', { name: 'Cancel' }).click();
+    await expect(card.getByRole('button')).toHaveCount(0);
+    expect(requests).toHaveLength(before);
+    await page.reload();
+    await page.getByRole('button', { name: 'Budget assistant', exact: true }).click();
+    await say(dialog, 'Check those schedules again');
+    await expect(dialog.getByText('Review the schedule date.')).toBeVisible();
+    expect(requests.at(-1).auditContext).toEqual({ month: '2026-04', category: 'Services', fromIndex: 0, historyTruncated: true });
+    await dialog.getByRole('button', { name: 'New chat' }).click();
+    await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+    await say(dialog, 'Start again');
+    await expect(dialog.getByText('Here is your audit.')).toBeVisible();
+    expect(requests.at(-1).auditContext).toBeUndefined();
+  });
+
+  test('a stale recurring review refreshes from the original request before another confirmation', async ({ page }) => {
+    const { dialog, requests } = await openAssistant(page, (body) => body.mode ? null : {
+      message: 'Review the proposed changes.', recurringReview: {
+        token: body.requestId, category: 'Subscriptions', month: '2026-04',
+        items: [{ action: 'create', name: 'Ledger Studio', amount: 7.5, actualDate: '2026-04-07', frequency: 'monthly' }],
+      },
+    });
+    await page.route('**/.netlify/functions/budget-assistant', (route) => {
+      if (route.request().postDataJSON().mode !== 'confirm_recurring_changes') return route.fallback();
+      return route.fulfill({ status: 409, json: { error: 'The source schedule changed.', retryable: false } });
+    });
+    await say(dialog, 'Create missing monthly schedules for Subscriptions in April except Playhouse 5.00 CAD');
+    const review = dialog.getByRole('region', { name: 'Review recurring schedules' });
+    await review.getByRole('button', { name: 'Apply schedule changes' }).click();
+    await expect(dialog.getByRole('alert')).toHaveText('The source schedule changed.');
+    await expect(review.getByRole('button', { name: 'Apply schedule changes' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Refresh proposal' }).click();
+    await expect(review.last().getByRole('button', { name: 'Apply schedule changes' })).toBeVisible();
+    expect(requests[1].messages).toEqual(requests[0].messages);
+    expect(requests[1].requestId).not.toBe(requests[0].requestId);
+  });
+
+  test('ambiguous filters require an explicit choice from actual schedule candidates', async ({ page }) => {
+    const { dialog, requests } = await openAssistant(page, (body) => {
+      if (body.mode === 'confirm_recurring_changes') return { message: 'Selected schedule saved.' };
+      if (body.mode) return null;
+      return { message: 'Select the charges to schedule.', recurringReview: {
+        manualSelection: true, token: 'manual-pick', category: 'Subscriptions', month: '2026-04',
+        items: [{ action: 'create', name: 'Ledger Studio', amount: 7.5, actualDate: '2026-04-07', frequency: 'monthly' },
+          { action: 'create', name: 'Ledger Studio', amount: 16, actualDate: '2026-04-18', frequency: 'monthly' }],
+      } };
+    });
+    await say(dialog, 'Schedule one of those purchases');
+    const review = dialog.getByRole('region', { name: 'Review recurring schedules' });
+    const apply = review.getByRole('button', { name: 'Apply schedule changes' });
+    await expect(review.getByText('Subscriptions · 04.2026')).toBeVisible();
+    await expect(apply).toBeDisabled();
+    const candidates = review.getByRole('checkbox');
+    await expect(candidates.nth(0)).not.toBeChecked();
+    await expect(candidates.nth(1)).not.toBeChecked();
+    await review.getByText('18.04.2026').click();
+    await expect(candidates.nth(1)).toBeChecked();
+    await apply.click();
+    await expect(dialog.getByText('Selected schedule saved.')).toBeVisible();
+    expect(requests.at(-1).selectedIndices).toEqual([1]);
+    await say(dialog, 'Review the schedules again');
+    const next = dialog.getByRole('region', { name: 'Review recurring schedules' }).last();
+    await next.getByRole('checkbox').nth(0).check();
+    await next.getByRole('checkbox').nth(1).check();
+    await next.getByRole('button', { name: 'Apply schedule changes' }).click();
+    await expect(dialog.getByText('Selected schedule saved.')).toHaveCount(2);
+    expect(requests.at(-1).selectedIndices).toEqual([0, 1]);
+  });
+
   test('the import form requires CAD and category and lets a repeated file row be confirmed separately', async ({ page }) => {
     const row = { date: '2026-11-20', type: 'expense', description: 'TEST PURCHASE', account_id: 'a', category_id: 'c', amount: 5 };
     const { dialog, requests } = await openAssistant(page, (body) => {

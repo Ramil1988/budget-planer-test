@@ -405,6 +405,8 @@ The backend is built with NestJS, providing a RESTful API for the frontend to co
 
 ### Budget Assistant (2026-11-20)
 
+Recurring follow-ups carry the audited category and month. The server repeats that user's audit, reads the source rows again, and signs a short-lived review of the proposed schedule changes. The confirmation endpoint accepts indices into that review. The `apply_assistant_recurring_changes` database function validates the sources and saves the selected rules and retry receipt in one transaction. New schedules use the bank date as their first occurrence and start with automatic transaction posting off.
+
 The assistant is one Netlify Function, `netlify/functions/budget-assistant.mjs`, with its logic split across `netlify/functions/_lib/assistant-*.mjs`.
 
 ```

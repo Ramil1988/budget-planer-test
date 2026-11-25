@@ -8,6 +8,8 @@ import { addWarnings, differenceNote, linesTotal, missingNote, planFormat, planI
 import { parseAssistantReply, replyFormat } from './_lib/assistant-reply.mjs';
 import { AssistantProviderError, providerHttpError } from './_lib/assistant-provider-error.mjs';
 import { auditMonthChoices, auditMonthPrompt, recurringAuditTurn } from './_lib/assistant-recurring-intent.mjs';
+import { recurringPlanIntent } from './_lib/assistant-recurring-plan.mjs';
+import { applyRecurringReview, recurringContext, recurringReviewReply } from './_lib/assistant-recurring-review.mjs';
 import { closeToReceipt, resolveSplits, SplitInputError } from './_lib/assistant-split.mjs';
 import { confirmAssistantChanges, confirmAssistantTransaction, TransactionReviewError } from './_lib/assistant-transaction.mjs';
 import { budgetReviewVisual, captureAssistantVisual, categoryComparisonVisual, compareMatchingSummaryVisuals, hasForeignCurrencyLabel, ledgerCurrency, spendingSummaryVisual } from './_lib/assistant-visuals.mjs';
@@ -340,7 +342,7 @@ When the user requests a comparison by spending category or percentage changes a
 For upcoming payments, a balance projection with scheduled payments, or what is coming up on the calendar, use get_upcoming_payments. Pass inclusive calendar dates when the user specifies a range, otherwise pass null dates for 30 days starting today. Keep type null and start on today for a daily balance projection with expenses and income. Set type only for an explicitly income-only or expense-only request. The schedule is a forecast. Use list_finance_records for the recurrence rules themselves.
 Every amount recorded in the BudgetWise ledger, including transactions, limits, balances, and scheduled payments, is in ${ledgerCurrency} (Canadian dollars). Explicitly label ledger amounts, totals and comparisons in ${ledgerCurrency}, including any differences. Ignore other currency labels previously applied to these ledger figures in the conversation. For a follow-up about a category comparison, use the dates and scope of the chart displayed in the conversation, including any month the user selected. Query those periods to verify details. Do not convert or reinterpret ledger amounts. Keep currency values separately provided by the user distinct from the ledger.
 For budget questions, especially why a category is over budget or near its limit, call get_budget_review with the requested month and category before answering. Use the exact saved spending and applicable limit, explain the difference, and cite the largest recorded expenses that account for it. If a prior month's limit was carried forward, say which month supplied it. If the spending is within the limit or no limit is set, say so. Do not infer a motive or cause beyond what the posted transactions show.
-When investigating a recurring audit follow-up, use list_transactions for the audit's expense category and date range. Start with all merchants in that filter and paginate as needed. Compare statement descriptions, amounts and dates against the schedule. Describe an additional merchant charge as unexplained until there is evidence for its purpose.
+For follow-up questions about a recurring audit, read get_recurring_date_audit first. The app remembers the displayed category and month. Read the data yourself and use list_transactions for any further detail. Never ask the user to retype the rows shown in the audit. Describe additional merchant charges as unexplained unless there is evidence for their purpose. An audit's create and correct buttons prepare the selected changes in Recurring for approval. Never use a ledger transaction change card to correct a recurring schedule.
 Use company links already reviewed in this conversation when explaining a charge. A confirmed link identifies the subscription for that individual posting. Other charges from the company still need their own evidence. Such a review neither identifies a duplicate nor authorizes editing the ledger or the recurring schedule.
 ${withVisuals ? 'The app will show a detailed visual card and follow-up buttons for results marked visual_prepared: true. Give brief commentary and answer the specific question without repeating the chart data or ending with a menu of suggested actions.' : ''}
 If asked about bills before the next salary, or whether a stated amount will cover them, call get_payments_until_salary first to read the payment calendar. Use the user's amount as the available amount without asking which account it is in. Use the discovered salary date unless the user provides a date. Ask for a salary date only after the tool reports it cannot find one. State the cutoff date, the scheduled bills and total, and the amount left or short. Make clear the calculation covers scheduled bills, and don't assume additional income or spending.
@@ -434,7 +436,7 @@ export default async function budgetAssistant(request) {
   }
 
   const mode = body?.mode ?? 'chat';
-  if (!['chat', 'suggestions', 'budget_review', 'financial_summary', 'category_comparison', 'category_drilldown', 'recurring_date_audit', 'upcoming_payments', 'prepare_import', 'commit_import', 'confirm_transaction', 'confirm_changes'].includes(mode)) {
+  if (!['chat', 'suggestions', 'budget_review', 'financial_summary', 'category_comparison', 'category_drilldown', 'recurring_date_audit', 'upcoming_payments', 'prepare_import', 'commit_import', 'confirm_transaction', 'confirm_changes', 'confirm_recurring_changes'].includes(mode)) {
     return json({ error: 'Invalid assistant operation.' }, 400);
   }
   // A chat message may carry the signed receipt of the previous reply on top of the conversation.
@@ -456,7 +458,9 @@ export default async function budgetAssistant(request) {
   const isCategoryDrilldown = mode === 'category_drilldown';
   const isUpcomingPayments = mode === 'upcoming_payments';
   const today = currentDate(body.timeZone);
-  const auditTurn = mode === 'chat' ? recurringAuditTurn(messages, today) : null;
+  const auditContext = mode === 'chat' ? recurringContext(messages, body.auditContext) : null;
+  const planIntent = mode === 'chat' && !body.analysisOnly ? recurringPlanIntent(messages, auditContext, today) : null;
+  const auditTurn = mode === 'chat' && !planIntent ? recurringAuditTurn(messages, today) : null;
   const isRecurringAudit = mode === 'recurring_date_audit' || Boolean(auditTurn);
   const isDirectReport = isBudgetReview || isFinancialSummary || isCategoryComparison || isCategoryDrilldown || isUpcomingPayments || isRecurringAudit;
   const withVisuals = body.visuals === true && (mode === 'chat' || isBudgetReview);
@@ -501,12 +505,20 @@ export default async function budgetAssistant(request) {
       },
     });
     const { data, error } = await supabase.auth.getUser(token);
-    if (isDirectReport) {
+    if (isDirectReport || planIntent || mode === 'confirm_recurring_changes') {
       signal.throwIfAborted();
       if (error?.name === 'AuthRetryableFetchError') throw error;
     }
     if (error || !data?.user?.id) return json({ error: 'Your session expired. Sign in again.' }, 401);
     budgetContext = { supabase, userId: data.user.id };
+
+    if (planIntent || mode === 'confirm_recurring_changes') {
+      const language = preferredChatLanguage(body, messages);
+      if (readOnly) return json({ error: language === 'ru' ? 'Этот режим поддерживает только просмотр.' : 'This preview is read-only.' }, 403);
+      const context = { ...budgetContext, today, language, signingKey: apiKey };
+      if (planIntent) return json(await recurringReviewReply({ ...context, intent: planIntent }));
+      return json(await applyRecurringReview({ ...context, token: body.recurringToken, selectedIndices: body.selectedIndices }));
+    }
 
     if (mode === 'suggestions') {
       return json(await getBudgetSuggestions(supabase, data.user.id, body.month ?? today.slice(0, 7)));
@@ -1008,6 +1020,7 @@ export default async function budgetAssistant(request) {
               writeIndex: actionIndex,
               proposalIndex: call.name === CHANGES_TOOL ? proposalIndex++ : 0,
               today,
+              auditContext,
               signingKey: apiKey,
             });
             result = executed.result;
@@ -1051,6 +1064,12 @@ export default async function budgetAssistant(request) {
     const cardsPrepared = transactionReviews.length + changeReviews.length > 0;
     if ((error instanceof ImportRequestError || error instanceof TransactionReviewError) && !cardsPrepared) {
       return json({ error: error.message }, error.status);
+    }
+    if (planIntent || mode === 'confirm_recurring_changes') {
+      if (error instanceof ToolInputError || error instanceof BudgetReviewError) return json({ error: error.message }, error.status ?? 400);
+      const ru = preferredChatLanguage(body, messages) === 'ru';
+      if (signal.aborted) return json({ error: ru ? 'Проверка Recurring заняла слишком много времени. Повтори запрос.' : 'The Recurring request timed out. Try again.' }, 504);
+      return json({ error: ru ? 'Не удалось проверить изменения в Recurring. Повтори запрос.' : 'Could not verify the Recurring changes. Try again.' }, 502);
     }
     if (mode === 'suggestions') {
       return error instanceof BudgetReviewError

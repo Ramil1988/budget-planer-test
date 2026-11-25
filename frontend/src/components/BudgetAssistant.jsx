@@ -280,6 +280,17 @@ const actionRoutes = new Map([
   ['recurring', '/recurring'],
 ]);
 
+function auditFilter(audit) {
+  if (!monthPattern.test(audit?.month ?? '') || typeof audit.category !== 'string'
+    || !audit.category.trim() || audit.category.length > 100) return null;
+  return { month: audit.month, category: audit.category };
+}
+
+function readLastAudit(key) {
+  try { return auditFilter(JSON.parse(sessionStorage.getItem(key))); }
+  catch { return null; }
+}
+
 function attachmentKind(file) {
   if (IMAGE_TYPES.has(file.type)) return 'image';
   if (file.type === 'application/pdf') return 'pdf';
@@ -696,6 +707,65 @@ function ChangeReview({ review, busy, onApply, onSkip }) {
   );
 }
 
+function RecurringReview({ review, active, busy, onApply, onCancel }) {
+  const russian = review.language === 'ru';
+  const title = russian ? 'Изменения в Recurring' : 'Review recurring schedules';
+  const [selected, setSelected] = useState(() => review.manualSelection === true ? [] : review.items.map((_, index) => index));
+  const intervals = russian
+    ? { daily: 'Ежедневно', weekly: 'Еженедельно', biweekly: 'Раз в две недели', monthly: 'Ежемесячно', quarterly: 'Ежеквартально', yearly: 'Ежегодно' }
+    : { daily: 'Daily', weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
+  const scope = [review.category, review.month?.replace(/^(\d{4})-(\d{2})$/, '$2.$1')].filter(Boolean).join(' · ');
+  return (
+    <section className="budget-assistant__transaction" aria-label={title}>
+      <div className="budget-assistant__transaction-heading">
+        <div><h3>{title}</h3>{scope && <p>{scope}</p>}</div>
+      </div>
+      <div className="budget-assistant__transaction-duplicates budget-assistant__changes">
+        <ul className="budget-assistant__schedule-items" aria-label={russian ? 'Предложенные расписания' : 'Proposed schedules'}>
+          {review.items.map((item, index) => {
+            const create = item.action === 'create';
+            return (
+              <li key={index}>
+                <label>
+                  <input type="checkbox" checked={selected.includes(index)} disabled={!active || busy}
+                    aria-label={`${item.name} · ${formatReviewDate(item.actualDate)} · ${formatAmount.format(item.amount)} CAD`}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelected((previous) => checked ? [...previous, index].sort((a, b) => a - b) : previous.filter((value) => value !== index));
+                    }} />
+                  <span>
+                    <strong>{item.name}</strong>
+                    <span>{create
+                      ? [russian ? 'Новое расписание' : 'New schedule', intervals[item.frequency]].filter(Boolean).join(' · ')
+                      : (russian ? 'Изменить дату' : 'Change date')}</span>
+                    <span>{!create && <>{formatReviewDate(item.expectedDate)} → </>}{formatReviewDate(item.actualDate)}</span>
+                    {item.previousBusinessDaysOnly && !item.businessDaysOnly && <span>{russian
+                      ? 'Отключится перенос на рабочие дни' : 'Weekend payments will stay on their scheduled dates'}</span>}
+                    {item.previousLastBusinessDayOfMonth && !item.lastBusinessDayOfMonth && <span>{russian
+                      ? 'Отключится правило последнего рабочего дня месяца' : 'Replaces the last-business-day rule with a fixed date'}</span>}
+                    {item.autoAddFrom && <span>{russian ? 'Автодобавление с ' : 'Auto-add from '}{formatReviewDate(item.autoAddFrom)}</span>}
+                  </span>
+                  <strong className="budget-assistant__transaction-amount">{formatAmount.format(item.amount)} CAD</strong>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      {review.notes?.map((note, index) => <p key={index}>{note}</p>)}
+      {active && <div className="budget-assistant__transaction-controls">
+        <button type="button" className="budget-assistant__transaction-skip" disabled={busy} onClick={onCancel}>
+          {russian ? 'Отменить' : 'Cancel'}
+        </button>
+        <button type="button" className="budget-assistant__transaction-save" disabled={busy || !selected.length}
+          onClick={() => onApply(review.manualSelection === true || selected.length !== review.items.length ? selected : undefined)}>
+          {russian ? 'Применить изменения' : 'Apply schedule changes'}
+        </button>
+      </div>}
+    </section>
+  );
+}
+
 function fitComposer(composer) {
   if (!composer?.offsetWidth) return;
   // Measure the text independently of the user's chosen minimum height.
@@ -793,7 +863,7 @@ function withCompanyReviews(message, store) {
   };
 }
 
-function assistantHistoryMessage({ role, content, requestPrompt, visuals, choices }) {
+function assistantHistoryMessage({ role, content, requestPrompt, visuals, choices, recurringReview }) {
   const chart = visuals?.find(({ kind }) => kind === 'category-comparison');
   const notes = [];
   if (chart) {
@@ -812,10 +882,34 @@ function assistantHistoryMessage({ role, content, requestPrompt, visuals, choice
         subscription: row.companyCandidates.find((c) => c.scheduleId === row.reviewDecision)?.name?.slice(0, 100) ?? null,
       }));
     if (decisions.length) notes.push(`Company links reviewed by the user (null means separate charge): ${JSON.stringify(decisions)}`);
+    const findings = audit.rows.slice(0, 10).map(({ name, status, expectedDate, actualDate, actualAmount }) => ({
+      name: name?.slice(0, 100), status, expectedDate, actualDate, amount: actualAmount,
+    }));
+    if (findings.length) notes.push(`Displayed audit rows (up to 10; refresh the audit for the complete list): ${JSON.stringify(findings)}`);
+  }
+  if (recurringReview) {
+    const items = recurringReview.items.slice(0, 10).map(({ name, action, amount, expectedDate, actualDate }) => ({
+      name: name.slice(0, 100), action, amount, expectedDate, actualDate,
+    }));
+    notes.push(`Proposed Recurring changes (preview): ${JSON.stringify(items)}`);
   }
   if (choices?.length) notes.push(`Options offered:\n${choices.map((choice, index) => `${index + 1}) ${choice}`).join('\n')}`);
   const suffix = notes.length ? `\n\n${notes.join('\n')}`.slice(0, 5000) : '';
   return { role, content: (requestPrompt ?? content).slice(0, 6000 - suffix.length) + suffix };
+}
+
+function chatHistory(messages) {
+  const recent = [];
+  const encoder = new TextEncoder();
+  let bytes = 0;
+  // The function accepts 64 KB of UTF-8 including the request envelope.
+  for (const message of messages.slice(-MAX_HISTORY).reverse()) {
+    const entry = assistantHistoryMessage(message);
+    bytes += encoder.encode(JSON.stringify(entry)).length + 1;
+    if (bytes > 60_000) break;
+    recent.unshift(entry);
+  }
+  return recent;
 }
 
 export default function BudgetAssistant({ onDataChanged, dataVersion }) {
@@ -825,6 +919,16 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
   const [heightExpanded, setHeightExpanded] = useState(false);
   const [heightFraction, setHeightFraction] = useState(null);
   const [messages, setMessages] = useState([]);
+  const auditStorageKey = `budgetwise:last-recurring-audit:${user.id}`;
+  const [lastAudit, setLastAudit] = useState(() => readLastAudit(auditStorageKey));
+  const latestAuditMessage = messages.findLast(({ visuals }) => visuals?.some(({ kind }) => kind === 'recurring-date-audit'));
+  const rememberAudit = (filter, sourceId, afterSource = true) => {
+    setLastAudit(filter && { ...filter, sourceId, afterSource });
+    try {
+      if (filter) sessionStorage.setItem(auditStorageKey, JSON.stringify(filter));
+      else sessionStorage.removeItem(auditStorageKey);
+    } catch { /* A conversation still works when browser storage is unavailable. */ }
+  };
   const [companyReviews] = useState(() => createCompanyReviewStore(user.id));
   const [reviewVersion, setReviewVersion] = useState(0);
   const reviewedMessages = useMemo(() => messages.map((message) => withCompanyReviews(message, companyReviews)),
@@ -858,6 +962,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
   const uploadRef = useRef(null);
   const scrollRef = useRef(null);
   const requestRef = useRef(null);
+  const recurringProposalRequest = useRef(null);
   const settledReviews = useRef(new Set());
   const resizeRef = useRef(null);
   const latestMessage = messages.at(-1);
@@ -1023,6 +1128,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       }
       if (!response.ok || typeof payload?.message !== 'string' || !payload.message.trim()) {
         const error = new Error(payload?.error || 'The assistant couldn’t reply. Try again.');
+        error.status = response.status;
         error.retryable = payload?.retryable !== false;
         throw error;
       }
@@ -1034,6 +1140,10 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
           )
         : [];
       const receiptSourceId = payload.receiptToken ? (turn.receiptSourceId ?? turn.id) : null;
+      const recurring = payload.recurringReview;
+      const reviewable = typeof recurring?.token === 'string' && recurring.token && Array.isArray(recurring.items) && recurring.items.length
+        && recurring.items.every((item) => item && ['create', 'update'].includes(item.action) && typeof item.name === 'string'
+          && Number.isFinite(item.amount) && typeof item.actualDate === 'string' && (item.action === 'create' || typeof item.expectedDate === 'string'));
       const message = {
         id: `reply:${turn.id}`,
         receiptSourceId,
@@ -1048,7 +1158,19 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         // A reply about a receipt carries the receipt back, signed, so the next message can be about it without a new upload.
         receiptToken: typeof payload.receiptToken === 'string' ? payload.receiptToken : undefined,
         visuals: validAssistantReplyVisuals(payload.visuals),
+        recurringReview: reviewable ? {
+          ...recurring, language: recurring.language ?? (/\p{Script=Cyrillic}/u.test(payload.message) ? 'ru' : 'en'),
+          notes: Array.isArray(recurring.notes) ? recurring.notes.filter((note) => typeof note === 'string') : [],
+        } : undefined,
       };
+      const displayedAudit = message.visuals.find(({ kind }) => kind === 'recurring-date-audit');
+      if (displayedAudit) rememberAudit(auditFilter(displayedAudit), message.id);
+      const planScope = auditFilter(message.recurringReview);
+      if (planScope && (planScope.month !== turn.body.auditContext?.month || planScope.category !== turn.body.auditContext?.category)) {
+        // A single request can create a new audit scope and a proposal without a preceding audit card.
+        rememberAudit(planScope, turn.id, false);
+      }
+      recurringProposalRequest.current = message.recurringReview ? turn.body : null;
       // A follow-up about a receipt replaces what the receipt proposed before, whichever kind of card that was.
       const receiptFollowUp = Boolean(turn.receiptSourceId && receiptSourceId);
       const importId = turn.importSourceId ?? receiptSourceId ?? turn.id;
@@ -1112,8 +1234,12 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       dataChanged ||= actions.length > 0;
     } catch (error) {
       if (requestRef.current !== controller) return;
+      const refreshRecurring = turn.body.mode === 'confirm_recurring_changes' && [409, 410].includes(error.status)
+        && recurringProposalRequest.current;
+      if (refreshRecurring) settledReviews.current.add(turn.reviewId);
       setFailure({
         turn,
+        refreshRecurring,
         retryable: error.retryable !== false,
         message: controller.signal.aborted
           ? 'This reply is taking longer than expected. Try again.'
@@ -1218,15 +1344,24 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
       role === 'user' && /[А-Яа-яЁё]/.test(previousText)));
     const previousReply = messages.findLast(({ role }) => role === 'assistant');
     const receipt = !review && !fileAttachment && previousReply?.receiptToken ? previousReply : null;
+    const conversation = [...reviewedMessages, updatedMessages.at(-1)];
+    const history = chatHistory(conversation);
+    const sourceId = lastAudit?.sourceId ?? latestAuditMessage?.id;
+    const auditIndex = sourceId ? conversation.slice(-history.length).findIndex(({ id }) => id === sourceId) : -1;
+    const filter = auditFilter(lastAudit) ?? auditFilter(latestAuditMessage?.visuals?.find(({ kind }) => kind === 'recurring-date-audit'));
     const body = review
       ? { ...review, timeZone, language: usesRussian ? 'ru' : 'en', visuals: true }
       : {
         // A file with a request lets the assistant decide what to do with it; a file on its own is an import.
         ...(fileAttachment ? { mode: 'prepare_import', attachmentNote: Boolean(text.trim()) } : { visuals: true }),
         ...(receipt && { receiptToken: receipt.receiptToken }),
+        ...(!fileAttachment && !receipt && filter && { auditContext: {
+          ...filter, fromIndex: auditIndex < 0 ? 0 : auditIndex + (lastAudit?.afterSource === false ? 0 : 1),
+          ...(auditIndex < 0 && { historyTruncated: true }),
+        } }),
         ...(analysisOnly ? { analysisOnly: true } : {}),
         requestId,
-        messages: [...reviewedMessages, updatedMessages.at(-1)].slice(-MAX_HISTORY).map(assistantHistoryMessage),
+        messages: history,
         timeZone,
       };
     requestReply({ id: requestId, attachment: fileAttachment, receiptSourceId: receipt?.receiptSourceId, body });
@@ -1374,6 +1509,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
   const reset = () => {
     if (requestRef.current) return;
     setMessages([]);
+    rememberAudit(null);
     setDraft('');
     setFailure(null);
     setConfirmReset(false);
@@ -1382,6 +1518,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
     setImportCards({});
     setTransactionReviews([]);
     setChangeReviews([]);
+    recurringProposalRequest.current = null;
     settledReviews.current.clear();
     closeRef.current?.focus();
   };
@@ -1424,7 +1561,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
         <header className="budget-assistant__header">
           <span className="budget-assistant__mark" aria-hidden="true"><LuSparkles /></span>
           <h2 id={titleId}>Budget assistant</h2>
-          {messages.length > 0 && (
+          {(messages.length > 0 || lastAudit) && (
             <button
               className="budget-assistant__icon"
               type="button"
@@ -1473,7 +1610,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
             </div>
           ) : (
             <div className="budget-assistant__messages" role="log" aria-label="Conversation">
-              {reviewedMessages.map(({ id, role, content, originalContent, actions, choices, attachmentName, visuals, timeZone }, index) => {
+              {reviewedMessages.map(({ id, role, content, originalContent, actions, choices, attachmentName, visuals, timeZone, recurringReview }, index) => {
                 const importId = role === 'assistant' ? id.slice('reply:'.length) : null;
                 const importCard = importCards[importId];
                 const previous = messages[index - 1];
@@ -1504,6 +1641,8 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                       <AssistantReplyVisuals
                         visuals={visuals}
                         onReviewCompanyCharge={reviewCompanyCharge}
+                        onPrepareRecurring={id === (lastAudit?.sourceId ?? latestAuditMessage?.id) ? (prompt) => send(prompt) : undefined}
+                        busy={Boolean(pending) || !session?.access_token}
                         onOpenTransactions={closeDialog}
                         onComparePeriods={session?.access_token ? (chart, periods, signal) =>
                           replaceCategoryComparison(id, chart, periods, signal, language) : undefined}
@@ -1575,6 +1714,23 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                       </ul>
                     )}
                   </div>
+                  {recurringReview && (
+                    <RecurringReview review={recurringReview} active={id === latestMessageId && !settledReviews.current.has(id)}
+                      busy={Boolean(pending) || !session?.access_token || (failure?.retryable && failure.turn.reviewId === id)}
+                      onApply={(selectedIndices) => requestReply({ id: crypto.randomUUID(), reviewId: id, body: {
+                        mode: 'confirm_recurring_changes', recurringToken: recurringReview.token, language: recurringReview.language,
+                        ...(selectedIndices && { selectedIndices }),
+                      } })}
+                      onCancel={() => {
+                        if (requestRef.current) return;
+                        settledReviews.current.add(id);
+                        clearReviewFailure(id);
+                        setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user',
+                          content: recurringReview.language === 'ru' ? 'Отменить предложенные изменения в Recurring.' : 'Cancel the proposed Recurring changes.' }]);
+                        composerRef.current?.focus();
+                      }}
+                    />
+                  )}
                   {importCard && (importCard.rows.length > 0 || importCard.warnings?.length > 0) && (
                     <div id={`assistant-import-${importId}`}>
                       <ImportReview
@@ -1628,6 +1784,7 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
                 commit_import: 'Importing transactions…',
                 confirm_transaction: 'Saving transaction…',
                 confirm_changes: 'Applying changes…',
+                confirm_recurring_changes: 'Saving recurring schedules…',
                 budget_review: 'Checking this category’s transactions…',
                 financial_summary: 'Reviewing recorded income and expenses…',
                 category_comparison: 'Comparing recorded spending…',
@@ -1638,16 +1795,20 @@ export default function BudgetAssistant({ onDataChanged, dataVersion }) {
           {failure && (
             <div className="budget-assistant__error">
               <p role="alert">{failure.message}</p>
-              {failure.retryable && failure.turn.body.mode !== 'commit_import' && (
+              {(failure.refreshRecurring || failure.retryable) && failure.turn.body.mode !== 'commit_import' && (
                 <button
                   type="button"
                   disabled={!session?.access_token}
                   onClick={() => {
                     composerRef.current?.focus();
-                    requestReply(failure.turn);
+                    if (failure.refreshRecurring) {
+                      const id = crypto.randomUUID();
+                      requestReply({ id, body: { ...failure.refreshRecurring, requestId: id } });
+                    } else requestReply(failure.turn);
                   }}
                 >
-                  <LuRotateCcw aria-hidden="true" /> Retry
+                  <LuRotateCcw aria-hidden="true" /> {failure.refreshRecurring
+                    ? (failure.turn.body.language === 'ru' ? 'Обновить предложение' : 'Refresh proposal') : 'Retry'}
                 </button>
               )}
             </div>

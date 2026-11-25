@@ -349,7 +349,8 @@ export function reconcileRecurringDates({ schedules, ledger, category, startDate
     const extras = byOccurrence.get(occurrence.id);
     const totalPosted = extras?.reduce((total, extra) => total + extra.cents, posting?.cents);
     rows.push({
-      id: `expected:${occurrence.id}`, name: occurrence.name,
+      id: `expected:${occurrence.id}`, name: occurrence.name, scheduleId: occurrence.scheduleId,
+      transactionId: posting?.id ?? null,
       expectedDate: occurrence.date, actualDate: posting?.date ?? null,
       expectedAmount: occurrence.cents == null ? null : occurrence.cents / 100,
       actualAmount: posting?.cents == null ? null : posting.cents / 100,
@@ -370,7 +371,7 @@ export function reconcileRecurringDates({ schedules, ledger, category, startDate
     const candidateCount = actualOptions.get(posting.id)?.candidates.length ?? ambiguousCounts.get(posting.id) ?? 0;
     const question = !candidateCount && companyQuestion(posting, companyGroups, category);
     rows.push({
-      id: `actual:${posting.id}`, name: posting.description ?? 'Recorded transaction',
+      id: `actual:${posting.id}`, name: posting.description ?? 'Recorded transaction', transactionId: posting.id,
       expectedDate: null, actualDate: posting.date, expectedAmount: null,
       actualAmount: posting.cents == null ? null : posting.cents / 100,
       differenceDays: null, description: posting.description,

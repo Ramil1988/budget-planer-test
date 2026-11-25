@@ -87,6 +87,8 @@ Apply this migration after recurring auto-add (008) so a confirmed bank import c
 
 ## How to Apply Migrations
 
+`20261125203756_assistant_recurring_changes.sql` adds the authenticated, user-scoped function for saving a reviewed set of recurring schedules. It depends on both November 25 assistant migrations above. Apply it before publishing the Recurring confirmation endpoint.
+
 ### Option 1: Supabase SQL Editor (Recommended)
 
 1. Go to your Supabase project dashboard
