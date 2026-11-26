@@ -1098,6 +1098,28 @@ It has three parts now, each measuring something different.
 with the others because they all came from the same balance. What exposed it was asking what a
 figure *means* and whether the real world works that way, not whether the page added up.
 
+### 4.17 "Add a nice animation" turned into a diagram, and the diagram into a question about the mortgage (2026-11-26)
+
+The request was one line: look at the Dashboard, maybe add a nice animation. It took four rounds to find out what was actually wanted, and each round is a small lesson.
+
+**Round one: I did what the words said.** The figures counted up, the budget bar grew, the ring drew itself. All correct, all tested, and your answer was that nothing had really changed. A page that looks the same when the motion stops *is* the same page. "Animation" was the word; "I want this page to show me more" was the request.
+
+**Round two: a chart that already existed.** I put a chart of income and spending through the month into the summary. You pointed out that Transactions already had one. I had built that page two days earlier and still did not check it. The fix was cheap in the end — the better version moved to Transactions, where it replaced the weaker one — but the habit to keep is: before adding a view, walk through the other tabs and ask whether it is already there.
+
+**Round three: the diagram.** What the app had nowhere was the picture of money *moving*: sources on the left, categories on the right, each band as thick as its amount. Two decisions made it honest:
+- **Both sides must be the same height.** Income was 3,377 and spending 6,147. Drawn as they are, the bands would not meet. So the difference became a part of its own: a *Shortfall* on the income side, or *Left over* on the spending side. The diagram then always balances, like a ledger.
+- **A thin band stays thin.** A category of 4% is a sliver ten pixels high, too small for a label. The usual trick is a minimum height, which quietly lies about the amount. Here the sliver keeps its true height and gets empty room around it for its label.
+
+**Round four: "the mortgage is not paid from my salary".** The diagram was arithmetically right and still wrong. All income flows into one bar in the middle and out again, so the picture *says* the salary paid the mortgage. It does not: the payment is typed in by hand, and the money comes from an account the app never sees. The 2,770 "shortfall" was simply the mortgage with no income to match it.
+
+No amount of code could have known that. The data has no field that says where a payment came from, so this was the one moment to stop and ask instead of guessing. The answer became a tick on the category, *paid from other money*: such a category gets its own source and its own straight band, and it leaves the shortfall. The shortfall dropped from 2,770.18 to 49.92, which is the real one.
+
+**Things worth remembering:**
+- A diagram makes claims that a table does not. A table of income and a table of spending say nothing about which paid for which; two shapes joined by a band do. Before drawing a connection, ask whether the data supports it.
+- The mark changes **only the diagram**. Net Balance still counts the mortgage. That is on purpose: one tick should not silently change every total in the app. If the balance should follow, that is a separate decision.
+- The dev server talks to the real database, so the new column had to exist in production before you could see the feature. Until then I checked it by changing the *answer* the browser received (Playwright's `route`), not the database: the page believed Mortgage was ticked, and nothing was written. That is a good way to demonstrate a feature that depends on a migration nobody has approved yet.
+- Motion that waits to be seen: the lower charts only draw when you scroll to them, otherwise on a phone everything would play off-screen. The trick is a CSS animation that is *paused* on its first frame until an `IntersectionObserver` sets `data-seen`. The trap: in a test or a screenshot those bars have no height until you scroll.
+
 ## 5. War Stories
 
 ### The three-commit salary badge

@@ -126,7 +126,7 @@ Supabase Auth's sign-in rate limit. The symptom is a `waitForURL('/dashboard')` 
 - Page layout and header
 - Summary cards (income, expenses, balance)
 - Upcoming payments section
-- Spending breakdown chart
+- Money flow: both sides add up to the same, the grouped categories open into a list
 - Cash flow visualization
 - Budget overview
 - Top spending categories

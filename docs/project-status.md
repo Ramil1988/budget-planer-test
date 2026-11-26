@@ -141,8 +141,10 @@ The local Recurring page opens on a category directory of saved schedules, inclu
   - [x] Chat window stays inside phone safe areas, portrait and landscape
 - [x] Dashboard and navigation refresh (2026-11-20)
   - [x] Monthly summary (net balance, income, expenses, budget progress), Upcoming Payments calendar above Spending Breakdown
+  - [x] Money flow diagram in the summary, replacing the Spending Breakdown ring; categories can be marked as paid from other money (migration 012); opening motion (2026-11-26)
   - [x] Shared responsive header menu with active-page indicators
 - [x] Budget, Recurring, Reports, Assets & Liabilities, Transactions and Add transaction redesigned in the Dashboard's language (2026-11-24)
+  - [x] Transactions chart draws income beside spending, with the balance between them (2026-11-26)
   - [x] Shared stylesheet `ledger.css` (`bw-*` classes and tokens), one stylesheet and one component folder per page, a shared `DialogFrame`
   - [x] View logic in pure helpers with unit tests: `budgetMath`, `recurringView`, `reportView`, `assetsView`, `transactionView`
   - [x] One chart per page: pace ruler, month strip, year chart with treemap and heat map, balance sheet to scale, steps of spending

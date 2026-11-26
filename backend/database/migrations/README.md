@@ -77,6 +77,16 @@ payment off the balance:
   Other liabilities keep their balance and get interest from now on
 - Needs no grants and is safe to re-run. Until it is applied the app works as before
 
+### 012_category_outside_income.sql
+Lets a spending category be marked as paid from money that is not recorded as income (a mortgage
+paid from an account the app does not follow):
+- Adds `categories.outside_income BOOLEAN NOT NULL DEFAULT false`
+- Only the Dashboard's money flow reads it: a marked category gets a source of its own and is left
+  out of the shortfall. No total anywhere else changes
+- Needs no grants (the grants of 009 are table-level) and is safe to re-run. Until it is applied
+  the app works as before and the control that marks a category is not shown
+- Applied to the production database on 2026-11-26
+
 ### 20261125145446_assistant_transaction_changes.sql
 
 Apply this migration before deploying the assistant transaction-change handler. It adds a row version, a user-scoped retry receipt and an invoker RPC that applies a reviewed card atomically. Start with `004_soft_delete_transactions.sql`. Migration 010 is optional for this RPC.
@@ -138,6 +148,7 @@ psql "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
 7. `009_data_api_grants.sql` (**last** of the table-creating set — grants Data API access on
    every table, so it has to run after everything that creates one)
 8. `011_liability_interest.sql` (after 005, 006 and 007, whose triggers it replaces)
+9. `012_category_outside_income.sql` (any time; it only adds a column to `categories`)
 
 ## Verification
 

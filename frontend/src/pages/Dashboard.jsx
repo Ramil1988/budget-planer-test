@@ -23,9 +23,10 @@ import {
 } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import DashboardSpending from '../components/DashboardSpending';
+import MoneyFlow from '../components/dashboard/MoneyFlow';
 import { getUpcomingPayments, formatFrequency, getPaymentDatesInRange, getPaymentsUntilSalary } from '../lib/recurringUtils';
 import { useDarkModeColors } from '../lib/useDarkModeColors';
+import { useEased, useSeen } from '../lib/motion';
 import '../styles/dashboard.css';
 
 // Category color mapping for visual distinction
@@ -75,26 +76,32 @@ function getCustomSpendingColors(categories) {
 const formatMonthValue = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-function MonthlySummary({ summary, budget, daysLeft, formatCurrency }) {
+function MonthlySummary({ summary, budget, daysLeft, formatCurrency, transactions, spending, categories, onMark }) {
   const budgetPercent = Math.round(budget.percent);
   const cappedPercent = Math.max(0, Math.min(100, budget.percent));
+  // The figures run up to their values; a value on its way is shown to the cent, never as -$0.00.
+  const running = (value) => formatCurrency(Math.round(value * 100) / 100 || 0);
+  const net = useEased(summary.net);
+  const income = useEased(summary.income);
+  const expenses = useEased(summary.expenses);
 
   return (
     <section className="dashboard-ledger" aria-label="Monthly summary">
       <dl className="dashboard-ledger__figures">
         <div className="dashboard-figure dashboard-figure--balance">
           <dt>Net Balance</dt>
-          <dd data-negative={summary.net < 0}>{formatCurrency(summary.net)}</dd>
+          <dd data-negative={summary.net < 0}>{running(net)}</dd>
         </div>
         <div className="dashboard-figure">
           <dt><FiArrowDownLeft aria-hidden="true" color="var(--dashboard-positive)" /> Income</dt>
-          <dd>{formatCurrency(summary.income)}</dd>
+          <dd>{running(income)}</dd>
         </div>
         <div className="dashboard-figure">
           <dt><FiArrowUpRight aria-hidden="true" color="var(--dashboard-negative)" /> Expenses</dt>
-          <dd>{formatCurrency(summary.expenses)}</dd>
+          <dd>{running(expenses)}</dd>
         </div>
       </dl>
+      <MoneyFlow transactions={transactions} spending={spending} categories={categories} onMark={onMark} formatCurrency={formatCurrency} />
       {(budget.total > 0 || daysLeft > 0) && (
         <div className="dashboard-ledger-meta">
           {budget.total > 0 && (
@@ -129,9 +136,10 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
   // Get current day (0 = Sunday, so we need to adjust for Mon-Sun array)
   const today = new Date().getDay();
   const todayIndex = today === 0 ? 6 : today - 1; // Convert to Mon=0, Sun=6
+  const [chartRef, seen] = useSeen();
 
   return (
-    <VStack gap={3} align="stretch">
+    <VStack ref={chartRef} data-seen={seen} gap={3} align="stretch">
       <Flex align="center" justify="space-between" h={`${barHeight * 2 + 60}px`} gap={{ base: 0.5, sm: 2 }}>
         {days.map((day, index) => {
           const expense = dailyExpenses[index] || 0;
@@ -168,12 +176,14 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
                   maxW="100%"
                   truncate
                   fontWeight="600"
-                  color={income > 0 ? '#059669' : 'transparent'}
+                  color={income > 0 ? 'var(--dashboard-positive)' : 'transparent'}
                   whiteSpace="nowrap"
                 >
                   {income > 0 ? `+$${income.toFixed(0)}` : ''}
                 </Text>
                 <Box
+                  className="dashboard-rise"
+                  style={{ '--order': index }}
                   position="absolute"
                   bottom="0"
                   left="50%"
@@ -181,7 +191,7 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
                   w="70%"
                   maxW="32px"
                   h={`${Math.max(incomePercent * 0.8, income > 0 ? 8 : 0)}%`}
-                  bg={income > 0 ? 'linear-gradient(180deg, #10B981 0%, #059669 100%)' : 'transparent'}
+                  bg={income > 0 ? 'var(--dashboard-positive)' : 'transparent'}
                   borderRadius="4px 4px 0 0"
                   transition="height 0.5s ease"
                 />
@@ -193,14 +203,14 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
                 px={{ base: 0.5, sm: 1 }}
                 w="100%"
                 borderRadius="6px"
-                bg={isSelected ? colors.rowHoverBg : 'transparent'}
-                border={isToday ? '2px solid #2563EB' : isSelected ? '1px solid' : 'none'}
+                bg={isSelected ? 'var(--dashboard-hover)' : 'transparent'}
+                border={isToday ? '2px solid var(--dashboard-accent)' : isSelected ? '1px solid' : 'none'}
                 borderColor={isSelected ? colors.borderColor : 'transparent'}
               >
                 <Text
                   fontSize={{ base: "10px", sm: "xs" }}
                   fontWeight={isToday || isSelected ? '700' : '500'}
-                  color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textMuted}
+                  color={isToday ? 'var(--dashboard-accent)' : isSelected ? colors.textPrimary : colors.textMuted}
                   textAlign="center"
                 >
                   {day}
@@ -218,6 +228,8 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
               {/* Expense bar (goes down) */}
               <Box position="relative" w="100%" h={`${barHeight}px`}>
                 <Box
+                  className="dashboard-rise dashboard-rise--down"
+                  style={{ '--order': index }}
                   position="absolute"
                   top="0"
                   left="50%"
@@ -225,7 +237,7 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
                   w="70%"
                   maxW="32px"
                   h={`${Math.max(expensePercent * 0.8, expense > 0 ? 8 : 0)}%`}
-                  bg={expense > 0 ? 'linear-gradient(180deg, #7C3AED 0%, #A855F7 100%)' : 'transparent'}
+                  bg={expense > 0 ? 'var(--dashboard-negative)' : 'transparent'}
                   borderRadius="0 0 4px 4px"
                   transition="height 0.5s ease"
                 />
@@ -239,7 +251,7 @@ const WeeklyBarChart = ({ dailyExpenses, dailyIncome, maxAmount, weekOffset = 0,
                   maxW="100%"
                   truncate
                   fontWeight="600"
-                  color={expense > 0 ? '#7C3AED' : 'transparent'}
+                  color={expense > 0 ? 'var(--dashboard-negative)' : 'transparent'}
                   whiteSpace="nowrap"
                 >
                   {expense > 0 ? `-$${expense.toFixed(0)}` : ''}
@@ -263,16 +275,17 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
   const isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
   const todayDate = isCurrentMonth ? today.getDate() : -1;
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const [chartRef, seen] = useSeen();
 
   return (
-    <Box>
+    <Box ref={chartRef} data-seen={seen}>
       <Box
         overflowX="auto"
         pb={2}
         css={{
           '&::-webkit-scrollbar': { height: '6px' },
-          '&::-webkit-scrollbar-track': { background: '#F4F4F5', borderRadius: '3px' },
-          '&::-webkit-scrollbar-thumb': { background: '#D4D4D8', borderRadius: '3px' },
+          '&::-webkit-scrollbar-track': { background: 'var(--dashboard-muted-surface)', borderRadius: '3px' },
+          '&::-webkit-scrollbar-thumb': { background: 'var(--dashboard-border)', borderRadius: '3px' },
         }}
       >
         <Flex gap={1} minW={`${dailyData.length * 36}px`} align="flex-end" h={`${barHeight + 50}px`}>
@@ -302,24 +315,21 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
                   w="100%"
                   maxW="28px"
                   h={`${barHeight}px`}
-                  bg={colors.rowStripedBg}
+                  bg={'var(--dashboard-muted-surface)'}
                   borderRadius="4px"
                   overflow="hidden"
                   position="relative"
-                  border={isSelected ? '2px solid #2563EB' : 'none'}
+                  border={isSelected ? '2px solid var(--dashboard-accent)' : 'none'}
                 >
                   <Box
+                    className="dashboard-rise"
+                    style={{ '--order': index / 3 }}
                     position="absolute"
                     bottom="0"
                     left="0"
                     right="0"
                     h={`${Math.max(heightPercent, hasSpending ? 5 : 0)}%`}
-                    bg={isToday
-                      ? 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)'
-                      : hasSpending
-                        ? 'linear-gradient(180deg, #10B981 0%, #059669 100%)'
-                        : '#E4E4E7'
-                    }
+                    bg="var(--dashboard-negative)"
                     borderRadius="3px"
                     transition="height 0.3s ease"
                   />
@@ -328,14 +338,14 @@ const MonthlyBarChart = ({ dailyData, selectedDay, onDayClick, selectedMonth, fo
                   <Text
                     fontSize={{ base: '11px', md: '13px' }}
                     fontWeight={isToday || isSelected ? '700' : '600'}
-                    color={isToday ? colors.primary : isSelected ? colors.textPrimary : colors.textSecondary}
+                    color={isToday ? 'var(--dashboard-accent)' : isSelected ? colors.textPrimary : colors.textSecondary}
                   >
                     {dayNum}
                   </Text>
                   <Text
                     fontSize={{ base: '9px', md: '11px' }}
                     fontWeight="500"
-                    color={isToday ? colors.primary : colors.textMuted}
+                    color={isToday ? 'var(--dashboard-accent)' : colors.textMuted}
                   >
                     {dayName}
                   </Text>
@@ -594,6 +604,10 @@ export default function Dashboard() {
   const [monthlySummary, setMonthlySummary] = useState({ income: 0, expenses: 0, net: 0 });
   const [budgetProgress, setBudgetProgress] = useState({ used: 0, total: 0, percent: 0 });
   const [categoryBudgets, setCategoryBudgets] = useState([]);
+  // The expense categories, each with `outside_income`: whether it is paid from money that is
+  // not recorded as income (migration 012). Without that column nothing can be marked.
+  const [expenseCategories, setExpenseCategories] = useState([]);
+  const [canMarkOutside, setCanMarkOutside] = useState(false);
   const [daysLeft, setDaysLeft] = useState(0);
   const [weeklySpending, setWeeklySpending] = useState([0, 0, 0, 0, 0, 0, 0]);
   const [weeklyIncome, setWeeklyIncome] = useState([0, 0, 0, 0, 0, 0, 0]);
@@ -783,7 +797,8 @@ export default function Dashboard() {
         ? `${year + 1}-01-01`
         : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
-      const [transactionsResult, budgetResult, categoriesResult] = await Promise.all([
+      const loadCategories = (columns) => supabase.from('categories').select(columns).eq('user_id', user.id).eq('type', 'expense');
+      const [transactionsResult, budgetResult, markedCategories] = await Promise.all([
         supabase
           .from('transactions')
           .select('id, description, date, amount, type, category_id, categories(name)')
@@ -800,12 +815,11 @@ export default function Dashboard() {
           .gte('month', startDate)
           .lt('month', nextMonthStart)
           .maybeSingle(),
-        supabase
-          .from('categories')
-          .select('id, name')
-          .eq('user_id', user.id)
-          .eq('type', 'expense')
+        loadCategories('id, name, outside_income'),
       ]);
+      // 42703: the column is not there, so migration 012 has not been applied.
+      const hasOutsideColumn = markedCategories.error?.code !== '42703';
+      const categoriesResult = hasOutsideColumn ? markedCategories : await loadCategories('id, name');
 
       if (isStale()) return;
       if (transactionsResult.error) throw transactionsResult.error;
@@ -814,6 +828,8 @@ export default function Dashboard() {
       const transactions = transactionsResult.data || [];
       const budget = budgetResult.data;
       const categories = categoriesResult.data || [];
+      setExpenseCategories(categories);
+      setCanMarkOutside(hasOutsideColumn);
 
       let income = 0;
       let expenses = 0;
@@ -918,6 +934,18 @@ export default function Dashboard() {
     }
   };
 
+  // Marks a category as paid from other money, or takes the mark off. The diagram follows at
+  // once; if the save fails the mark is put back and the error goes to the caller.
+  const markOutsideIncome = async (id, outside) => {
+    const set = (value) => setExpenseCategories((list) => list.map((category) => (category.id === id ? { ...category, outside_income: value } : category)));
+    set(outside);
+    const { error: failed } = await supabase.from('categories').update({ outside_income: outside }).eq('id', id);
+    if (failed) {
+      set(!outside);
+      throw failed;
+    }
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1004,6 +1032,10 @@ export default function Dashboard() {
               budget={budgetProgress}
               daysLeft={daysLeft}
               formatCurrency={formatCurrency}
+              transactions={allTransactions}
+              spending={categoryBudgets}
+              categories={expenseCategories}
+              onMark={canMarkOutside ? markOutsideIncome : undefined}
             />
 
             <div className="dashboard-insights">
@@ -1251,7 +1283,7 @@ export default function Dashboard() {
                                 maxW="50%"
                                 overflowWrap="anywhere"
                                 textAlign="end"
-                                color={payment.type === 'expense' ? '#E11D48' : '#059669'}
+                                color={payment.type === 'expense' ? 'var(--dashboard-negative)' : 'var(--dashboard-positive)'}
                               >
                                 {payment.type === 'expense' ? '-' : '+'}{formatCurrency(payment.amount)}
                               </Text>
@@ -1281,12 +1313,6 @@ export default function Dashboard() {
                 )}
               </Box>
 
-              <DashboardSpending
-                key={selectedMonth}
-                categories={categoryBudgets}
-                total={monthlySummary.expenses}
-                formatCurrency={formatCurrency}
-              />
             </div>
 
             <div className="dashboard-activity">
@@ -1311,7 +1337,7 @@ export default function Dashboard() {
                       h="28px"
                       borderRadius="8px"
                       color={colors.textMuted}
-                      _hover={{ bg: colors.rowHoverBg }}
+                      _hover={{ bg: 'var(--dashboard-hover)' }}
                     >
                       ←
                     </Button>
@@ -1329,7 +1355,7 @@ export default function Dashboard() {
                       h="28px"
                       borderRadius="8px"
                       color={colors.textMuted}
-                      _hover={{ bg: colors.rowHoverBg }}
+                      _hover={{ bg: 'var(--dashboard-hover)' }}
                       disabled={weekOffset >= 0}
                       opacity={weekOffset >= 0 ? 0.3 : 1}
                       cursor={weekOffset >= 0 ? 'not-allowed' : 'pointer'}
@@ -1342,16 +1368,16 @@ export default function Dashboard() {
                 {/* Net summary */}
                 <Flex gap={{ base: 2, sm: 4 }} mb={4} justify="center" wrap="wrap">
                   <HStack gap={1}>
-                    <Box w="8px" h="8px" borderRadius="full" bg="#10B981" />
+                    <Box w="8px" h="8px" borderRadius="full" bg="var(--dashboard-positive)" />
                     <Text fontSize="xs" color={colors.textMuted}>Income:</Text>
-                    <Text fontSize="xs" fontWeight="600" color="#059669">
+                    <Text fontSize="xs" fontWeight="600" color="var(--dashboard-positive)">
                       +{formatCurrency(weeklyIncome.reduce((a, b) => a + b, 0))}
                     </Text>
                   </HStack>
                   <HStack gap={1}>
-                    <Box w="8px" h="8px" borderRadius="full" bg="#7C3AED" />
+                    <Box w="8px" h="8px" borderRadius="full" bg="var(--dashboard-negative)" />
                     <Text fontSize="xs" color={colors.textMuted}>Expenses:</Text>
-                    <Text fontSize="xs" fontWeight="600" color="#7C3AED">
+                    <Text fontSize="xs" fontWeight="600" color="var(--dashboard-negative)">
                       -{formatCurrency(weeklySpending.reduce((a, b) => a + b, 0))}
                     </Text>
                   </HStack>
@@ -1368,14 +1394,14 @@ export default function Dashboard() {
                 />
 
                 {/* Transaction Details Section */}
-                <Box mt={4} p={3} borderRadius="10px" bg={colors.rowStripedBg}>
+                <Box mt={4} p={3} borderRadius="10px" bg={'var(--dashboard-muted-surface)'}>
                   {selectedDayIndex !== null && dailyTransactions[selectedDayIndex]?.length > 0 ? (
                     <VStack align="stretch" gap={2}>
                       <Flex justify="space-between" align="center" mb={1}>
                         <Text fontSize="sm" fontWeight="600" color={colors.textPrimary}>
                           {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][selectedDayIndex]}, {weekDates[selectedDayIndex]}
                         </Text>
-                        <Text fontSize="sm" fontWeight="700" color={weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex] >= 0 ? '#059669' : '#7C3AED'}>
+                        <Text fontSize="sm" fontWeight="700" color={weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex] >= 0 ? 'var(--dashboard-positive)' : 'var(--dashboard-negative)'}>
                           {weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex] >= 0 ? '+' : ''}{formatCurrency(weeklyIncome[selectedDayIndex] - weeklySpending[selectedDayIndex])}
                         </Text>
                       </Flex>
@@ -1394,7 +1420,7 @@ export default function Dashboard() {
                                 w="6px"
                                 h="6px"
                                 borderRadius="full"
-                                bg={tx.type === 'income' ? '#10B981' : getCategoryColor(tx.categories?.name || 'default')}
+                                bg={tx.type === 'income' ? 'var(--dashboard-positive)' : getCategoryColor(tx.categories?.name || 'default')}
                                 flexShrink={0}
                               />
                               <VStack align="start" gap={0} flex="1" minW="0">
@@ -1406,7 +1432,7 @@ export default function Dashboard() {
                                 </Text>
                               </VStack>
                             </HStack>
-                            <Text fontSize="xs" fontWeight="600" color={tx.type === 'income' ? '#059669' : '#E11D48'} flexShrink={0} ml={2}>
+                            <Text fontSize="xs" fontWeight="600" color={tx.type === 'income' ? 'var(--dashboard-positive)' : 'var(--dashboard-negative)'} flexShrink={0} ml={2}>
                               {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                             </Text>
                           </Flex>
@@ -1418,7 +1444,7 @@ export default function Dashboard() {
                       <Text fontSize="sm" color={colors.textMuted}>
                         {selectedDayIndex !== null ? 'No transactions' : 'Click a day to see details'}
                       </Text>
-                      <Text fontSize="sm" fontWeight="700" color={weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0) >= 0 ? '#059669' : '#7C3AED'}>
+                      <Text fontSize="sm" fontWeight="700" color={weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0) >= 0 ? 'var(--dashboard-positive)' : 'var(--dashboard-negative)'}>
                         Net: {weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0) >= 0 ? '+' : ''}{formatCurrency(weeklyIncome.reduce((a, b) => a + b, 0) - weeklySpending.reduce((a, b) => a + b, 0))}
                       </Text>
                     </Flex>
@@ -1433,7 +1459,7 @@ export default function Dashboard() {
               >
                 <Box className="dashboard-panel-heading" mb={4}>
                   <Heading as="h2" id="dashboard-daily-spending-heading">Daily Spending</Heading>
-                  <Box bg={colors.rowStripedBg} px={3} py={1} borderRadius="full">
+                  <Box bg={'var(--dashboard-muted-surface)'} px={3} py={1} borderRadius="full">
                     <Text fontSize="xs" fontWeight="600" color={colors.textMuted}>
                       {formatCurrency(monthlyDailySpending.reduce((a, b) => a + b, 0))} total
                     </Text>
@@ -1455,7 +1481,7 @@ export default function Dashboard() {
                 )}
 
                 {/* Transaction Details Section */}
-                <Box mt={3} p={{ base: 3, md: 4 }} borderRadius="10px" bg={colors.rowStripedBg}>
+                <Box mt={3} p={{ base: 3, md: 4 }} borderRadius="10px" bg={'var(--dashboard-muted-surface)'}>
                   {selectedMonthDay !== null && monthlyDailyTransactions[selectedMonthDay]?.length > 0 ? (
                     <VStack align="stretch" gap={2}>
                       <Flex justify="space-between" align="center" mb={1}>
@@ -1463,7 +1489,7 @@ export default function Dashboard() {
                           {new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1] - 1, selectedMonthDay + 1)
                             .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                         </Text>
-                        <Text fontSize="sm" fontWeight="700" color="#059669">
+                        <Text fontSize="sm" fontWeight="700" color="var(--dashboard-ink)">
                           {formatCurrency(monthlyDailySpending[selectedMonthDay])}
                         </Text>
                       </Flex>
@@ -1495,7 +1521,7 @@ export default function Dashboard() {
                                 </Text>
                               </VStack>
                             </HStack>
-                            <Text fontSize="xs" fontWeight="600" color="#E11D48" flexShrink={0} ml={3}>
+                            <Text fontSize="xs" fontWeight="600" color="var(--dashboard-negative)" flexShrink={0} ml={3}>
                               {formatCurrency(tx.amount)}
                             </Text>
                           </Flex>

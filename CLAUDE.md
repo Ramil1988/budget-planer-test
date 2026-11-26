@@ -156,6 +156,7 @@ The application uses React's built-in state management:
 - **GOTCHA:** never give a flex item both `aspect-ratio` and a `min-height`. Safari derives the width from the height and the element runs out of its panel; Chrome keeps the width. The Reports treemap did this. Size from the container and measure the box instead (`ExpenseTreemap.jsx`). Check layout in WebKit, not only Chromium: `reports.spec.js` asserts that every tile is inside its panel
 - Dropdowns are native `<select>`; dates are local (`today()` in `lib/transactionView.js`), never `toISOString()`
 - The Transactions filters are one object (`NO_FILTERS` in `lib/transactionView.js`) applied by `applyFilters()`; the filtered list is derived with `useMemo`, never kept in state. A new filter is a field in that object, a control in `components/transactions/Filters.jsx` and an entry in its `chips` list, so that it is written out under the bar and can be removed on its own
+- The Transactions chart (`components/transactions/SpendChart.jsx`) draws income so far and spending so far from `timeline()` (`incomeSoFar`, `spentSoFar`, `received`, `total`); the band between the lines is the balance. With one of the two at zero it is a single line with the area under it. The figures above the plot follow the pointer (`onPointerMove` on the columns), then the day picked, then the end of the line
 - **GOTCHA:** on Transactions the trash button writes at once. The Playwright tests for these pages only read: they never press it, cancel every dialog, and the Transactions and Add transaction tests fail if the page sends anything but a read to `/rest/v1/`
 
 **Dark Mode Implementation:**
@@ -400,6 +401,18 @@ export const handler = async (event, context) => {
 - Interactive: Button, IconButton
 - See `docs/technical-reference.md` for detailed usage patterns
 
+## Dashboard
+
+**Key Files:** `frontend/src/pages/Dashboard.jsx`, `frontend/src/components/dashboard/MoneyFlow.jsx`, `frontend/src/lib/dashboardView.js` (+ `dashboardView.test.js`), `frontend/src/lib/motion.js`, `frontend/src/styles/dashboard.css`
+
+- The Dashboard has its own tokens (`--dashboard-*` on `.dashboard-page`), not the `--bw-*` ones. The Cash-flow and Daily Spending charts are still Chakra boxes inside `Dashboard.jsx`; their colours are those tokens (green for money in, red for money out)
+- **Where the money went** (`MoneyFlow`, inside the monthly summary) is a flow diagram. `moneyFlow()` builds the two sides: income by category name on the left, spending categories on the right (the five largest, the rest as one part that opens into a list, spending without a category as *No category*). Both sides add up to `max(income, what income had to pay for)`: the difference is **Shortfall** on the left or **Left over** on the right. `flowLayout()` places it in pixels: one scale for both sides and the bar in the middle; a thin part gets room for its label around it and is never drawn thicker
+- **Categories paid from other money:** `categories.outside_income` (migration `012_category_outside_income.sql`, applied to production on 2026-11-26). Such a category is taken out of the flow from income and out of the shortfall, and drawn below with a band straight from a source of its own, *Other money*. It is ticked in the list under the diagram, which writes at once (`markOutsideIncome()` in `Dashboard.jsx`). **Only the diagram reads the mark**: Net Balance, the budget bar and every other page count the category as before. Without the migration the select fails with `42703`; the page then reads the categories without the column and does not show the list
+- The diagram's bands are one SVG stretched to its column (`preserveAspectRatio="none"`, x from 0 to 100, y in pixels); bars and labels are HTML. On a phone (`max-width: 599px`) the labels have narrow columns, so `MoneyFlow` asks `flowLayout()` for more room per part and a name may take two lines
+- **Motion** (`lib/motion.js`): `useEased(target)` is a number that runs to its target (the three figures); `useSeen()` turns true once an element has come into view. The two lower charts wait for it: their bars carry `dashboard-rise`, which stays paused on its first frame until an ancestor has `data-seen="true"`. Everything respects `prefers-reduced-motion`
+- **GOTCHA:** a bar with `dashboard-rise` has no height until its chart has been scrolled into view. A test or a screenshot of the lower charts has to scroll to them first. The figures of the summary are on their way for about a second after loading: a test that reads them waits until Net Balance equals Income less Expenses (`dashboard.spec.js` does)
+- **GOTCHA:** the list of marks is the one control on the Dashboard that writes. The Playwright tests never tick it
+
 ## Assets & Liabilities
 
 **Key Files:** `frontend/src/pages/AssetsLiabilities.jsx`, `frontend/src/components/assets/*`, `frontend/src/lib/assetsView.js` (+ `assetsView.test.js`), `frontend/src/styles/assets.css`
@@ -504,7 +517,7 @@ BudgetWise has a comprehensive end-to-end test suite built with Playwright. Test
 |------|-------------|
 | `test-utils.js` | Shared utilities, login helper, common selectors |
 | `auth.spec.js` | Authentication: login, signup, logout, protected routes, session |
-| `dashboard.spec.js` | Dashboard: summary cards, charts, navigation, data loading |
+| `dashboard.spec.js` | Dashboard: summary figures, the money flow (both sides add up, the grouped categories open), upcoming payments, charts, navigation (read-only) |
 | `transactions.spec.js` | Transactions: figures, chart, list by day, filters, editing in place, trash; Add transaction form (read-only, with a write guard) |
 | `assets.spec.js` | Assets & Liabilities: figures, balance sheet, trend, health score, emergency fund, lists and forms (read-only) |
 | `budget.spec.js` | Budget: tracking, setup, category budgets, progress |

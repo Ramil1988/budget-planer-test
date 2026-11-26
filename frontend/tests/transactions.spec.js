@@ -65,11 +65,13 @@ test.describe('Transactions', () => {
       const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       await expect(page.locator('.tx-chart__column')).toHaveCount(days);
       await expect(page.locator('.tx-chart__axis li[data-today="true"]')).toHaveText(String(now.getDate()));
-      // The line ends at what was spent: the same figure as Expenses.
-      const total = page.locator('.tx-chart__total');
-      if (await total.count()) {
-        const expenses = amount(await page.locator('.tx-ledger dd').nth(2).textContent());
-        expect(Math.abs(amount(await total.textContent()) - expenses)).toBeLessThan(0.011);
+      // The lines end at what came in and what was spent: the same figures as Income and Expenses.
+      for (const [series, figure] of [['income', 1], ['spent', 2]]) {
+        const end = page.locator(`.tx-chart__sofar [data-series="${series}"] b`);
+        if (await end.count()) {
+          const whole = amount(await page.locator('.tx-ledger dd').nth(figure).textContent());
+          expect(Math.abs(Math.abs(amount(await end.textContent())) - Math.abs(whole))).toBeLessThan(0.011);
+        }
       }
     });
 
@@ -372,7 +374,8 @@ test.describe('Transactions', () => {
     test('should navigate from dashboard to transactions', async ({ page }) => {
       await page.goto('/dashboard');
 
-      await page.locator('a[href="/transactions"]').first().click();
+      // On a phone the link in the header is folded into the menu: take the one that shows.
+      await page.locator('a[href="/transactions"]:visible').first().click();
       await expect(page).toHaveURL('/transactions');
     });
   });

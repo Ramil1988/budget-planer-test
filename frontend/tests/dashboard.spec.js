@@ -99,15 +99,39 @@ test.describe('Dashboard', () => {
     });
   });
 
-  test.describe('Spending Breakdown', () => {
-    test('should display spending breakdown section', async ({ page }) => {
-      await expect(page.locator('text=Spending Breakdown')).toBeVisible();
+  test.describe('Where the money went', () => {
+    const amount = (text) => Number(text.replace(/[^0-9.-]/g, ''));
+    const figures = (page, side) => page.locator(`.dashboard-moneyflow__side[data-side="${side}"] .dashboard-moneyflow__figure b`).allTextContents();
+    const sum = (texts) => texts.map(amount).reduce((total, value) => total + value, 0);
+
+    test('should display the money flow', async ({ page }) => {
+      await expect(page.getByRole('heading', { name: 'Where the money went' })).toBeVisible();
+      await expect(page.locator('.dashboard-moneyflow__plot, .dashboard-moneyflow__note').first()).toBeVisible();
     });
 
-    test('should display spending chart or categories', async ({ page }) => {
-      // Check for either a chart or category items
-      const chartOrCategories = page.locator('text=/Total Spent|by category|No (categorized )?spending/i');
-      await expect(chartOrCategories.first()).toBeVisible();
+    test('both sides of the flow add up to the same, and leave nothing out', async ({ page }) => {
+      await expect(page.getByRole('heading', { name: 'Where the money went' })).toBeVisible();
+      test.skip(await page.locator('.dashboard-moneyflow__plot').count() === 0, 'nothing recorded this month');
+      // The figures above run up to their values: read them once they have arrived.
+      const read = async () => (await page.locator('.dashboard-figure dd').allTextContents()).map(amount);
+      await expect.poll(async () => { const [net, income, expenses] = await read(); return Math.abs(net - (income - expenses)); }).toBeLessThan(0.011);
+      const [, income, expenses] = await read();
+      const [left, right] = [sum(await figures(page, 'left')), sum(await figures(page, 'right'))];
+      expect(Math.abs(left - right)).toBeLessThan(0.011);
+      // Each side holds all of the income and all of the spending, whichever is larger.
+      expect(left).toBeGreaterThan(Math.max(income, expenses) - 0.011);
+    });
+
+    test('opens the categories that are shown together', async ({ page }) => {
+      await expect(page.getByRole('heading', { name: 'Where the money went' })).toBeVisible();
+      const others = page.getByRole('button', { name: /other categories/ });
+      test.skip(await others.count() === 0, 'no categories are grouped this month');
+      const list = page.getByRole('list', { name: 'The other categories' });
+      await expect(list).toBeHidden();
+      await others.click();
+      await expect(others).toHaveAttribute('aria-expanded', 'true');
+      const total = sum(await list.locator('b').allTextContents());
+      expect(Math.abs(total - amount(await others.locator('b').textContent()))).toBeLessThan(0.011);
     });
   });
 

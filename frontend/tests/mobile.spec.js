@@ -97,7 +97,7 @@ test.describe('Mobile Responsiveness', () => {
       await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Upcoming Payments' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Payment calendar', exact: true })).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.getByRole('heading', { name: 'Spending Breakdown' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Where the money went' })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
       // Summary cards should be visible

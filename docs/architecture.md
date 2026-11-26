@@ -188,7 +188,12 @@ the same way, and differently from the pages that still use Chakra components th
 - Dropdowns are native `<select>` elements; no click-outside handling is needed
 - Each page has one chart that is its own: the pace ruler (Budget), the month strip
   (Recurring), the year chart, treemap and heat map (Reports), the balance sheet to scale
-  (Assets & Liabilities), the steps of what had been spent (Transactions)
+  (Assets & Liabilities), the steps of income and spending with the balance between them
+  (Transactions)
+
+### Dashboard money flow (2026-11-26)
+
+The monthly summary of the Dashboard holds a flow diagram, `src/components/dashboard/MoneyFlow.jsx`. The arithmetic is two pure functions in `src/lib/dashboardView.js` with `node --test` tests: `moneyFlow()` turns the month's transactions and the spending by category into the two sides of the diagram (sources of income; categories, a shortfall or what is left over), and `flowLayout()` places them in pixels to one scale. A category whose `outside_income` is true (migration 012) is paid from money that is not recorded as income: it is kept out of the flow from income and drawn with a source of its own. The bands are a single SVG stretched to its column; bars and labels are HTML.
 
 ## State Management
 
@@ -484,6 +489,7 @@ BudgetAssistant.jsx ──POST + Supabase JWT──▶ budget-assistant.mjs ─�
 - Chakra UI's built-in CSS optimization
 
 ### Animation Strategy
+- The Dashboard draws itself once as it opens (2026-11-26): the three figures of the summary run up to their values (`useEased` in `src/lib/motion.js`), the bands of the money flow pour in from the left, and the bars of the two lower charts rise when the chart first comes into view (`useSeen`, an `IntersectionObserver`). All of it is switched off by `prefers-reduced-motion`
 - Scroll-to-top button uses React state (not CSS classes)
 - Hover effects use Chakra's `_hover` prop
 - Feature cards use CSS animation delays (staggered effect)

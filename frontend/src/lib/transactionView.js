@@ -170,18 +170,21 @@ export function timeline(transactions, { start, end, now = new Date() } = {}) {
   }
 
   let spent = 0;
+  let received = 0;
   for (const bucket of buckets) {
     const inside = transactions.filter(({ date }) => date >= bucket.from && date <= bucket.to);
     const totals = summary(inside);
     spent += totals.expenses;
+    received += totals.income;
     bucket.income = totals.income;
     bucket.expenses = totals.expenses;
     bucket.count = totals.count;
     bucket.today = current >= bucket.from && current <= bucket.to;
     bucket.future = bucket.from > current;
     bucket.spentSoFar = bucket.future ? null : spent;
+    bucket.incomeSoFar = bucket.future ? null : received;
   }
-  return { unit, buckets, total: spent };
+  return { unit, buckets, total: spent, received };
 }
 
 // The list, newest first, cut into days. Each day has its own totals and what had been

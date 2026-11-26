@@ -85,6 +85,9 @@ test('a month is cut into its days, and the line stops at today', () => {
   assert.ok(Math.abs(day(24).spentSoFar - 3188.41) < 1e-9);
   assert.deepEqual([day(24).today, day(24).future, day(25).today, day(25).future], [true, false, false, true]);
   assert.equal(day(25).spentSoFar, null);
+  // Income runs up beside it: nothing before the 20th, the pay from then on.
+  assert.deepEqual([day(19).incomeSoFar, day(20).incomeSoFar, day(24).incomeSoFar, day(25).incomeSoFar], [0, 1918.07, 1918.07, null]);
+  assert.equal(line.received, 1918.07);
   assert.equal(day(24).count, 2);
 });
 

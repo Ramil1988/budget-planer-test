@@ -181,6 +181,8 @@
   height: 100%;
   border-radius: inherit;
   background: var(--dashboard-positive);
+  transform-origin: left center;
+  animation: dashboard-grow 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .dashboard-budget-meter[data-over-budget='true'] > span {
@@ -282,6 +284,362 @@
   text-underline-offset: 3px;
 }
 
+/* ---- Where the money went -------------------------------------------------------------------
+   components/dashboard/MoneyFlow.jsx. Three columns: the sources and their labels, the bands,
+   the categories and their labels. The svg of the bands is stretched to its column; bars and
+   labels are HTML, placed in pixels by flowLayout(). */
+
+.dashboard-moneyflow {
+  padding: 18px clamp(16px, 2.3vw, 28px) 20px;
+  border-top: 1px solid var(--dashboard-border);
+}
+
+.dashboard-moneyflow__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dashboard-moneyflow__head h2 {
+  color: var(--dashboard-ink);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.dashboard-moneyflow__head a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: var(--dashboard-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dashboard-moneyflow__head a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dashboard-moneyflow__plot {
+  display: grid;
+  grid-template-columns: minmax(0, 170px) minmax(0, 1fr) minmax(0, 230px);
+}
+
+.dashboard-moneyflow__side {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-moneyflow__side li {
+  position: absolute;
+  inset-inline: 0;
+  transition: opacity 160ms ease;
+}
+
+.dashboard-moneyflow__side li[data-dimmed='true'] {
+  opacity: 0.4;
+}
+
+/* The bar of a part: as high as its amount, at the edge that faces the bands. */
+.dashboard-moneyflow__side li > i {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  min-height: 1px;
+  border-radius: 2px;
+}
+
+.dashboard-moneyflow__side[data-side='right'] li > i {
+  right: auto;
+  left: 0;
+}
+
+.dashboard-moneyflow__side button {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  padding: 0 14px 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dashboard-ink);
+  font: inherit;
+  text-align: end;
+  cursor: pointer;
+}
+
+.dashboard-moneyflow__side[data-side='right'] button {
+  padding: 0 6px 0 16px;
+  text-align: start;
+}
+
+.dashboard-moneyflow__side button:hover,
+.dashboard-moneyflow__side button[aria-pressed='true'],
+.dashboard-moneyflow__side button[aria-expanded='true'] {
+  background: var(--dashboard-hover);
+}
+
+.dashboard-moneyflow__side button:focus-visible {
+  outline: 2px solid var(--dashboard-accent);
+  outline-offset: -2px;
+}
+
+.dashboard-moneyflow__name {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-moneyflow__figure svg {
+  display: inline;
+  margin-left: 3px;
+  vertical-align: -2px;
+  transition: rotate 160ms ease;
+}
+
+.dashboard-moneyflow__figure svg[data-open='true'] {
+  rotate: 180deg;
+}
+
+.dashboard-moneyflow__figure {
+  color: var(--dashboard-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.dashboard-moneyflow__figure b {
+  color: var(--dashboard-ink);
+  font-weight: 600;
+}
+
+.dashboard-moneyflow__bands {
+  position: relative;
+  min-width: 0;
+}
+
+.dashboard-moneyflow__bands svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: dashboard-pour 1400ms cubic-bezier(0.3, 0.5, 0.2, 1) both;
+}
+
+.dashboard-moneyflow__bands path {
+  opacity: 0.3;
+  transition: opacity 160ms ease;
+}
+
+.dashboard-moneyflow__bands path[data-active='true'] {
+  opacity: 0.6;
+}
+
+.dashboard-moneyflow__bands path[data-dimmed='true'] {
+  opacity: 0.1;
+}
+
+/* Where the two sides meet: all the month's money in one bar. */
+.dashboard-moneyflow__middle {
+  position: absolute;
+  left: calc(50% - 3px);
+  width: 6px;
+  border-radius: 2px;
+  background: var(--dashboard-ink);
+  transform-origin: center top;
+  animation: dashboard-rise 500ms 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.dashboard-moneyflow__others {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px 24px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--dashboard-muted-surface);
+  list-style: none;
+}
+
+.dashboard-moneyflow__others[hidden] {
+  display: none;
+}
+
+.dashboard-moneyflow__others li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.dashboard-moneyflow__others i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dashboard-moneyflow__others span {
+  flex: 1;
+  min-width: 0;
+  color: var(--dashboard-muted);
+  overflow-wrap: anywhere;
+}
+
+.dashboard-moneyflow__others b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.dashboard-moneyflow__note {
+  margin-top: 12px;
+  color: var(--dashboard-muted);
+  font-size: 0.8125rem;
+}
+
+.dashboard-moneyflow__note + .dashboard-moneyflow__note {
+  margin-top: 4px;
+}
+
+/* Which categories are paid from money that is not recorded as income. */
+.dashboard-moneyflow__setup {
+  margin-top: 12px;
+  color: var(--dashboard-muted);
+  font-size: 0.8125rem;
+}
+
+.dashboard-moneyflow__setup summary {
+  width: fit-content;
+  min-height: 28px;
+  color: var(--dashboard-accent);
+  font-weight: 600;
+  line-height: 28px;
+  cursor: pointer;
+}
+
+.dashboard-moneyflow__setup summary:focus-visible {
+  outline: 2px solid var(--dashboard-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.dashboard-moneyflow__setup p {
+  max-width: 70ch;
+  margin-top: 4px;
+}
+
+.dashboard-moneyflow__setup p[role='alert'] {
+  color: var(--dashboard-negative);
+}
+
+.dashboard-moneyflow__marks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px 20px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--dashboard-muted-surface);
+}
+
+.dashboard-moneyflow__marks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--dashboard-ink);
+  cursor: pointer;
+}
+
+.dashboard-moneyflow__marks input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dashboard-accent);
+}
+
+/* ---- Motion ---------------------------------------------------------------------------------
+   The page draws its figures once. The summary does it as the page opens: the figures run up
+   (useEased in lib/motion.js), the bands pour in from the left and the categories arrive as
+   the bands reach them. A chart further down waits, paused on its first frame, until it has
+   come into view (`data-seen`, from useSeen). `--order` is the place of a part among its
+   neighbours, so that they follow one another. `scale` is used, not `transform`: some bars
+   are centred with a transform of their own. */
+
+.dashboard-moneyflow__side[data-side='right'] li {
+  animation: dashboard-arrive 420ms ease-out both;
+  animation-delay: calc(650ms + var(--order, 0) * 70ms);
+}
+
+.dashboard-rise {
+  animation: dashboard-rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both paused;
+  animation-delay: calc(var(--order, 0) * 45ms);
+  transform-origin: center bottom;
+}
+
+.dashboard-rise--down {
+  transform-origin: center top;
+}
+
+[data-seen='true'] .dashboard-rise {
+  animation-play-state: running;
+}
+
+@keyframes dashboard-grow {
+  from {
+    scale: 0 1;
+  }
+}
+
+@keyframes dashboard-rise {
+  from {
+    scale: 1 0;
+  }
+}
+
+@keyframes dashboard-pour {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes dashboard-arrive {
+  from {
+    opacity: 0;
+    translate: -8px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-rise,
+  .dashboard-budget-meter > span,
+  .dashboard-moneyflow__bands svg,
+  .dashboard-moneyflow__middle,
+  .dashboard-moneyflow__side li {
+    animation: none;
+    transition: none;
+  }
+}
+
 @media (max-width: 1023px) {
   .dashboard-activity {
     grid-template-columns: minmax(0, 1fr);
@@ -308,6 +666,29 @@
 
   .dashboard-figure dd {
     font-size: clamp(1.15rem, 5.8vw, 1.6rem);
+  }
+
+  /* Narrow columns for the labels: a name may take two lines (MoneyFlow gives each part
+     more room at this width). */
+  .dashboard-moneyflow__plot {
+    grid-template-columns: minmax(0, 104px) minmax(0, 1fr) minmax(0, 142px);
+  }
+
+  .dashboard-moneyflow__side button {
+    padding: 0 11px 0 2px;
+  }
+
+  .dashboard-moneyflow__side[data-side='right'] button {
+    padding: 0 2px 0 12px;
+  }
+
+  .dashboard-moneyflow__name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .dashboard-figure--balance dd {
